@@ -1,0 +1,9 @@
+.DS_Store
+plugin/target/
+target/
+*.pdf
+!docs/documentation.pdf
+!src/lib.pdf
+!tests/test.pdf
+CLAUDE.md
+agents.md
