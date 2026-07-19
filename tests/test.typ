@@ -232,7 +232,7 @@ Volta brackets continue when a system wraps:
 #score(
   clef: "treble",
   time: "2/4",
-  width: 10,
+  width: 20,
   bars: (
     (notes: "C5:q D5:q"),
     (ending: (label: "1.", start: true), notes: "E5:q F5:q"),
@@ -290,7 +290,7 @@ repeated, while a later re-articulation shows the accidental normally.
   clef: "treble",
   key: "C",
   time: "2/4",
-  width: 9.5,
+  width: 20,
   bars: (
     (notes: "C5:q F#5:q ~"),
     (notes: "F#5:q E5:q"),
@@ -435,6 +435,7 @@ single staff, and a chromatic piano pickup.
 #mozart-k525-opening(
   scale: 0.39,
   note-spacing: 2.85,
+  wrap: true,
 )
 
 === Bach · Cello Suite No. 1, BWV 1007
@@ -744,7 +745,6 @@ staff, independently of the group symbol.
   ),
   group: "bracket",
   time: "2/4",
-  width: 24,
   bars: (
     (violin-one: "g5:q a5:q", violin-two: "d5:q e5:q", viola: "a3:q b3:q", cello: "g2:q a2:q"),
     (violin-one: "b5:q c6:q", violin-two: "f5:q g5:q", viola: "c4:q d4:q", cello: "b2:q c3:q"),
