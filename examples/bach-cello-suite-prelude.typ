@@ -1,0 +1,47 @@
+#import "../src/lib.typ": score
+
+// Measures 1–16 of the Prelude from Bach's Cello Suite No. 1, BWV 1007,
+// translated from the public-domain Mutopia LilyPond cello part. The register
+// follows its explicit cello transposition.
+#let bach-bwv1007-opening(
+  scale: 0.68,
+  note-spacing: 2.35,
+  composer: [J. S. Bach],
+  bar-count: 16,
+  wrap: true,
+  width: none,
+) = score(
+  clef: "bass",
+  bars: (
+    (notes: "G2:s[s1(] D3:s B3:s A3:s[s1)] B3:s[s2(] D3:s B3:s D3:s[s2)] G2:s[s3(] D3:s B3:s A3:s[s3)] B3:s[s4(] D3:s B3:s D3:s[s4)]"),
+    (notes: "G2:s[s5(] E3:s C4:s B3:s[s5)] C4:s[s6(] E3:s C4:s E3:s[s6)] G2:s[s7(] E3:s C4:s B3:s[s7)] C4:s[s8(] E3:s C4:s E3:s[s8)]"),
+    (notes: "G2:s[s9(] F#3:s C4:s B3:s[s9)] C4:s[s10(] F#3:s C4:s F#3:s[s10)] G2:s[s11(] F#3:s C4:s B3:s[s11)] C4:s[s12(] F#3:s C4:s F#3:s[s12)]"),
+    (notes: "G2:s[s13(] G3:s B3:s A3:s[s13)] B3:s[s14(] G3:s B3:s G3:s[s14)] G2:s[s15(] G3:s B3:s A3:s[s15)] B3:s[s16(] G3:s B3:s F#3:s[s16)]"),
+    (notes: "G2:s[s17(] E3:s B3:s A3:s[s17)] B3:s[s18(] G3:s F#3:s G3:s[s18)] E3:s[s19(] G3:s F#3:s G3:s[s19)] B2:s[s20(] D3:s C#3:s B2:s[s20)]"),
+    (notes: "C#3:s[s21(] G3:s A3:s G3:s[s21)] A3:s[s22(] G3:s A3:s G3:s[s22)] C#3:s[s23(] G3:s A3:s G3:s[s23)] A3:s[s24(] G3:s A3:s G3:s[s24)]"),
+    (notes: "F#3:s[s25(] A3:s D4:s C#4:s[s25)] D4:s[s26(] A3:s G3:s A3:s[s26)] F#3:s[s27(] A3:s G3:s A3:s[s27)] D3:s[s28(] F#3:s E3:s D3:s[s28)]"),
+    (notes: "E2:s[s29(] B2:s G3:s F#3:s[s29)] G3:s[s30(] B2:s G3:s B2:s[s30)] E2:s[s31(] B2:s G3:s F#3:s[s31)] G3:s[s32(] B2:s G3:s B2:s[s32)]"),
+    (notes: "E2:s[s33(] C#3:s D3:s E3:s[s33)] D3:s[s34(] C#3:s B2:s A2:s[s34)] G3:s[s35(] F#3:s E3:s D4:s[s35)] C#4:s[s36(] B3:s A3:s G3:s[s36)]"),
+    (notes: "F#3:s[s37(] E3:s D3:s D4:s[s37)] A3:s[s38(] D4:s F#3:s A3:s[s38)] D3:s[s39(] E3:s F#3:s A3:s[s39)] G3:s[s40(] F#3:s E3:s D3:s[s40)]"),
+    (notes: "G#3:s[s41(] D3:s F3:s E3:s[s41)] F3:s[s42(] D3:s G#3:s D3:s[s42)] A3:s[s43(] D3:s F3:s E3:s[s43)] F3:s[s44(] D3:s G#3:s D3:s[s44)]"),
+    (notes: "C3:s[s45(] E3:s A3:s B3:s[s45)] C4:s[s46(] A3:s E3:s D3:s[s46)] C3:s[s47(] E3:s A3:s B3:s[s47)] C4:s[s48(] A3:s F#3:s E3:s[s48)]"),
+    (notes: "D#3:s[s49(] F#3:s D#3:s F#3:s[s49)] A3:s[s50(] F#3:s A3:s F#3:s[s50)] D#3:s[s51(] F#3:s D#3:s F#3:s[s51)] A3:s[s52(] F#3:s A3:s F#3:s[s52)]"),
+    (notes: "G3:s[s53(] F#3:s E3:s G3:s[s53)] F#3:s[s54(] G3:s A3:s F#3:s[s54)] G3:s[s55(] F#3:s E3:s D3:s[s55)] C3:s[s56(] B2:s A2:s G2:s[s56)]"),
+    (notes: "F#3:s[s57(] C4:s D4:s C4:s[s57)] D4:s[s58(] C4:s D4:s C4:s[s58)] F#3:s[s59(] C4:s D4:s C4:s[s59)] D4:s[s60(] C4:s D4:s C4:s[s60)]"),
+    (notes: "G3:s[s61(] B3:s F4:s E4:s[s61)] F4:s[s62(] B3:s F4:s B3:s[s62)] G3:s[s63(] B3:s F4:s E4:s[s63)] F4:s[s64(] B3:s F4:s B3:s[s64)]"),
+  ).slice(0, bar-count),
+  key: "G",
+  time: "4/4",
+  tempo: [Prélude],
+  composer: composer,
+  scale: scale,
+  note-spacing: note-spacing,
+  beams: true,
+  wrap: wrap,
+  width: width,
+  indent: 2.5,
+  short-indent: 0,
+  ragged-right: false,
+  ragged-last: false,
+  bar-numbers: "systems",
+)

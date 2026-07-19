@@ -9,8 +9,8 @@
   align(center, stack(
     spacing: 0.2cm,
     strong[Pitches, durations, accidentals, rests, and chords],
-    bar(
-      "C4:q D4:e E4:e F#4:q (G4 Bb4 D5):q",
+    score(
+      bars: ((notes: "c4:q d4:e e4:e f#4:q (g4 bb4 d5):q"),),
       clef: "treble",
       key: "C",
       time: "4/4",
@@ -21,8 +21,8 @@
   align(center, stack(
     spacing: 0.2cm,
     strong[Ties and manual beam breaks],
-    bar(
-      "C5:q ~ C5:e D5:e E5:e F5:e / G5:e A5:e",
+    score(
+      bars: ((notes: "c5:q ~ c5:e d5:e e5:e f5:e / g5:e a5:e"),),
       clef: "treble",
       time: "4/4",
       beams: true,
@@ -35,9 +35,9 @@
     align: center + horizon,
     stroke: 0.4pt + rgb("#dedede"),
     [*Whole*], [*Dotted half*], [*Sixteenth*], [*Double-dotted*],
-    [#note("C5:w", scale: 0.58)],
-    [#note("D5:h.", scale: 0.58)],
-    [#note("E5:s", scale: 0.58)],
-    [#note("F5:q..", scale: 0.58)],
+    [#score(time: none, bars: ((notes: "c5:w"),), scale: 0.58)],
+    [#score(time: none, bars: ((notes: "d5:h."),), scale: 0.58)],
+    [#score(time: none, bars: ((notes: "e5:s"),), scale: 0.58)],
+    [#score(time: none, bars: ((notes: "f5:q.."),), scale: 0.58)],
   ),
 )

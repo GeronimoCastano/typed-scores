@@ -2,241 +2,281 @@
 
 ![Chopin Nocturne Op. 9 No. 2 opening](assets/readme/chopin-opening.png)
 
-`typed-scores` engraves western music notation directly in Typst. Write notes,
-chords, rests, ties, slurs, directions, and complete measures as compact text;
-the package validates the music, computes the layout, and draws a score with
-bundled Bravura glyphs through [CeTZ](https://typst.app/universe/package/cetz).
+`typed-scores` engraves western music notation directly in Typst. Compact event
+strings are parsed by a Rust/WASM plugin; Typst and CeTZ lay out the resulting
+score with bundled Bravura glyphs.
 
 ```typst
 #import "@preview/typed-scores:0.1.0": *
 ```
 
-For the complete notation grammar, argument reference, validation rules, and
-worked piano score, see the
-[documentation PDF](https://github.com/GeronimoCastano/typed-scores/blob/main/docs/documentation.pdf).
+## Quick start
 
-## Quick Start
-
-Render a note, chord, or rest with `note`:
-
-```typst
-#note("C4:q", clef: "treble")
-#note("(C4 E4 G4):h", clef: "treble")
-#note("r:q", clef: "bass")
-```
-
-Render and validate one measure with `bar`:
+`bar` is the quick one-staff, one-measure helper. It accepts only notes,
+clef, key, and time.
 
 ```typst
 #bar(
-  "G4:e A4:e B4:e C5:e D5:e E5:e F5:e G5:e",
+  "g4:e a4:e b4:e c5:e d5:e e5:e f#5:e g5:e",
   clef: "treble",
   key: "G",
   time: "4/4",
+)
+```
+
+Use `score` for every complete score. A single staff needs no invented name:
+
+```typst
+#score(
+  clef: "treble",
+  time: "4/4",
+  bars: (
+    (notes: "c5:q d5:q e5:q f5:q"),
+    (notes: "g5:h e5:h"),
+  ),
+)
+```
+
+Omitting `key` uses C major (`key: "C"`).
+
+For multiple staves, declare stable staff IDs once. Each bar then supplies one
+event string (or an array of simultaneous voice strings) for every ID. Add
+`label` for a first-system staff name and
+`short-label` for the optional abbreviation on later systems.
+
+```typst
+#score(
+  staves: (
+    upper: (clef: "treble", label: "Violin I", short-label: "Vln. I"),
+    lower: (clef: "bass", label: "Violoncello", short-label: "Vc."),
+  ),
+  key: "Eb",
+  time: "12/8",
+  bars: (
+    (
+      partial: "1/8",
+      upper: "bb4:e",
+      lower: "r:e",
+    ),
+    (
+      upper: "g5:q. f5:e g5:e bb5:e ab5:q. g5:q f5:e",
+      lower: "eb2:e (g3 eb4):e (bb3 eb4 g4):e eb2:e (ab3 d4):e (cb4 d4 ab4):e eb2:e (g3 eb4):e (bb3 eb4 g4):e d2:e (g3 eb4):e (bb3 eb4 g4):e",
+    ),
+  ),
   beams: true,
 )
 ```
 
-Render a grand staff from parallel treble and bass measures:
+Bar metadata belongs beside the staff content. `clef`, `key`, `time`, and
+`tempo` persist from the bar where they appear; `partial` validates an
+incomplete bar. For a multi-staff clef change, use a staff map such as
+`clef: (lower: "treble")`. Mid-system clefs are reduced; the active clefs at a
+new system are full-size.
+
+For an engraved metronome mark, use named beat values instead of pasting a
+musical character:
+
+```typst
+tempo: (text: [Andante], beat: "eighth", bpm: 132)
+```
+
+`beat` accepts `whole`, `half`, `quarter`, `eighth`, `sixteenth`, and
+`thirty-second`; the package draws the matching Bravura note glyph.
+
+## Harmony symbols
+
+Use a bar's `harmony` field for chord symbols above the top staff. Its value is
+a duration-bearing sequence of author-controlled symbols, so it can change
+inside a bar. Each symbol is centered on the onset where its harmony becomes
+active, including when a change falls between melody note onsets.
 
 ```typst
 #score(
-  treble: (
-    "C5:q D5:q E5:q F5:q",
-    "G5:q A5:q B5:q C6:q",
-  ),
-  bass: (
-    "C3:h G2:h",
-    "C3:h G2:h",
-  ),
   time: "4/4",
+  bars: (
+    (
+      notes: "c5:q d5:q e5:q f5:q",
+      harmony: "Cmaj7:h A7:h",
+    ),
+    (
+      notes: "g5:h e5:h",
+      harmony: "Dm7:q G7:q Cmaj7:h",
+    ),
+  ),
 )
 ```
+
+Write each symbol as `symbol:duration`; the harmony sequence must fill the
+active bar. Symbols such as `F#7(b9)`, `Bb/D`, and `N.C.` are rendered as
+written.
+
+## System layout
+
+Multi-system scores justify their timed gaps to fill `width` by default. The
+line breaker evaluates all complete-bar partitions and chooses balanced density,
+rather than applying a fixed number of bars per system. One-system scores remain
+at their natural width; use `ragged-right: false` to justify one too.
+`ragged-last: true` leaves only the final system natural-width.
+
+Use `indent` and `short-indent` (in staff spaces) to reserve left space for the
+first system and later systems respectively; each indented system still reaches
+the same right edge.
+
+```typst
+#score(
+  time: "4/4",
+  width: 36,
+  indent: 3.5,
+  ragged-last: true,
+  bars: (
+    (notes: "c5:q d e f"),
+    (notes: "g5:q a b c6"),
+    (notes: "c6:h g5:h"),
+    (notes: "f5:q e d c"),
+    (notes: "b4:h c5:h"),
+    (notes: "d5:q e f g"),
+  ),
+)
+```
+
+## Barlines, navigation, and endings
+
+Use `barline` for repeat marks and `ending` for first/second-ending brackets:
+
+```typst
+#score(
+  clef: "treble",
+  time: "2/4",
+  bars: (
+    (barline: (left: "repeat-start"), notes: "c5:q d5:q"),
+    (ending: (label: "1.", start: true), notes: "e5:q f5:q"),
+    (
+      barline: (right: "repeat-end"),
+      ending: (label: "1.", stop: true),
+      notes: "g5:q a5:q",
+    ),
+    (ending: (label: "Final", start: true), notes: "b5:q a5:q"),
+    (ending: (label: "Final", stop: true), notes: "g5:h"),
+  ),
+)
+```
+
+At one shared boundary, a repeat end and start combine into the conventional
+double-sided repeat barline. Volta brackets continue across wrapped systems,
+and their `label` is literal text such as `"1."`, `"2."`, or `"Final"`.
+Right edges additionally accept `double`, `final`, and `dashed`. A bar can carry
+a boxed `rehearsal` label and a `navigation` mark; `"segno"` and `"coda"` use
+Bravura symbols while other values render literally. Coincident bar numbers
+stay closest to the staff, and long boundary text reserves horizontal room
+before the next bar. Set `bar-numbers` to
+`"systems"` or `"all"`, and offset numbering with `first-bar-number`.
 
 ![Notes, a beamed measure, and a grand staff](assets/readme/quick-start.png)
 
-## Note Language
-
-Each event has a pitch and duration. A colon is optional in compact notation.
+## Event language
 
 | Syntax | Meaning |
 |---|---|
-| `C4:q` or `C4q` | C4 quarter note |
-| `Bb4:e.` | B-flat dotted eighth |
-| `(C4 E4 G4):h` | C-major half-note chord |
+| `c4:q` or `c4q` | C4 quarter note |
+| `ce` or `c:e` | Relative C with an eighth-note duration |
+| `c4:q d e f` | Four quarter notes using inherited register and duration |
+| `bb4:e.` | B-flat dotted eighth |
+| `c##5:q` / `dbb5:q` | Double-sharp / double-flat quarter note |
+| `(a4 c e):h (f a c)` | Relative chord pitches and inherited duration |
 | `r:q` | Quarter rest |
-| `_` | Rest that fills part of the remaining measure |
-| `~` | Tie the preceding note or chord to the next event |
+| `_` | Rest filling the remaining measure duration |
+| `~` | Tie the preceding event to the next event |
 | `/` | Break the automatic beam before the next event |
+| `-` | Join the adjacent flagged events into one beam group |
+| `tuplet 3:2 { c:e d e }` | Inline time-scaled music group |
+| `acciaccatura { d:e } f:q` | Slashed single grace note resolving to F |
+| `tremolo 16 { c:h g:h }` | Two-note alternating sixteenth tremolo |
+| `(c e g):h[arpeggio=up]` | Upward arpeggio over a chord |
 | `[s1(]` … `[s1)]` | Named slur |
 
-Duration letters are `w` (whole), `h` (half), `q` (quarter), `e` (eighth),
-`s` (sixteenth), and `t` (thirty-second). Append `.` or `..` for dotted and
-double-dotted values. Pitches use scientific pitch notation; append `#` or `b`
-before the octave for a sharp or flat.
+Durations are `w`, `h`, `q`, `e`, `s`, and `t`; append `.` or `..` for dots.
+An explicit duration becomes the current value for that staff; a note, chord,
+or ordinary rest without one inherits it across barlines. The first omitted
+duration defaults to `q`, while `_` does not change the current value. Omission
+never stretches an event to fill a measure; incorrect totals remain errors.
 
-![Pitches, rhythm, ties, beaming, and durations](assets/readme/note-language.png)
+Pitch letters are ASCII case-insensitive: `c4`, `C4`, and mixed-case input all
+have identical pitch and octave semantics. Lowercase is the documented compact
+style, while uppercase remains accepted. Compact `ce` and explicit `c:e` both
+mean an eighth-note C; whitespace distinguishes that event from `c e`, which
+means two notes. Case never selects an octave.
 
-## Expressive Notation
+Pitches accept `#`, `b`, `##`, or `bb`. In lowercase, `bb4` is B-flat 4 and
+`bbb4` is B-double-flat 4. After a single note spells an octave, later single
+notes may omit it: `g4:e a b c` resolves to G4, A4, B4, C5, all
+as eighth notes. The pitch anchor also continues independently across bars;
+an explicit octave resets it. If a staff begins without an anchor, treble,
+alto, and tenor use octave 4, while bass uses octave 3. Key signatures and
+accidentals do not alter this register calculation.
 
-Annotations go in square brackets after an event. Separate multiple marks with
-spaces.
+Chords use LilyPond-style relative entry. Their first written pitch resolves
+from the current staff anchor, and each remaining pitch resolves from the
+preceding pitch inside that chord. Afterward, the chord's first written pitch
+becomes the external anchor. Use explicit octaves whenever a voicing should
+span a different octave than the nearest-pitch rule selects.
 
-```typst
-#bar(
-  "G5:q.[f=4] F5:e[f=3 s1(] G5:e[f=4] Eb5:e[f=2 s1)]",
-  key: "Eb",
-  time: "6/8",
-)
-```
+Tuplets stay inside the note string: `tuplet 3:2 { c5:e d e }` writes three
+eighths in the time of two. By default, the centered numerator has no bracket
+when a single visible beam spans the entire group; otherwise it receives one.
+The italic numeral is optically centered through the interrupted bracket line,
+using LilyPond's bracket weight and hook height.
+Use `bracket=always`, `bracket=never`, `side=above`, or `side=below` in the
+group header when an explicit engraving choice is needed, for example
+`tuplet 3:2[bracket=always side=below] { c5:e d e }`. Groups may nest.
 
-| Annotation | Result |
-|---|---|
-| `f=4` | Fingering outside any articulation stack |
-| `stacc` | Staccato |
-| `staccatissimo` | Wedge staccatissimo |
-| `tenuto` or `legato` | Tenuto line |
-| `accent` | Accent |
-| `marcato` or `strong` | Marcato |
-| `text=espress._dolce` | Italic text below the staff; `_` becomes a space |
-| `text-below=Ped._simile` | Italic text below pedals and beams |
-| `turn` | Turn ornament |
-| `chromatic-turn turn-f=12121` | Turn with flat/natural auxiliaries and fingering |
-| `s1(` … `s1)` | Named slur; names may span measures |
-| `p1(` … `p1)` | Pedal mark and release bracket |
-| `h1<` … `h1!` | Crescendo hairpin |
-| `h1>` … `h1!` | Diminuendo hairpin |
+Grace notes also stay inside the string and consume no bar time. Use
+`grace { ... }`, `acciaccatura { ... }`, or `appoggiatura { ... }`; the latter
+two slur from the first grace event into the following principal note. Grace
+stems and beams default upward and those slurs curve below, following
+LilyPond's grace settings. Heads and flags use the smaller grace scale, while
+stems retain normal weight and grace beams use their own engraving thickness.
+A grace slur retains the normal slur weight rather than shrinking with its
+noteheads.
+A single flagged acciaccatura receives the customary slash; a multi-note
+beamed acciaccatura omits it. Flagged grace groups beam independently.
 
-IDs (`s1`, `p1`, `h1`) pair starts and stops. Use a different ID for every
-simultaneously open or overlapping span.
+Write repeated-note strokes as `c5:h[tremolo=16]`, and a two-note alternation as
+`tremolo 16 { c5:h g5:h }`. For a single event, subdivisions 8, 16, 32, and 64
+draw one, two, three, and four strokes respectively, independent of its written
+duration. The strips use LilyPond's beam-weight thickness, vertical end edges,
+and stem-tip-relative placement. Append `arpeggio`, `arpeggio=up`, or
+`arpeggio=down` to a chord to draw a full-height wave immediately to its left,
+with an arrow at the requested end for a directional form.
 
-Articulations may be combined, for example `[marcato stacc]`,
-`[tenuto staccatissimo]`, or `[accent tenuto]`. The stack is placed on the
-notehead side of the stem: above stem-down notes and below stem-up notes.
+Annotations follow an event in square brackets: fingering (`f=4`),
+articulations (`stacc`, `tenuto`, `accent`, `marcato`), dynamics (`dyn=pp`,
+`dyn=mf`, `dyn=sfz`), fermatas, breath marks, text directions, turns, named
+slurs, pedal spans, and hairpins. Ties must join adjacent events with the same
+written pitch or chord and continue across wrapped systems.
 
-![Combined articulations and expressive markings](assets/readme/expressive.png)
+For independent rhythms on one staff, make the staff content an array of two
+to four strings. Voice 1 stems upward, voice 2 downward, and later voices
+alternate. Coincident identical noteheads merge; colliding seconds and unisons
+shift horizontally. Keep the same voice count for that staff in every bar.
 
-## Measures, Pickups, And Signatures
+For multiple staves, `group: "brace"`, `"bracket"`, `"line"`, or `"none"`
+controls the system grouping symbol. The default `auto` chooses the customary
+style from the number of staves. Key changes automatically print cancellation
+naturals before the new signature when required.
 
-The `bars:` form is the most explicit score input. Key and time signatures
-persist until a later measure changes them.
+## Current limitations
 
-```typst
-#score(
-  bars: (
-    (
-      key: "Eb",
-      time: "12/8",
-      partial: "1/8",
-      treble: "Bb4:e",
-      bass: "r:e",
-    ),
-    (
-      treble: "G5:q. F5:e G5:e Bb5:e Ab5:q. G5:q F5:e",
-      bass: "Eb2:e (G3 Eb4):e (Bb3 Eb4 G4):e Eb2:e (Ab3 D4):e (Cb4 D4 Ab4):e Eb2:e (G3 Eb4):e (Bb3 Eb4 G4):e D2:e (G3 Eb4):e (Bb3 Eb4 G4):e",
-    ),
-  ),
-  beams: true,
-)
-```
+- One to four rhythmic voices per staff are supported; each staff's voice count
+  is fixed across its bars.
+- Lyrics and cross-staff notation are not yet in the public DSL.
+- Grace groups exclude rests, tuplets, and nested ornamental groups.
+- Arpeggio signs currently span a chord on one staff, not a cross-staff piano
+  arpeggio.
+- Pedals and hairpins do not split automatically at system breaks.
+- Dense markings may need `staff-gap`, `note-spacing`, or `scale` adjustment.
 
-`partial:` gives an exact pickup duration such as `"1/8"`. The package still
-validates every staff against that duration. In full measures, `_` placeholders
-divide the remaining duration into representable rests.
-
-Accidentals follow score rules: the key signature supplies the default,
-natural signs cancel it, and an accidental persists for that pitch through the
-rest of the measure.
-
-![Pickup measures and changing key and time signatures](assets/readme/measures.png)
-
-## Longer Scores
-
-Use `sections:` when key, meter, tempo, or instrumentation changes over a
-larger piece. Each voice has a stable name, clef, and array of measures.
-
-```typst
-#score(
-  sections: (
-    (
-      key: "C",
-      time: "4/4",
-      tempo: "Moderato",
-      voices: (
-        (name: "Violin I", clef: "treble", notes: (
-          "E5:q F5:q G5:q A5:q",
-          "G5:h E5:h",
-        )),
-        (name: "Viola", clef: "alto", notes: (
-          "C4:q D4:q E4:q F4:q",
-          "E4:h C4:h",
-        )),
-        (name: "Cello", clef: "bass", notes: (
-          "C3:h G2:h",
-          "C3:w",
-        )),
-      ),
-    ),
-  ),
-  beams: true,
-)
-```
-
-Scores wrap automatically to the available Typst layout width. Set
-`wrap: false` for one unbroken system, `width:` to control the packing width,
-`system-gap:` for vertical separation, and `staff-gap:` when a passage needs
-extra room between staves.
-
-![Treble, alto, and bass voices](assets/readme/ensemble.png)
-
-## Worked Example: Chopin
-
-[`examples/chopin-opening.typ`](examples/chopin-opening.typ) contains the
-opening pickup and measures 1–2 of Frédéric Chopin’s Nocturne in E-flat major,
-Op. 9 No. 2. It is the package’s release-gate fixture and exercises pickup
-validation, 12/8 beaming, octave-spanning piano texture, ties, nested slurs,
-fingerings, a chromatic turn, natural cancellation, hairpins, and pedal spans.
-
-The musical text was checked against the public-domain 1881 G. Schirmer score
-available from the
-[Library of Congress](https://www.loc.gov/item/2023842215/) and the
-[Mutopia transcription](https://www.mutopiaproject.org/cgibin/piece-info.cgi?id=1590).
-
-## Validation
-
-`typed-scores` reports an error when:
-
-- a pitch, duration, clef, key, or time signature is malformed;
-- a measure does not equal its declared `time:` or `partial:` duration;
-- parallel voices have different measure counts;
-- a score changes its voice structure halfway through;
-- a named slur closes without opening, opens twice, or never closes.
-
-These checks run while Typst compiles the document, close to the source that
-needs correction.
-
-## Architecture
-
-The package has two layers:
-
-- A Rust/WASM plugin parses events, computes exact rational durations and
-  onsets, maps pitches to staff positions, and assigns beat-aware beam groups.
-- Typst and CeTZ align voices, pack systems, place bundled Bravura SVG glyphs,
-  and draw stems, beams, curves, barlines, braces, directions, and annotations.
-
-No music font installation is required. Bravura glyph assets are included
-under the SIL Open Font License; package code is MIT licensed.
-
-## Current Limitations
-
-- One rhythmic voice per staff is supported. Independent simultaneous voices
-  on the same staff are not yet modeled.
-- Grace-note timing, tuplets, tremolos, arpeggio signs, lyrics, and repeat/end
-  barlines are not yet part of the public DSL.
-- Collision avoidance covers core notes, accidentals, beams, ties, and slurs;
-  dense editorial markings may still require `staff-gap`, `note-spacing`, or
-  `scale` adjustments.
-
-## License
-
-MIT for package code and OFL-1.1 for the bundled Bravura glyphs.
+See the [user guide](https://github.com/GeronimoCastano/typed-scores/blob/main/docs/documentation.pdf) for the complete reference. The
+[five-piece release showcase](https://github.com/GeronimoCastano/typed-scores/blob/main/examples/showcase.pdf)
+includes famous piano, string-score, solo-cello, and alto-saxophone excerpts;
+its reusable [source fixtures and reference notes](https://github.com/GeronimoCastano/typed-scores/tree/main/examples)
+live alongside it.

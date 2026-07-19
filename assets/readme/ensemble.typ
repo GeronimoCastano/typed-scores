@@ -8,25 +8,24 @@
   spacing: 0.25cm,
   strong[Treble, alto, and bass voices across two measures],
   score(
-    sections: (
+    staves: (
+      violin: (clef: "treble"),
+      viola: (clef: "alto"),
+      cello: (clef: "bass"),
+    ),
+    key: "C",
+    time: "4/4",
+    tempo: "Moderato",
+    bars: (
       (
-        key: "C",
-        time: "4/4",
-        tempo: "Moderato",
-        voices: (
-          (name: "Violin", clef: "treble", notes: (
-            "E5:q F5:q G5:q A5:q",
-            "G5:h E5:h",
-          )),
-          (name: "Viola", clef: "alto", notes: (
-            "C4:q D4:q E4:q F4:q",
-            "E4:h C4:h",
-          )),
-          (name: "Cello", clef: "bass", notes: (
-            "C3:h G2:h",
-            "C3:w",
-          )),
-        ),
+        violin: "E5:q F5:q G5:q A5:q",
+        viola: "C4:q D4:q E4:q F4:q",
+        cello: "C3:h G2:h",
+      ),
+      (
+        violin: "G5:h E5:h",
+        viola: "E4:h C4:h",
+        cello: "C3:w",
       ),
     ),
     beams: true,

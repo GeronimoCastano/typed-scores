@@ -8,23 +8,27 @@
   spacing: 0.25cm,
   strong[Pickup validation with persistent and changing signatures],
   score(
+    staves: (
+      upper: (clef: "treble"),
+      lower: (clef: "bass"),
+    ),
     bars: (
       (
         key: "Eb",
         time: "12/8",
         partial: "1/8",
-        treble: "Bb4:e",
-        bass: "r:e",
+        upper: "Bb4:e",
+        lower: "r:e",
       ),
       (
-        treble: "Eb4:e F4:e G4:e Ab4:e Bb4:e C5:e D5:e Eb5:e F5:e G5:e Ab5:e Bb5:e",
-        bass: "Eb2:q Bb2:q Eb3:q Bb2:q Eb3:q Bb2:q",
+        upper: "Eb4:e F4:e G4:e Ab4:e Bb4:e C5:e D5:e Eb5:e F5:e G5:e Ab5:e Bb5:e",
+        lower: "Eb2:q Bb2:q Eb3:q Bb2:q Eb3:q Bb2:q",
       ),
       (
         key: "G",
         time: "3/4",
-        treble: "G4:q B4:q D5:q",
-        bass: "G2:q D3:q G3:q",
+        upper: "G4:q B4:q D5:q",
+        lower: "G2:q D3:q G3:q",
       ),
     ),
     beams: true,

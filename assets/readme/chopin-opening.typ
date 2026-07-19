@@ -7,5 +7,9 @@
 #set text(font: "New Computer Modern")
 
 #align(center + horizon)[
-  #chopin-opening(scale: 0.82, note-spacing: 4.35, staff-gap: 13.5)
+  #chopin-opening(
+    scale: 0.82,
+    note-spacing: 4.35,
+    bar-count: 2,
+  )
 ]

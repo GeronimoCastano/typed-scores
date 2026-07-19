@@ -12,15 +12,15 @@
     align: center + horizon,
     stroke: 0.4pt + rgb("#dedede"),
     [*Single note*], [*Chord*], [*Rest*],
-    [#note("C4:q", clef: "treble", scale: 0.72)],
-    [#note("(C4 E4 G4):h", clef: "treble", scale: 0.72)],
-    [#note("r:q", clef: "bass", scale: 0.72)],
+    [#score(time: none, bars: ((notes: "c4:q"),), scale: 0.72)],
+    [#score(time: none, bars: ((notes: "(c4 e4 g4):h"),), scale: 0.72)],
+    [#score(clef: "bass", time: none, bars: ((notes: "r:q"),), scale: 0.72)],
   ),
   align(center, stack(
     spacing: 0.2cm,
     strong[Validated and automatically beamed measure],
-    bar(
-      "G4:e A4:e B4:e C5:e D5:e E5:e F#5:e G5:e",
+    score(
+      bars: ((notes: "g4:e a4:e b4:e c5:e d5:e e5:e f#5:e g5:e"),),
       clef: "treble",
       key: "G",
       time: "4/4",
@@ -32,8 +32,11 @@
     spacing: 0.2cm,
     strong[Parallel grand staff],
     score(
-      treble: "C5:q D5:q E5:q G5:q",
-      bass: "C3:h G2:h",
+      staves: (upper: (clef: "treble"), lower: (clef: "bass")),
+      bars: ((
+        upper: "c5:q d5:q e5:q g5:q",
+        lower: "c3:h g2:h",
+      ),),
       time: "4/4",
       scale: 0.62,
       wrap: false,
