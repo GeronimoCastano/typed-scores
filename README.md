@@ -37,6 +37,8 @@ Use `score` for every complete score. A single staff needs no invented name:
 )
 ```
 
+![bar() and score() output](assets/readme/quick-start.png)
+
 Omitting `key` uses C major (`key: "C"`).
 
 For multiple staves, declare stable staff IDs once. Each bar then supplies one
@@ -66,6 +68,8 @@ event string (or an array of simultaneous voice strings) for every ID. Add
   beams: true,
 )
 ```
+
+![Two-staff pickup measure with independent voices](assets/readme/multi-staff.png)
 
 Bar metadata belongs beside the staff content. `clef`, `key`, `time`, and
 `tempo` persist from the bar where they appear; `partial` validates an
@@ -139,6 +143,8 @@ the same right edge.
 )
 ```
 
+![Indented, width-justified systems](assets/readme/system-layout.png)
+
 ## Barlines, navigation, and endings
 
 Use `barline` for repeat marks and `ending` for first/second-ending brackets:
@@ -161,6 +167,8 @@ Use `barline` for repeat marks and `ending` for first/second-ending brackets:
 )
 ```
 
+![Repeat barline combined with a volta bracket](assets/readme/barlines.png)
+
 At one shared boundary, a repeat end and start combine into the conventional
 double-sided repeat barline. Volta brackets continue across wrapped systems,
 and their `label` is literal text such as `"1."`, `"2."`, or `"Final"`.
@@ -170,8 +178,6 @@ Bravura symbols while other values render literally. Coincident bar numbers
 stay closest to the staff, and long boundary text reserves horizontal room
 before the next bar. Set `bar-numbers` to
 `"systems"` or `"all"`, and offset numbering with `first-bar-number`.
-
-![Notes, a beamed measure, and a grand staff](assets/readme/quick-start.png)
 
 ## Event language
 

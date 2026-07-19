@@ -359,9 +359,7 @@ The `group` argument controls the symbol at the left of a multi-staff system:
 `"brace"`, `"bracket"`, `"line"`, or `"none"`. Its default, `auto`, uses no
 symbol for one staff, a brace for two staves, and a bracket for larger
 ensembles. Brace groups connect barlines across their staves; the other styles
-keep each staff's barline separate. Braces use Bravura's proportional outlines
-and flatter large-span variants; brackets use Bravura terminals joined by a
-weighted stem. Group symbols align exactly with the outer staff lines.
+keep each staff's barline separate.
 
 == Bar metadata
 
@@ -399,9 +397,9 @@ the active clef is printed full-size when a new system begins.
 
 For a metronome mark, use a tempo dictionary rather than inserting a Unicode
 note character. `beat` accepts `whole`, `half`, `quarter`, `eighth`,
-`sixteenth`, or `thirty-second`; the package supplies the matching Bravura
-glyph. `text` is optional, so `(beat: "eighth", bpm: 132)` produces just the
-note-and-number mark.
+`sixteenth`, or `thirty-second`, and the matching note glyph is drawn
+automatically. `text` is optional, so `(beat: "eighth", bpm: 132)` produces
+just the note-and-number mark.
 
 == Harmony symbols
 
@@ -457,10 +455,9 @@ literally, so punctuation and text such as `"1."` or `"Final"` are both valid.
 ```, side: false)
 ]
 
-The renderer combines a repeat end followed by a repeat start at one boundary
-into a double-sided repeat barline. Volta brackets continue across system
-wraps. Endings are currently sequential: one bracket must stop before another
-one starts.
+A repeat end followed immediately by a repeat start becomes one double-sided
+repeat barline. Volta brackets continue across system wraps. Endings are
+currently sequential: one bracket must stop before another one starts.
 
 A right bar edge may also be `double`, `final`, or `dashed`. Use a bar's
 `rehearsal` field for a boxed rehearsal label and `navigation` for `"segno"`,
@@ -515,14 +512,11 @@ matching LilyPond's usual sparse numbering; `"all"` prints every bar number.
 
 == Indentation and justification
 
-Multi-system scores fill #c("width") by default. The package preserves clefs,
-signatures, barline clearance, and collision space, then expands or contracts
-the timed gaps between onsets. It evaluates every legal complete-bar partition
-and chooses the overall least-bad spacing, favoring neither cramped nor loose
-systems and keeping adjacent systems similarly dense. There is no fixed bar
-count per line. This follows LilyPond's non-ragged default for scores with more
-than one system. A one-system score stays at natural width with the default
-#c("ragged-right: auto").
+Multi-system scores fill #c("width") by default: note spacing stretches or
+compresses so each system's bars fill the line, and adjacent systems keep a
+similar density rather than alternating cramped and loose lines. There is no
+fixed bar count per line. A one-system score stays at natural width with the
+default #c("ragged-right: auto").
 
 Use #c("indent") for the first system and #c("short-indent") for every later
 one; both reduce the usable line width while retaining a shared right edge.
@@ -637,13 +631,11 @@ and groups may nest. The group preserves pitch and duration inheritance, so
 only its first event needs an explicit octave or duration when the surrounding
 context already supplies one.
 
-By default the numerator is centered on the group. Following LilyPond's usual
-rule, a bracket is omitted when one visible beam spans every event in the
-tuplet; otherwise the renderer draws a bracket. Written rests keep the bracket.
-The italic numerator is optically centered on the interrupted line. Bracket
-segments use LilyPond's 0.16-staff-space weight and 0.7-space terminal hooks.
-Use optional group controls when the engraving needs an explicit choice:
-`bracket=always`, `bracket=never`, `side=above`, or `side=below`.
+By default the numerator is centered on the group, and a bracket is omitted
+when one visible beam spans every event in the tuplet; otherwise a bracket is
+drawn. Written rests keep the bracket. Use optional group controls when the
+engraving needs an explicit choice: `bracket=always`, `bracket=never`,
+`side=above`, or `side=below`.
 
 #demo[
   #example(```typ
@@ -664,22 +656,10 @@ Use optional group controls when the engraving needs an explicit choice:
 Grace groups stay inline and consume no bar time. `grace { ... }` writes plain
 small grace notes. `acciaccatura { ... }` adds a slur to the following
 principal note, as does `appoggiatura { ... }`. For a multi-note group, the
-slur starts at the first grace event. Following LilyPond's grace settings,
-grace stems and beams default upward while the resolving slur curves below. A
-grace note's heads and flags use LilyPond's `font-size = -3` scale (about 70.7
-percent), while its stem retains the normal, unscaled stem weight. Grace beams
-have their own 0.384-space weight and 0.648-space center separation rather than
-shrinking the regular beam wholesale. A single flagged acciaccatura also
-receives the conventional slash. LilyPond attaches that stroke to the flag, so
-a multi-note beamed acciaccatura has no slash; `typed-scores` follows the same
-rule. The resolving bow's tapered tips leave visible clearance from both the
-grace and principal noteheads. A grace slur retains the normal, unscaled slur
-weight; only the grace-note glyphs and their dedicated beam geometry shrink.
+slur starts at the first grace event. A single flagged acciaccatura also
+receives the conventional slash; a multi-note beamed acciaccatura does not.
 Consecutive flagged grace notes beam as an independent group. Their written
-durations control flags and beams but do not contribute to the measure total,
-following LilyPond's grace-time model. When grace and principal notes share
-ledger levels, their shortened ledger segments retain a visible gap instead of
-merging into one line.
+durations control flags and beams but do not contribute to the measure total.
 
 #demo[
   #example(```typ
@@ -701,17 +681,14 @@ are rejected inside it so timing remains unambiguous.
 
 For a repeated single event, append `tremolo=8`, `16`, `32`, or `64` in its
 annotation block. These values draw one, two, three, or four strokes
-respectively, independent of the event's written duration. Each stroke is a
-filled sloping strip with LilyPond's 0.48-staff-space beam weight and vertical
-end edges. The strip cluster is positioned inward from the stem tip, and a
-four-stroke cluster lengthens the stem to retain notehead clearance. For an
+respectively, independent of the event's written duration. For an
 alternation, place exactly two equal-duration notes or chords in
 `tremolo subdivision { ... }`; the connecting strokes replace ordinary flags
 or beams.
 
-Append `arpeggio`, `arpeggio=up`, or `arpeggio=down` to a chord. A Bravura
-arpeggio wave spans the full chord immediately to its left; the directional
-forms add an arrow at the appropriate end, following LilyPond's placement.
+Append `arpeggio`, `arpeggio=up`, or `arpeggio=down` to a chord. The arpeggio
+wave spans the full chord immediately to its left; the directional forms add
+an arrow at the appropriate end.
 
 #demo[
   #example(```typ
@@ -734,28 +711,13 @@ directions, turns, fermatas (`fermata`), breath marks (`breath`), named slurs,
 pedal spans, hairpins, and dynamics (`dyn=p`, `dyn=pp`, `dyn=mf`, `dyn=sfz`,
 and the other standard SMuFL combinations).
 
-Within one staff and system, dynamics and hairpins share a collision-aware
-baseline. A hairpin shortens around a dynamic at either endpoint, so a closing
-mark such as `dyn=ff` remains clear of the wedge.
-Named slurs over beamed passages follow the beam group's rendered stem
-direction. Their endpoints therefore remain attached to the actual boundary
-notes even when a note's standalone stem direction would have been different.
-Following LilyPond's neutral-direction rule, a slur goes below when every
-encompassed non-rest event has an upward stem; the presence of any downward
-stem places it above.
-A slur keeps free air over every notehead it spans, measured across the head's
-full width, and when its boundary notes are beamed the bow may deviate further
-from the melodic interval, so a phrase over a compact sixteenth run arches
-over the inner notes instead of skimming them.
-Articulation marks follow LilyPond's script placement: staccato dots and
-tenuto bars quantize to the half-space grid on their side of the note and
-never rest on a staff line, staccatissimo wedges and marcatos quantize the
-edge nearest the note the same way, and accents always clear the staff
-outline entirely.
-Fingerings sit in a common band just above the staff and rise only when the
-notehead column or an articulation stacked above reaches higher; multi-staff
-scores with computed staff gaps also reserve room for slur arches, keeping
-hairpins and dynamics between staves clear of the bows below them.
+Dynamics, hairpins, slurs, articulations, and fingerings avoid collisions with
+each other automatically: a hairpin shortens around an adjacent dynamic such
+as a closing `dyn=ff`, and fingerings rise above stacked articulations rather
+than overlapping them.
+Named slurs over beamed passages follow the beam group's stem direction, so a
+slur goes below when every note it spans stems upward and above when any note
+stems downward.
 
 #reference-table(
   (34%, 66%),
@@ -764,7 +726,7 @@ hairpins and dynamics between staves clear of the bows below them.
   [#c("stacc") / #c("staccatissimo")], [Staccato dot / wedge.],
   [#c("tenuto") / #c("accent") / #c("marcato")], [Articulation marks.],
   [#c("turn") / #c("chromatic-turn")], [Turn ornament.],
-  [#c("dyn=pp") / #c("dyn=sfz")], [Bravura dynamic glyphs.],
+  [#c("dyn=pp") / #c("dyn=sfz")], [Dynamic marking.],
   [#c("fermata") / #c("breath")], [Fermata / comma breath mark.],
   [#c("s1(") … #c("s1)")], [Named slur.],
   [#c("p1(") … #c("p1)")], [Pedal span.],
