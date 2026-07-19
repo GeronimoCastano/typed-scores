@@ -1540,21 +1540,33 @@
       top = calc.max(top, articulation-top)
     }
   }
+  let has-turn = _has-annotation(item.layout, "turn") or _has-annotation(item.layout, "chromatic-turn")
+  let turn-top = none
+  if has-turn {
+    let stack-base = calc.max(..y-values) + 0.5
+    if articulation-top != none {
+      stack-base = calc.max(stack-base, articulation-top - 0.18)
+    }
+    let turn-y = calc.max(_event-top(item, bottom-y: bottom-y) + 1.22, stack-base + 0.75)
+    turn-top = turn-y + 0.42
+    if _has-annotation(item.layout, "chromatic-turn") {
+      turn-top = turn-y + 0.95
+    }
+    if _annotation-with-prefix(item.layout, "turn-f=") != none {
+      turn-top = turn-y + 1.85
+    }
+    top = calc.max(top, turn-top)
+  }
   if _annotation-with-prefix(item.layout, "f=") != none {
     let ink-top = calc.max(..y-values) + 0.5
     if articulation-top != none {
       ink-top = calc.max(ink-top, articulation-top - 0.18)
     }
-    top = calc.max(top, calc.max(bottom-y + 4.56, ink-top + 0.55) + 0.95)
-  }
-  if _has-annotation(item.layout, "turn") or _has-annotation(item.layout, "chromatic-turn") {
-    top = calc.max(top, _event-top(item, bottom-y: bottom-y) + 1.65)
-    if _has-annotation(item.layout, "chromatic-turn") {
-      top = calc.max(top, _event-top(item, bottom-y: bottom-y) + 2.55)
+    let fingering-y = calc.max(bottom-y + 4.56, ink-top + 0.55)
+    if turn-top != none {
+      fingering-y = calc.max(fingering-y, turn-top + 0.3)
     }
-    if _annotation-with-prefix(item.layout, "turn-f=") != none {
-      top = calc.max(top, _event-top(item, bottom-y: bottom-y) + 3.0)
-    }
+    top = calc.max(top, fingering-y + 0.95)
   }
   if _has-annotation(item.layout, "fermata") {
     top = calc.max(top, _event-top(item, bottom-y: bottom-y) + 1.75)
@@ -1653,17 +1665,51 @@
       let last = placements.last()
       articulation-cursor = last.y + sign * (_articulation-height(last.mark) / 2 + 0.18)
     }
+    // The stack above the note grows outward in LilyPond's script order:
+    // articulations first, then the turn ornament, then the fingering digit
+    // on top.
+    let ink-top = calc.max(..y-values) + 0.5
+    if articulations.len() > 0 and articulation-placement == "above" {
+      ink-top = calc.max(ink-top, articulation-cursor - 0.18)
+    }
+    let turn-top = none
+    if _has-annotation(item.layout, "turn") or _has-annotation(item.layout, "chromatic-turn") {
+      let turn-y = calc.max(top + 1.22, ink-top + 0.75)
+      let slur-y = _slur-clearance-at(slur-layouts, item.x)
+      if slur-y != none {
+        // The chromatic variant hangs a natural sign below the turn, so it
+        // needs more air to clear the bow underneath.
+        let lift = if _has-annotation(item.layout, "chromatic-turn") { 1.7 } else { 0.8 }
+        turn-y = calc.max(turn-y, slur-y + lift)
+      }
+      draw-ornament-turn(item.x, turn-y, unit: unit, scale: 0.82)
+      turn-top = turn-y + 0.42
+      if _has-annotation(item.layout, "chromatic-turn") {
+        draw-accidental("Flat", item.x - 0.72, turn-y + 0.58, unit: unit, scale: 0.38)
+        draw-accidental("Natural", item.x + 0.34, turn-y - 0.74, unit: unit, scale: 0.38)
+        turn-top = turn-y + 0.95
+      }
+      let turn-fingering = _annotation-with-prefix(item.layout, "turn-f=")
+      if turn-fingering != none {
+        content(
+          (item.x, turn-y + 1.08),
+          text(size: unit * 0.62, weight: "bold", turn-fingering),
+          anchor: "south",
+          padding: 0pt,
+        )
+        turn-top = turn-y + 1.85
+      }
+    }
     let fingering = _annotation-with-prefix(item.layout, "f=")
     if fingering != none {
       // LilyPond's default fingering direction is up with half a space of
       // staff padding, so digits float in a common band just above the staff
-      // and rise only when the notehead (never the stem) or an articulation
-      // stacked above reaches higher.
-      let ink-top = calc.max(..y-values) + 0.5
-      if articulations.len() > 0 and articulation-placement == "above" {
-        ink-top = calc.max(ink-top, articulation-cursor - 0.18)
-      }
+      // and rise only when the notehead (never the stem), an articulation,
+      // or a turn stacked above reaches higher.
       let fingering-y = calc.max(bottom-y + 4.56, ink-top + 0.55)
+      if turn-top != none {
+        fingering-y = calc.max(fingering-y, turn-top + 0.3)
+      }
       // A digit inside a slur moves above the bow; endpoint digits stay
       // under the raised slur tip.
       let slur-y = _slur-clearance-at(slur-layouts, item.x)
@@ -1676,30 +1722,6 @@
         anchor: "south",
         padding: 0pt,
       )
-    }
-    if _has-annotation(item.layout, "turn") or _has-annotation(item.layout, "chromatic-turn") {
-      let turn-y = top + 1.22
-      let slur-y = _slur-clearance-at(slur-layouts, item.x)
-      if slur-y != none {
-        // The chromatic variant hangs a natural sign below the turn, so it
-        // needs more air to clear the bow underneath.
-        let lift = if _has-annotation(item.layout, "chromatic-turn") { 1.7 } else { 0.8 }
-        turn-y = calc.max(turn-y, slur-y + lift)
-      }
-      draw-ornament-turn(item.x, turn-y, unit: unit, scale: 0.82)
-      if _has-annotation(item.layout, "chromatic-turn") {
-        draw-accidental("Flat", item.x - 0.72, turn-y + 0.58, unit: unit, scale: 0.38)
-        draw-accidental("Natural", item.x + 0.34, turn-y - 0.74, unit: unit, scale: 0.38)
-      }
-      let turn-fingering = _annotation-with-prefix(item.layout, "turn-f=")
-      if turn-fingering != none {
-        content(
-          (item.x, turn-y + 1.08),
-          text(size: unit * 0.62, weight: "bold", turn-fingering),
-          anchor: "south",
-          padding: 0pt,
-        )
-      }
     }
     let marking = _annotation-with-prefix(item.layout, "text=")
     if marking != none {
@@ -1990,16 +2012,8 @@
     } else {
       calc.max(..y-values)
     }
-    if dir == 1 and _annotation-with-prefix(item.layout, "f=") != none {
-      let ink-top = calc.max(..y-values) + 0.5
-      let articulations = _event-articulations(item.layout)
-      if articulations.len() > 0 and direction != "up" {
-        let last = _articulation-stack(articulations, y-values, 1, bottom-y).last()
-        ink-top = calc.max(ink-top, last.y + _articulation-height(last.mark) / 2)
-      }
-      y = calc.max(y, calc.max(bottom-y + 4.56, ink-top + 0.55) + 1.2)
-    }
-    if dir == 1 and (_has-annotation(item.layout, "turn") or _has-annotation(item.layout, "chromatic-turn")) {
+    let has-turn = _has-annotation(item.layout, "turn") or _has-annotation(item.layout, "chromatic-turn")
+    if dir == 1 and has-turn {
       y = calc.max(y, top + 1.9)
       if _has-annotation(item.layout, "chromatic-turn") {
         y = calc.max(y, top + 2.75)
@@ -2007,6 +2021,19 @@
       if _annotation-with-prefix(item.layout, "turn-f=") != none {
         y = calc.max(y, top + 3.2)
       }
+    }
+    if dir == 1 and _annotation-with-prefix(item.layout, "f=") != none {
+      let ink-top = calc.max(..y-values) + 0.5
+      let articulations = _event-articulations(item.layout)
+      if articulations.len() > 0 and direction != "up" {
+        let last = _articulation-stack(articulations, y-values, 1, bottom-y).last()
+        ink-top = calc.max(ink-top, last.y + _articulation-height(last.mark) / 2)
+      }
+      // The digit rides on top of a turn stacked over the same note.
+      if has-turn {
+        ink-top = calc.max(ink-top, top + 1.64)
+      }
+      y = calc.max(y, calc.max(bottom-y + 4.56, ink-top + 0.55) + 1.2)
     }
     (x, y)
   }
