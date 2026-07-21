@@ -8,3 +8,4 @@ target/
 !tests/test.pdf
 CLAUDE.md
 agents.md
+PACKAGING.md
