@@ -800,6 +800,7 @@ pitches. This compact quartet excerpt demonstrates a bracketed ensemble:
 #align(center)[#mozart-k525-opening(
   scale: 0.42,
   note-spacing: 2.7,
+  wrap: true,
 )]
 
 The single-staff case needs no staff declaration, even for a transposing
