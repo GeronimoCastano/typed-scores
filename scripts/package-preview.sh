@@ -52,11 +52,15 @@ if [ -e "$target" ]; then
   exit 1
 fi
 
-mkdir -p "$target/assets/readme"
+mkdir -p "$target/assets/readme" "$target/src/assets"
 cp "$repo_root/typst.toml" "$target/typst.toml"
 cp "$repo_root/README.md" "$target/README.md"
 cp "$repo_root/LICENSE" "$target/LICENSE"
-cp -R "$repo_root/src" "$target/src"
+cp "$repo_root/src/lib.typ" "$target/src/lib.typ"
+cp "$repo_root/src/score.typ" "$target/src/score.typ"
+cp "$repo_root/src/render.typ" "$target/src/render.typ"
+cp "$repo_root/src/plugin.wasm" "$target/src/plugin.wasm"
+cp -R "$repo_root/src/assets/glyphs" "$target/src/assets/glyphs"
 
 found_png=0
 for image in "$repo_root"/assets/readme/*.png; do
