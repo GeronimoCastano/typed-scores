@@ -1,5 +1,7 @@
 # typed-scores
 
+[Permanent documentation (PDF)](https://github.com/GeronimoCastano/typed-scores/blob/3ee50d55643a98825bd5bd2f7280d514d1c402b9/docs/documentation.pdf)
+
 ![Chopin Nocturne Op. 9 No. 2 opening](assets/readme/chopin-opening.png)
 
 `typed-scores` engraves western music notation directly in Typst. Compact event
