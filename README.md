@@ -281,7 +281,8 @@ naturals before the new signature when required.
 - Pedals and hairpins do not split automatically at system breaks.
 - Dense markings may need `staff-gap`, `note-spacing`, or `scale` adjustment.
 
-See the [user guide](https://github.com/GeronimoCastano/typed-scores/blob/main/docs/documentation.pdf) for the complete reference. The
+See the [user guide](https://github.com/GeronimoCastano/typed-scores/blob/3ee50d55643a98825bd5bd2f7280d514d1c402b9/docs/documentation.pdf)
+for the complete reference. The
 [five-piece release showcase](https://github.com/GeronimoCastano/typed-scores/blob/main/examples/showcase.pdf)
 includes famous piano, string-score, solo-cello, and alto-saxophone excerpts;
 its reusable [source fixtures and reference notes](https://github.com/GeronimoCastano/typed-scores/tree/main/examples)
