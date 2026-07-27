@@ -54,23 +54,26 @@ ANCHOR_GLYPHS = {
 
 def main() -> None:
     if len(sys.argv) > 1:
-        with open(sys.argv[1]) as handle:
-            metadata = json.load(handle)
+        with open(sys.argv[1]) as metadata_file:
+            metadata = json.load(metadata_file)
     else:
         with urllib.request.urlopen(METADATA_URL) as response:
             metadata = json.load(response)
 
-    defaults = metadata["engravingDefaults"]
+    engraving_defaults = metadata["engravingDefaults"]
     print("engravingDefaults (staff spaces):")
     for key in ENGRAVING_KEYS:
-        print(f"  {key} = {defaults[key]}")
+        print(f"  {key} = {engraving_defaults[key]}")
 
-    anchors = metadata["glyphsWithAnchors"]
+    glyph_anchors = metadata["glyphsWithAnchors"]
     print("\nglyph anchors (staff spaces, relative to glyph origin):")
-    for glyph, names in ANCHOR_GLYPHS.items():
-        entry = anchors.get(glyph, {})
-        for name in names:
-            print(f"  {glyph}.{name} = {entry.get(name)}")
+    for glyph, anchor_names in ANCHOR_GLYPHS.items():
+        glyph_anchor_values = glyph_anchors.get(glyph, {})
+        for anchor_name in anchor_names:
+            print(
+                f"  {glyph}.{anchor_name} = "
+                f"{glyph_anchor_values.get(anchor_name)}"
+            )
 
 
 if __name__ == "__main__":

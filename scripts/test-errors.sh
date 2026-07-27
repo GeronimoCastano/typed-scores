@@ -8,15 +8,15 @@ trap 'rm -rf "$tmp_dir"' EXIT HUP INT TERM
 
 check_error() {
   source_file="$1"
-  expected="$2"
-  output="$tmp_dir/$(basename "$source_file").log"
-  if typst compile --root "$repo_root" "$repo_root/$source_file" "$tmp_dir/out.pdf" >"$output" 2>&1; then
+  expected_message="$2"
+  compiler_log="$tmp_dir/$(basename "$source_file").log"
+  if typst compile --root "$repo_root" "$repo_root/$source_file" "$tmp_dir/out.pdf" >"$compiler_log" 2>&1; then
     echo "error: $source_file compiled successfully; expected an error" >&2
     exit 1
   fi
-  if ! grep -F "$expected" "$output" >/dev/null; then
-    echo "error: $source_file did not report: $expected" >&2
-    sed -n '1,100p' "$output" >&2
+  if ! grep -F "$expected_message" "$compiler_log" >/dev/null; then
+    echo "error: $source_file did not report: $expected_message" >&2
+    sed -n '1,100p' "$compiler_log" >&2
     exit 1
   fi
   echo "ok: $source_file"

@@ -19,29 +19,29 @@ if ! command -v lilypond >/dev/null 2>&1; then
   exit 1
 fi
 
-version=$(lilypond --version | sed -n '1s/^GNU LilyPond \([^ ]*\).*/\1/p')
-if [ "$version" != "2.26.0" ]; then
-  echo "LilyPond 2.26.0 is required; found $version." >&2
+lilypond_version=$(lilypond --version | sed -n '1s/^GNU LilyPond \([^ ]*\).*/\1/p')
+if [ "$lilypond_version" != "2.26.0" ]; then
+  echo "LilyPond 2.26.0 is required; found $lilypond_version." >&2
   exit 1
 fi
 
 mkdir -p "$reference_dir"
-failed=0
-for source in "$fixture_dir"/*.ly; do
-  name=$(basename "$source" .ly)
+has_difference=0
+for fixture_source in "$fixture_dir"/*.ly; do
+  fixture_name=$(basename "$fixture_source" .ly)
   lilypond --svg -dcrop -dno-point-and-click \
-    -o "$tmp_dir/$name" "$source" >/dev/null 2>&1
-  generated="$tmp_dir/$name.cropped.svg"
-  reference="$reference_dir/$name.svg"
+    -o "$tmp_dir/$fixture_name" "$fixture_source" >/dev/null 2>&1
+  generated_svg="$tmp_dir/$fixture_name.cropped.svg"
+  reference_svg="$reference_dir/$fixture_name.svg"
   if [ "$mode" = "--update" ]; then
-    cp "$generated" "$reference"
-  elif ! cmp -s "$generated" "$reference"; then
-    echo "$name: LilyPond reference differs; run scripts/test-lilypond-ab.sh --update" >&2
-    failed=1
+    cp "$generated_svg" "$reference_svg"
+  elif ! cmp -s "$generated_svg" "$reference_svg"; then
+    echo "$fixture_name: LilyPond reference differs; run scripts/test-lilypond-ab.sh --update" >&2
+    has_difference=1
   fi
 done
 
-if [ "$failed" -ne 0 ]; then
+if [ "$has_difference" -ne 0 ]; then
   exit 1
 fi
 

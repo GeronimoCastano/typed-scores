@@ -90,30 +90,34 @@ GLYPHS = [
 ]
 
 
-def metadata_bbox(metadata: dict, smufl_name: str) -> tuple[float, float, float, float]:
-    bbox = metadata["glyphBBoxes"][smufl_name]
-    sw_x, sw_y = bbox["bBoxSW"]
-    ne_x, ne_y = bbox["bBoxNE"]
+def metadata_bounding_box(
+    metadata: dict, smufl_name: str
+) -> tuple[float, float, float, float]:
+    glyph_bounds = metadata["glyphBBoxes"][smufl_name]
+    southwest_x, southwest_y = glyph_bounds["bBoxSW"]
+    northeast_x, northeast_y = glyph_bounds["bBoxNE"]
     return (
-        sw_x * UNITS_PER_STAFF_SPACE,
-        sw_y * UNITS_PER_STAFF_SPACE,
-        ne_x * UNITS_PER_STAFF_SPACE,
-        ne_y * UNITS_PER_STAFF_SPACE,
+        southwest_x * UNITS_PER_STAFF_SPACE,
+        southwest_y * UNITS_PER_STAFF_SPACE,
+        northeast_x * UNITS_PER_STAFF_SPACE,
+        northeast_y * UNITS_PER_STAFF_SPACE,
     )
 
 
-def svg_for_glyph(font: TTFont, metadata: dict, smufl_name: str, codepoint: int) -> str:
-    cmap = font.getBestCmap()
-    glyph_name = cmap[codepoint]
+def build_glyph_svg(
+    font: TTFont, metadata: dict, smufl_name: str, codepoint: int
+) -> str:
+    character_map = font.getBestCmap()
+    glyph_name = character_map[codepoint]
     glyph_set = font.getGlyphSet()
-    pen = SVGPathPen(glyph_set)
-    glyph_set[glyph_name].draw(pen)
-    path = pen.getCommands()
-    min_x, min_y, max_x, max_y = metadata_bbox(metadata, smufl_name)
+    path_pen = SVGPathPen(glyph_set)
+    glyph_set[glyph_name].draw(path_pen)
+    svg_path_commands = path_pen.getCommands()
+    min_x, min_y, max_x, max_y = metadata_bounding_box(metadata, smufl_name)
     width = max_x - min_x
     height = max_y - min_y
     view_box = f"{min_x:g} {-max_y:g} {width:g} {height:g}"
-    escaped_path = html.escape(path, quote=True)
+    escaped_path = html.escape(svg_path_commands, quote=True)
     return "\n".join(
         [
             '<svg xmlns="http://www.w3.org/2000/svg" '
@@ -126,30 +130,30 @@ def svg_for_glyph(font: TTFont, metadata: dict, smufl_name: str, codepoint: int)
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
+    argument_parser = argparse.ArgumentParser()
+    argument_parser.add_argument(
         "--bravura-root",
         type=Path,
         default=Path("/private/tmp/bravura"),
         help="Path to a clone of https://github.com/steinbergmedia/bravura",
     )
-    parser.add_argument(
+    argument_parser.add_argument(
         "--out-dir",
         type=Path,
         default=Path("src/assets/glyphs"),
         help="Directory where package SVG glyph assets should be written",
     )
-    args = parser.parse_args()
+    arguments = argument_parser.parse_args()
 
-    font_path = args.bravura_root / "redist" / "otf" / "Bravura.otf"
-    metadata_path = args.bravura_root / "redist" / "bravura_metadata.json"
+    font_path = arguments.bravura_root / "redist" / "otf" / "Bravura.otf"
+    metadata_path = arguments.bravura_root / "redist" / "bravura_metadata.json"
     font = TTFont(font_path)
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
 
-    args.out_dir.mkdir(parents=True, exist_ok=True)
+    arguments.out_dir.mkdir(parents=True, exist_ok=True)
     for smufl_name, file_name, codepoint in GLYPHS:
-        svg = svg_for_glyph(font, metadata, smufl_name, codepoint)
-        (args.out_dir / file_name).write_text(svg, encoding="utf-8")
+        glyph_svg = build_glyph_svg(font, metadata, smufl_name, codepoint)
+        (arguments.out_dir / file_name).write_text(glyph_svg, encoding="utf-8")
 
 
 if __name__ == "__main__":

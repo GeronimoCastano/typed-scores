@@ -52,7 +52,7 @@
 #let _grace-stem-length = 3.5 * _grace-stem-length-fraction - stem-anchor-dy * _grace-notation-scale
 #let _default-left-bar-x = 1.36
 #let _group-symbol-to-bar-gap = 0.34
-#let _grand-clef-after-bar-gap = 0.8
+#let _system-clef-after-barline-gap = 0.8
 #let _staff-label-to-group-gap = 0.6
 
 #let _flat-order-positions = (
@@ -136,8 +136,8 @@
 }
 
 #let _draw-dots(x, y, dots, unit: 8pt) = {
-  for i in range(dots) {
-    draw-augmentation-dot(x + i * _dot-step, y, unit: unit)
+  for dot-index in range(dots) {
+    draw-augmentation-dot(x + dot-index * _dot-step, y, unit: unit)
   }
 }
 
@@ -181,38 +181,42 @@
 }
 
 #let _key-suppresses-accidental(pitch, key) = {
-  let sig = _key-accidentals(key)
-  if sig.count == 0 or pitch.accidental != sig.kind {
+  let signature-accidentals = _key-accidentals(key)
+  if signature-accidentals.count == 0 or pitch.accidental != signature-accidentals.kind {
     false
   } else {
     let flat-letters = ("B", "E", "A", "D", "G", "C", "F")
     let sharp-letters = ("F", "C", "G", "D", "A", "E", "B")
-    let letters = if sig.kind == "Flat" { flat-letters } else { sharp-letters }
-    letters.slice(0, sig.count).contains(pitch.letter)
+    let letters = if signature-accidentals.kind == "Flat" { flat-letters } else { sharp-letters }
+    letters.slice(0, signature-accidentals.count).contains(pitch.letter)
   }
 }
 
 #let _key-alters-natural(pitch, key) = {
-  let sig = _key-accidentals(key)
-  if pitch.accidental != "Natural" or sig.count == 0 {
+  let signature-accidentals = _key-accidentals(key)
+  if pitch.accidental != "Natural" or signature-accidentals.count == 0 {
     false
   } else {
     let flat-letters = ("B", "E", "A", "D", "G", "C", "F")
     let sharp-letters = ("F", "C", "G", "D", "A", "E", "B")
-    let letters = if sig.kind == "Flat" { flat-letters } else { sharp-letters }
-    letters.slice(0, sig.count).contains(pitch.letter)
+    let letters = if signature-accidentals.kind == "Flat" { flat-letters } else { sharp-letters }
+    letters.slice(0, signature-accidentals.count).contains(pitch.letter)
   }
 }
 
 #let _key-default-accidental(letter, key) = {
-  let sig = _key-accidentals(key)
-  if sig.count == 0 {
+  let signature-accidentals = _key-accidentals(key)
+  if signature-accidentals.count == 0 {
     "Natural"
   } else {
     let flat-letters = ("B", "E", "A", "D", "G", "C", "F")
     let sharp-letters = ("F", "C", "G", "D", "A", "E", "B")
-    let letters = if sig.kind == "Flat" { flat-letters } else { sharp-letters }
-    if letters.slice(0, sig.count).contains(letter) { sig.kind } else { "Natural" }
+    let letters = if signature-accidentals.kind == "Flat" { flat-letters } else { sharp-letters }
+    if letters.slice(0, signature-accidentals.count).contains(letter) {
+      signature-accidentals.kind
+    } else {
+      "Natural"
+    }
   }
 }
 
@@ -220,23 +224,27 @@
 #let _key-cancellation-gap = 0.45
 
 #let _key-signature-width(key) = {
-  let sig = _key-accidentals(key)
-  if sig.count == 0 { 0 } else { sig.count * _key-accidental-step(sig.kind) }
+  let signature-accidentals = _key-accidentals(key)
+  if signature-accidentals.count == 0 {
+    0
+  } else {
+    signature-accidentals.count * _key-accidental-step(signature-accidentals.kind)
+  }
 }
 
 #let _draw-key-signature(clef, key, x, bottom-y: 0, unit: 8pt) = {
-  let sig = _key-accidentals(key)
-  if sig.count > 0 {
-    let positions = if sig.kind == "Flat" {
+  let signature-accidentals = _key-accidentals(key)
+  if signature-accidentals.count > 0 {
+    let positions = if signature-accidentals.kind == "Flat" {
       _flat-order-positions.at(clef)
     } else {
       _sharp-order-positions.at(clef)
     }
-    for i in range(sig.count) {
+    for accidental-index in range(signature-accidentals.count) {
       draw-accidental(
-        sig.kind,
-        x + i * _key-accidental-step(sig.kind),
-        staff-y(positions.at(i), bottom-y: bottom-y),
+        signature-accidentals.kind,
+        x + accidental-index * _key-accidental-step(signature-accidentals.kind),
+        staff-y(positions.at(accidental-index), bottom-y: bottom-y),
         unit: unit,
       )
     }
@@ -262,9 +270,9 @@
     current-order.slice(0, current.count)
   }
   let indices = ()
-  for i in range(previous.count) {
-    if previous-order.at(i) not in current-letters {
-      indices.push(i)
+  for accidental-index in range(previous.count) {
+    if previous-order.at(accidental-index) not in current-letters {
+      indices.push(accidental-index)
     }
   }
   indices
@@ -412,8 +420,8 @@
   let offsets = layout.pitches.map(_ => 0.0)
   if layout.pitches.len() < 2 { return offsets }
   let order = ()
-  for (i, item) in layout.pitches.enumerate() {
-    order.push((index: i, pos: item.staff_position))
+  for (pitch-index, positioned-pitch) in layout.pitches.enumerate() {
+    order.push((index: pitch-index, pos: positioned-pitch.staff_position))
   }
   let order = order.sorted(key: e => e.pos)
   let shift = 2 * (_head-half-width(layout) - stem-thickness / 2)
@@ -450,19 +458,26 @@
 #let _accidental-plan(layout, key) = {
   let overrides = layout.at("visible-accidentals", default: none)
   let entries = ()
-  for (i, item) in layout.pitches.enumerate() {
-    let override = if overrides == none { auto } else { overrides.at(i) }
+  for (pitch-index, positioned-pitch) in layout.pitches.enumerate() {
+    let override = if overrides == none { auto } else { overrides.at(pitch-index) }
     let kind = if override != auto {
       override
-    } else if _key-alters-natural(item.pitch, key) {
+    } else if _key-alters-natural(positioned-pitch.pitch, key) {
       "Natural"
-    } else if item.pitch.accidental != "Natural" and not _key-suppresses-accidental(item.pitch, key) {
-      item.pitch.accidental
+    } else if (
+      positioned-pitch.pitch.accidental != "Natural"
+        and not _key-suppresses-accidental(positioned-pitch.pitch, key)
+    ) {
+      positioned-pitch.pitch.accidental
     } else {
       none
     }
     if kind != none {
-      entries.push((index: i, kind: kind, y: item.staff_position / 2))
+      entries.push((
+        index: pitch-index,
+        kind: kind,
+        y: positioned-pitch.staff_position / 2,
+      ))
     }
   }
   if entries.len() == 0 { return (placements: (:), total: 0) }
@@ -547,12 +562,12 @@
 // `note-spacing` remains the user-facing density knob: it is the width a
 // quarter note receives in a bar of quarters.
 #let _duration-spacing(layout, note-spacing, shortest) = {
-  let value = layout.duration_value.numerator / layout.duration_value.denominator
-  let unit = note-spacing / 2
-  unit * (2 + calc.log(calc.max(value / shortest, 1), base: 2))
+  let duration-value = layout.duration_value.numerator / layout.duration_value.denominator
+  let spacing-unit = note-spacing / 2
+  spacing-unit * (2 + calc.log(calc.max(duration-value / shortest, 1), base: 2))
 }
 
-#let _advance(layout, note-spacing, shortest, beamed) = {
+#let _event-rhythmic-advance(layout, note-spacing, shortest, beamed) = {
   calc.max(
     _duration-spacing(layout, note-spacing, shortest),
     _right-extent(layout, beamed) + 1.1,
@@ -584,70 +599,81 @@
   beams: false,
   key: "C",
 ) = {
-  let start = 0
+  let first-onset-x = 0
   let has-polyphony = voices-layouts.any(layouts => layouts.any(layout => (
     layout.at("stem-direction", default: none) != none
   )))
   let onset-keys = ()
-  let seen = (:)
+  let seen-onsets = (:)
   // The measure's shortest sounding duration sets the spacing unit. It is
   // clamped so extreme subdivisions cannot collapse or explode the scale.
-  let shortest = 1.0
+  let shortest-duration-value = 1.0
   for layouts in voices-layouts {
     let main-layouts = layouts.filter(layout => not layout.at("grace", default: false))
     if main-layouts.len() > 0 {
       let first = main-layouts.first()
-      start = calc.max(
-        start,
+      first-onset-x = calc.max(
+        first-onset-x,
         _left-pad(first, key) + first.at("grace_before", default: 0) * _grace-note-step + _grace-main-gap,
       )
     }
     for layout in main-layouts {
-      let value = layout.duration_value.numerator / layout.duration_value.denominator
-      shortest = calc.min(shortest, value)
-      let k = _onset-key(layout.onset)
-      if str(k) not in seen {
-        seen.insert(str(k), true)
-        onset-keys.push(k)
+      let duration-value = layout.duration_value.numerator / layout.duration_value.denominator
+      shortest-duration-value = calc.min(shortest-duration-value, duration-value)
+      let onset-key = _onset-key(layout.onset)
+      if str(onset-key) not in seen-onsets {
+        seen-onsets.insert(str(onset-key), true)
+        onset-keys.push(onset-key)
       }
     }
   }
   for layout in harmony {
-    let k = _onset-key(layout.onset)
-    if str(k) not in seen {
-      seen.insert(str(k), true)
-      onset-keys.push(k)
+    let onset-key = _onset-key(layout.onset)
+    if str(onset-key) not in seen-onsets {
+      seen-onsets.insert(str(onset-key), true)
+      onset-keys.push(onset-key)
     }
   }
   if harmony.len() > 0 {
     // The first symbol is centered on its onset, so reserve its left half
     // before the first note column and keep it clear of the system material.
-    start = calc.max(start, _harmony-width(harmony.first().symbol) / 2 + 0.35)
+    first-onset-x = calc.max(
+      first-onset-x,
+      _harmony-width(harmony.first().symbol) / 2 + 0.35,
+    )
   }
-  let shortest = calc.clamp(shortest, 1 / 32, 1 / 4)
+  shortest-duration-value = calc.clamp(shortest-duration-value, 1 / 32, 1 / 4)
   onset-keys = onset-keys.sorted()
 
   // For each onset, the spacing constraints imposed by events that end
   // there: x[onset] >= x[event onset] + advance(event) + left pad of next.
-  let ending = (:)
-  let end-demands = ()
+  let demands-by-ending-onset = (:)
+  let measure-end-demands = ()
   for layouts in voices-layouts {
     let main-layouts = layouts.filter(layout => not layout.at("grace", default: false))
-    for i in range(main-layouts.len()) {
-      let layout = main-layouts.at(i)
-      let k1 = _onset-key(layout.onset)
-      if i + 1 < main-layouts.len() {
-        let adv = _advance(layout, note-spacing, shortest, _is-beamed(layout, beams))
-        let next = main-layouts.at(i + 1)
-        let k2 = str(_onset-key(next.onset))
-        let grace-width = next.at("grace_before", default: 0) * _grace-note-step + (
-          if next.at("grace_before", default: 0) > 0 { _grace-main-gap } else { 0 }
+    for layout-index in range(main-layouts.len()) {
+      let layout = main-layouts.at(layout-index)
+      let current-onset-key = _onset-key(layout.onset)
+      if layout-index + 1 < main-layouts.len() {
+        let event-advance = _event-rhythmic-advance(
+          layout,
+          note-spacing,
+          shortest-duration-value,
+          _is-beamed(layout, beams),
         )
-        let demand = (from: k1, distance: adv + _left-pad(next, key) + grace-width)
-        if k2 in ending {
-          ending.at(k2).push(demand)
+        let next-layout = main-layouts.at(layout-index + 1)
+        let next-onset-key = str(_onset-key(next-layout.onset))
+        let grace-width = next-layout.at("grace_before", default: 0) * _grace-note-step + (
+          if next-layout.at("grace_before", default: 0) > 0 { _grace-main-gap } else { 0 }
+        )
+        let demand = (
+          from: current-onset-key,
+          distance: event-advance + _left-pad(next-layout, key) + grace-width,
+        )
+        if next-onset-key in demands-by-ending-onset {
+          demands-by-ending-onset.at(next-onset-key).push(demand)
         } else {
-          ending.insert(k2, (demand,))
+          demands-by-ending-onset.insert(next-onset-key, (demand,))
         }
       } else {
         // Measure content ends at the same ink-to-barline clearance that the
@@ -657,15 +683,15 @@
           + _barline-clearance
           + if has-polyphony { 1.15 } else { 0 }
         )
-        end-demands.push((from: k1, distance: distance))
+        measure-end-demands.push((from: current-onset-key, distance: distance))
       }
     }
   }
-  for i in range(harmony.len()) {
-    let layout = harmony.at(i)
+  for harmony-index in range(harmony.len()) {
+    let layout = harmony.at(harmony-index)
     let width = _harmony-width(layout.symbol)
-    let distance = if i + 1 < harmony.len() {
-      let next-width = _harmony-width(harmony.at(i + 1).symbol)
+    let distance = if harmony-index + 1 < harmony.len() {
+      let next-width = _harmony-width(harmony.at(harmony-index + 1).symbol)
       // Both symbols are centered on their onset columns. Preserve the
       // existing rhythmic clearance and add enough room for their extents.
       calc.max(width, (width + next-width) / 2 + 0.35)
@@ -673,44 +699,55 @@
       width
     }
     let demand = (from: _onset-key(layout.onset), distance: distance)
-    if i + 1 < harmony.len() {
-      let next-key = str(_onset-key(harmony.at(i + 1).onset))
-      if next-key in ending {
-        ending.at(next-key).push(demand)
+    if harmony-index + 1 < harmony.len() {
+      let next-key = str(_onset-key(harmony.at(harmony-index + 1).onset))
+      if next-key in demands-by-ending-onset {
+        demands-by-ending-onset.at(next-key).push(demand)
       } else {
-        ending.insert(next-key, (demand,))
+        demands-by-ending-onset.insert(next-key, (demand,))
       }
     } else {
-      end-demands.push(demand)
+      measure-end-demands.push(demand)
     }
   }
 
   let positions = (:)
-  let prev-x = none
-  for k in onset-keys {
-    let x = if prev-x == none { start } else { prev-x + _min-onset-step }
-    for demand in ending.at(str(k), default: ()) {
+  let previous-onset-x = none
+  for onset-key in onset-keys {
+    let x = if previous-onset-x == none {
+      first-onset-x
+    } else {
+      previous-onset-x + _min-onset-step
+    }
+    for demand in demands-by-ending-onset.at(str(onset-key), default: ()) {
       x = calc.max(x, positions.at(str(demand.from)) + demand.distance)
     }
-    positions.insert(str(k), x)
-    prev-x = x
+    positions.insert(str(onset-key), x)
+    previous-onset-x = x
   }
 
-  let width = if prev-x == none { 0 } else { prev-x }
-  for demand in end-demands {
+  let width = if previous-onset-x == none { 0 } else { previous-onset-x }
+  for demand in measure-end-demands {
     width = calc.max(width, positions.at(str(demand.from)) + demand.distance)
   }
   (positions: positions, width: width)
 }
 
 // Place one voice's layouts at the shared onset positions.
-#let _polyphony-clash(a, b) = {
-  if a.rest or b.rest { return false }
-  let a-positions = a.pitches.map(p => p.staff_position)
-  let b-positions = b.pitches.map(p => p.staff_position)
-  let exact-unison = a.notehead == b.notehead and a-positions.sorted() == b-positions.sorted()
+#let _polyphony-clash(left-layout, right-layout) = {
+  if left-layout.rest or right-layout.rest { return false }
+  let left-positions = left-layout.pitches.map(pitch => pitch.staff_position)
+  let right-positions = right-layout.pitches.map(pitch => pitch.staff_position)
+  let exact-unison = (
+    left-layout.notehead == right-layout.notehead
+      and left-positions.sorted() == right-positions.sorted()
+  )
   if exact-unison { return false }
-  a-positions.any(a-pos => b-positions.any(b-pos => calc.abs(a-pos - b-pos) <= 1))
+  left-positions.any(
+    left-position => right-positions.any(
+      right-position => calc.abs(left-position - right-position) <= 1,
+    ),
+  )
 }
 
 #let _polyphony-shift(layout, voice, all-voices) = {
@@ -730,7 +767,7 @@
   0
 }
 
-#let _place-at-positions(layouts, positions, note-start, scale: 1.0, voice: none, all-voices: ()) = {
+#let _place-voice-at-onsets(layouts, positions, note-start, scale: 1.0, voice: none, all-voices: ()) = {
   layouts.map(layout => {
     let base = note-start + positions.at(str(_onset-key(layout.onset))) * scale
     let grace-shift = if layout.at("grace", default: false) {
@@ -747,7 +784,7 @@
 // Drawing events
 // ---------------------------------------------------------------------------
 
-#let _draw-layout-note(
+#let _draw-notated-event(
   layout,
   x: 0,
   bottom-y: 0,
@@ -787,13 +824,13 @@
       default: ledger-extension * notation-scale,
     )
 
-    for (i, item) in layout.pitches.enumerate() {
-      let pos = item.staff_position
-      let y = y-values.at(i)
-      let head-x = x + cluster-offsets.at(i)
+    for (pitch-index, positioned-pitch) in layout.pitches.enumerate() {
+      let staff-position = positioned-pitch.staff_position
+      let notehead-y = y-values.at(pitch-index)
+      let head-x = x + cluster-offsets.at(pitch-index)
       draw-ledger-lines(
         head-x,
-        pos,
+        staff-position,
         bottom-y: bottom-y,
         line-gap: line-gap,
         head-half-width: head-half-width,
@@ -801,28 +838,28 @@
         right-extension: ledger-right-extension,
         unit: unit,
       )
-      let placement = accidental-plan.placements.at(str(i), default: none)
+      let placement = accidental-plan.placements.at(str(pitch-index), default: none)
       if placement != none {
         draw-accidental(
           placement.kind,
           x - left-spread - head-half-width - _accidental-gap - placement.dx,
-          y,
+          notehead-y,
           unit: unit,
           scale: notation-scale,
         )
       }
       if layout.notehead == "whole" {
-        draw-whole-notehead(head-x, y, unit: unit, scale: notation-scale)
+        draw-whole-notehead(head-x, notehead-y, unit: unit, scale: notation-scale)
       } else if layout.notehead == "half" {
-        draw-open-notehead(head-x, y, unit: unit, scale: notation-scale)
+        draw-open-notehead(head-x, notehead-y, unit: unit, scale: notation-scale)
       } else {
-        draw-filled-notehead(head-x, y, unit: unit, scale: notation-scale)
+        draw-filled-notehead(head-x, notehead-y, unit: unit, scale: notation-scale)
       }
       let dot-x = x + right-spread + head-half-width + _dot-gap-from-head + 0.2
       for dot-index in range(layout.duration.dots) {
         draw-augmentation-dot(
           dot-x + dot-index * _dot-step * notation-scale,
-          _dot-y(pos, y, line-gap),
+          _dot-y(staff-position, notehead-y, line-gap),
           unit: unit,
           scale: notation-scale,
         )
@@ -831,8 +868,10 @@
 
     let tremolo = none
     for mark in layout.annotations {
-      let raw = str(mark)
-      if raw.starts-with("tremolo=") { tremolo = int(raw.slice(8)) }
+      let annotation-text = str(mark)
+      if annotation-text.starts-with("tremolo=") {
+        tremolo = int(annotation-text.slice(8))
+      }
     }
     if layout.stem or layout.at("alternating_tremolo", default: false) {
       let low-y = calc.min(..y-values)
@@ -883,9 +922,11 @@
     }
     let arpeggio-direction = none
     for mark in layout.annotations {
-      let raw = str(mark)
-      if raw == "arpeggio" { arpeggio-direction = "normal" }
-      if raw.starts-with("arpeggio=") { arpeggio-direction = raw.slice(9) }
+      let annotation-text = str(mark)
+      if annotation-text == "arpeggio" { arpeggio-direction = "normal" }
+      if annotation-text.starts-with("arpeggio=") {
+        arpeggio-direction = annotation-text.slice(9)
+      }
     }
     if arpeggio-direction != none {
       draw-arpeggio(
@@ -900,7 +941,7 @@
 }
 
 // Stem tip and geometry of an event; alternating tremolos add stems to whole notes.
-#let _stem-data-for-layout(layout, x, bottom-y: 0, line-gap: 1.0, direction-override: none) = {
+#let _event-stem-geometry(layout, x, bottom-y: 0, line-gap: 1.0, direction-override: none) = {
   if layout.rest or (not layout.stem and not layout.at("alternating_tremolo", default: false)) {
     none
   } else {
@@ -949,7 +990,7 @@
   if group.len() == 0 { return }
   if group.len() == 1 {
     let item = group.first()
-    _draw-layout-note(item.layout, x: item.x, bottom-y: bottom-y, unit: unit, key: key)
+    _draw-notated-event(item.layout, x: item.x, bottom-y: bottom-y, unit: unit, key: key)
     return
   }
 
@@ -1031,7 +1072,7 @@
   for item in items {
     let tip-y = beam-y(item.sx)
     let length = sign * (tip-y - item.base-y) - stem-anchor-dy * notation-scale
-    _draw-layout-note(
+    _draw-notated-event(
       item.layout,
       x: item.x,
       bottom-y: bottom-y,
@@ -1047,24 +1088,36 @@
   let level-offset(level) = -sign * (local-beam-thickness / 2 + level * beam-center-step)
 
   // Full segments between neighbors.
-  for i in range(items.len() - 1) {
-    let a = items.at(i)
-    let b = items.at(i + 1)
-    let count = calc.min(a.flags, b.flags)
+  for item-index in range(items.len() - 1) {
+    let left-item = items.at(item-index)
+    let right-item = items.at(item-index + 1)
+    let count = calc.min(left-item.flags, right-item.flags)
     for level in range(count) {
       let dy = level-offset(level)
-      draw-beam((a.sx, beam-y(a.sx) + dy), (b.sx, beam-y(b.sx) + dy), thickness: local-beam-thickness)
+      draw-beam(
+        (left-item.sx, beam-y(left-item.sx) + dy),
+        (right-item.sx, beam-y(right-item.sx) + dy),
+        thickness: local-beam-thickness,
+      )
     }
   }
 
   // Stubs for notes with more flags than both neighbors share.
-  for i in range(items.len()) {
-    let item = items.at(i)
-    let left = if i > 0 { calc.min(items.at(i - 1).flags, item.flags) } else { 0 }
-    let right = if i + 1 < items.len() { calc.min(items.at(i + 1).flags, item.flags) } else { 0 }
+  for item-index in range(items.len()) {
+    let item = items.at(item-index)
+    let left = if item-index > 0 {
+      calc.min(items.at(item-index - 1).flags, item.flags)
+    } else {
+      0
+    }
+    let right = if item-index + 1 < items.len() {
+      calc.min(items.at(item-index + 1).flags, item.flags)
+    } else {
+      0
+    }
     let covered = calc.max(left, right)
     if item.flags > covered {
-      let toward-left = i > 0
+      let toward-left = item-index > 0
       let x2 = if toward-left { item.sx - _beam-stub-length * stem-length-scale } else { item.sx + _beam-stub-length * stem-length-scale }
       for level in range(covered, item.flags) {
         let dy = level-offset(level)
@@ -1077,7 +1130,7 @@
 // Draw a placed voice, joining beam groups computed by the plugin.
 #let _resolve-measure-accidentals(placed, key, tied-from-previous: false) = {
   let state = (:)
-  let out = ()
+  let resolved-events = ()
   for item in placed {
     let visible = ()
     for pitch in item.layout.pitches {
@@ -1087,7 +1140,7 @@
         default: _key-default-accidental(pitch.pitch.letter, key),
       )
       let actual = pitch.pitch.accidental
-      if tied-from-previous and out.len() == 0 {
+      if tied-from-previous and resolved-events.len() == 0 {
         visible.push(none)
         state.insert(pitch-key, actual)
       } else if actual == current {
@@ -1097,12 +1150,12 @@
         state.insert(pitch-key, actual)
       }
     }
-    out.push((
+    resolved-events.push((
       x: item.x,
       layout: item.layout + (visible-accidentals: visible,),
     ))
   }
-  out
+  resolved-events
 }
 
 #let _layout-ledger-levels(layout) = {
@@ -1147,16 +1200,16 @@
     (left: span.extension, right: span.extension, span: span)
   })
   let gap = 0.16
-  for i in range(placed.len() - 1) {
-    let left = plans.at(i)
-    let right = plans.at(i + 1)
+  for item-index in range(placed.len() - 1) {
+    let left = plans.at(item-index)
+    let right = plans.at(item-index + 1)
     if left.span.levels.any(level => level in right.span.levels) {
       let available = calc.max(0, right.span.left - left.span.right - gap)
       let requested = left.right + right.left
       if requested > available and requested > 0 {
         let scale = available / requested
-        plans.at(i) = left + (right: left.right * scale,)
-        plans.at(i + 1) = right + (left: right.left * scale,)
+        plans.at(item-index) = left + (right: left.right * scale,)
+        plans.at(item-index + 1) = right + (left: right.left * scale,)
       }
     }
   }
@@ -1191,7 +1244,7 @@
     // multi-note group therefore has no stroke; only a single flagged grace
     // note receives one.
     if style == "acciaccatura" and group.len() == 1 and first.layout.flags > 0 {
-      let stem = _stem-data-for-layout(first.layout, first.x, bottom-y: bottom-y)
+      let stem = _event-stem-geometry(first.layout, first.x, bottom-y: bottom-y)
       if stem != none {
         let sign = if stem.direction == "up" { 1 } else { -1 }
         let y = stem.point.at(1) - sign * 1.02
@@ -1212,9 +1265,9 @@
       draw-bow(
         (first.x - 0.08, grace-y - (0.5 * _grace-notation-scale + tip-clearance)),
         (main.x - 0.13, main-y - (0.5 + tip-clearance)),
-        dir: -1,
+        direction-sign: -1,
         height: 0.55,
-        h-inf: 1.2,
+        maximum-control-height: 1.2,
         unit: unit,
       )
     }
@@ -1225,8 +1278,8 @@
   for item in placed {
     for tremolo in item.layout.at("tremolo_starts", default: ()) {
       let end = placed.at(tremolo.end_index)
-      let first-stem = _stem-data-for-layout(item.layout, item.x, bottom-y: bottom-y)
-      let last-stem = _stem-data-for-layout(end.layout, end.x, bottom-y: bottom-y)
+      let first-stem = _event-stem-geometry(item.layout, item.x, bottom-y: bottom-y)
+      let last-stem = _event-stem-geometry(end.layout, end.x, bottom-y: bottom-y)
       if first-stem != none and last-stem != none {
         let strokes = _alternating-tremolo-strokes(item.layout, tremolo.subdivision)
         let direction = first-stem.direction
@@ -1258,22 +1311,26 @@
 ) = {
   let placed = _resolve-measure-accidentals(placed, key, tied-from-previous: tied-from-previous)
   let placed = _resolve-ledger-clearance(placed)
-  let i = 0
-  while i < placed.len() {
-    let item = placed.at(i)
+  let event-index = 0
+  while event-index < placed.len() {
+    let item = placed.at(event-index)
     let group-id = item.layout.at("beam_group", default: none)
     if group-id != none {
       let group = (item,)
-      let j = i + 1
-      while j < placed.len() and placed.at(j).layout.at("beam_group", default: none) == group-id {
-        group.push(placed.at(j))
-        j += 1
+      let group-end-index = event-index + 1
+      while (
+        group-end-index < placed.len()
+          and placed.at(group-end-index).layout.at("beam_group", default: none)
+            == group-id
+      ) {
+        group.push(placed.at(group-end-index))
+        group-end-index += 1
       }
       if _beam-group-visible(group, beams) {
         _draw-beam-group(group, bottom-y: bottom-y, unit: unit, key: key)
       } else {
         for member in group {
-          _draw-layout-note(
+          _draw-notated-event(
             member.layout,
             x: member.x,
             bottom-y: bottom-y,
@@ -1282,9 +1339,9 @@
           )
         }
       }
-      i = j
+      event-index = group-end-index
     } else {
-      _draw-layout-note(
+      _draw-notated-event(
         item.layout,
         x: item.x,
         bottom-y: bottom-y,
@@ -1292,7 +1349,7 @@
         suppress-flags: item.layout.at("alternating_tremolo", default: false),
         key: key,
       )
-      i += 1
+      event-index += 1
     }
   }
   _draw-grace-details(placed, bottom-y: bottom-y, unit: unit)
@@ -1349,7 +1406,7 @@
             bottom-y + 3
           } else {
             let heads = item.layout.pitches.map(p => staff-y(p.staff_position, bottom-y: bottom-y))
-            let stem = _stem-data-for-layout(item.layout, item.x, bottom-y: bottom-y)
+            let stem = _event-stem-geometry(item.layout, item.x, bottom-y: bottom-y)
             if stem != none and stem.direction == "up" {
               calc.max(calc.max(..heads), stem.point.at(1))
             } else {
@@ -1364,7 +1421,7 @@
             bottom-y
           } else {
             let heads = item.layout.pitches.map(p => staff-y(p.staff_position, bottom-y: bottom-y))
-            let stem = _stem-data-for-layout(item.layout, item.x, bottom-y: bottom-y)
+            let stem = _event-stem-geometry(item.layout, item.x, bottom-y: bottom-y)
             if stem != none and stem.direction == "down" {
               calc.min(calc.min(..heads) - 0.3, stem.point.at(1))
             } else {
@@ -1410,9 +1467,9 @@
 
 #let _annotation-with-prefix(layout, prefix) = {
   for annotation in layout.annotations {
-    let raw = str(annotation)
-    if raw.starts-with(prefix) {
-      return raw.slice(prefix.len())
+    let annotation-text = str(annotation)
+    if annotation-text.starts-with(prefix) {
+      return annotation-text.slice(prefix.len())
     }
   }
   none
@@ -1427,9 +1484,14 @@
     bottom-y + 3 * line-gap
   } else {
     let y-values = item.layout.pitches.map(p => staff-y(p.staff_position, bottom-y: bottom-y, line-gap: line-gap))
-    let data = _stem-data-for-layout(item.layout, item.x, bottom-y: bottom-y, line-gap: line-gap)
-    if data != none and data.direction == "up" {
-      calc.max(calc.max(..y-values), data.point.at(1))
+    let stem-geometry = _event-stem-geometry(
+      item.layout,
+      item.x,
+      bottom-y: bottom-y,
+      line-gap: line-gap,
+    )
+    if stem-geometry != none and stem-geometry.direction == "up" {
+      calc.max(calc.max(..y-values), stem-geometry.point.at(1))
     } else {
       calc.max(..y-values)
     }
@@ -1451,7 +1513,7 @@
       return if forced-direction == none { _stem-direction(positions) } else { forced-direction }
     }
   }
-  let stem = _stem-data-for-layout(item.layout, item.x, bottom-y: bottom-y)
+  let stem = _event-stem-geometry(item.layout, item.x, bottom-y: bottom-y)
   if stem == none { none } else { stem.direction }
 }
 
@@ -1601,9 +1663,9 @@
   if not item.layout.rest and item.layout.pitches.len() > 0 {
     let y-values = item.layout.pitches.map(p => staff-y(p.staff_position, bottom-y: bottom-y))
     event-bottom = calc.min(event-bottom, calc.min(..y-values) - 0.3)
-    let data = _stem-data-for-layout(item.layout, item.x, bottom-y: bottom-y)
-    if data != none and data.direction == "down" {
-      event-bottom = calc.min(event-bottom, data.point.at(1))
+    let stem-geometry = _event-stem-geometry(item.layout, item.x, bottom-y: bottom-y)
+    if stem-geometry != none and stem-geometry.direction == "down" {
+      event-bottom = calc.min(event-bottom, stem-geometry.point.at(1))
     }
   }
   event-bottom
@@ -1744,26 +1806,26 @@
   }
 }
 
-#let _collect-pedal-spans(placed-bars) = {
-  let open = (:)
-  let spans = ()
-  for placed in placed-bars {
-    for item in placed {
+#let _collect-pedal-spans(placed-measures) = {
+  let open-pedals = (:)
+  let pedal-spans = ()
+  for placed-events in placed-measures {
+    for item in placed-events {
       for annotation in item.layout.annotations {
-        let raw = str(annotation)
-        if raw.starts-with("p") and raw.ends-with("(") {
-          open.insert(raw.slice(0, -1), item.x)
-        } else if raw.starts-with("p") and raw.ends-with(")") {
-          let id = raw.slice(0, -1)
-          if id in open {
-            spans.push((start: open.at(id), end: item.x))
-            let _ = open.remove(id)
+        let annotation-text = str(annotation)
+        if annotation-text.starts-with("p") and annotation-text.ends-with("(") {
+          open-pedals.insert(annotation-text.slice(0, -1), item.x)
+        } else if annotation-text.starts-with("p") and annotation-text.ends-with(")") {
+          let span-id = annotation-text.slice(0, -1)
+          if span-id in open-pedals {
+            pedal-spans.push((start: open-pedals.at(span-id), end: item.x))
+            let _ = open-pedals.remove(span-id)
           }
         }
       }
     }
   }
-  spans
+  pedal-spans
 }
 
 #let _draw-pedal-spans(spans, y, unit: 8pt) = {
@@ -1780,38 +1842,41 @@
   }
 }
 
-#let _collect-hairpins(placed-bars) = {
-  let open = (:)
-  let spans = ()
-  for placed in placed-bars {
-    for item in placed {
+#let _collect-hairpins(placed-measures) = {
+  let open-hairpins = (:)
+  let hairpin-spans = ()
+  for placed-events in placed-measures {
+    for item in placed-events {
       for annotation in item.layout.annotations {
-        let raw = str(annotation)
-        if raw.starts-with("h") and (raw.ends-with("<") or raw.ends-with(">")) {
-          open.insert(raw.slice(0, -1), (
+        let annotation-text = str(annotation)
+        if (
+          annotation-text.starts-with("h")
+            and (annotation-text.ends-with("<") or annotation-text.ends-with(">"))
+        ) {
+          open-hairpins.insert(annotation-text.slice(0, -1), (
             x: item.x,
-            kind: if raw.ends-with("<") { "crescendo" } else { "diminuendo" },
+            kind: if annotation-text.ends-with("<") { "crescendo" } else { "diminuendo" },
             dynamic: _annotation-with-prefix(item.layout, "dyn="),
           ))
-        } else if raw.starts-with("h") and raw.ends-with("!") {
-          let id = raw.slice(0, -1)
-          if id in open {
-            let start = open.at(id)
+        } else if annotation-text.starts-with("h") and annotation-text.ends-with("!") {
+          let span-id = annotation-text.slice(0, -1)
+          if span-id in open-hairpins {
+            let start = open-hairpins.at(span-id)
             let start-clearance = if start.dynamic == none { 0 } else { dynamic-width(start.dynamic) / 2 + 0.35 }
             let end-dynamic = _annotation-with-prefix(item.layout, "dyn=")
             let end-clearance = if end-dynamic == none { 0 } else { dynamic-width(end-dynamic) / 2 + 0.35 }
             let start-x = start.x + start-clearance
             let end-x = item.x - end-clearance
             if end-x > start-x + 0.4 {
-              spans.push((start: start-x, end: end-x, kind: start.kind))
+              hairpin-spans.push((start: start-x, end: end-x, kind: start.kind))
             }
-            let _ = open.remove(id)
+            let _ = open-hairpins.remove(span-id)
           }
         }
       }
     }
   }
-  spans
+  hairpin-spans
 }
 
 #let _draw-hairpins(spans, y, unit: 8pt) = {
@@ -1831,9 +1896,9 @@
 // A taller tie keeps its tips clear of the line at the head and shifts so
 // its apex does not graze the staff line it approaches.
 #let _tie-tip-y(head-y, dir, apex, bottom-y) = {
-  let pos = head-y - bottom-y
-  let line = calc.round(pos)
-  let on-line = calc.abs(pos - line) < 0.25
+  let staff-space-offset = head-y - bottom-y
+  let nearest-line = calc.round(staff-space-offset)
+  let on-line = calc.abs(staff-space-offset - nearest-line) < 0.25
   if apex < 0.625 {
     let space-center = if on-line { head-y + dir * 0.5 } else { head-y }
     let center-pos = space-center - bottom-y
@@ -1905,13 +1970,17 @@
       }
     }
   }
-  for i in range(placed.len()) {
-    let item = placed.at(i)
+  for event-index in range(placed.len()) {
+    let item = placed.at(event-index)
     if item.layout.rest or not item.layout.tie_to_next { continue }
     let positions = item.layout.pitches.map(p => p.staff_position)
     let direction = _stem-direction(positions)
     let sign = if direction == "up" { -1 } else { 1 }
-    let next = if i + 1 < placed.len() { placed.at(i + 1) } else { none }
+    let next = if event-index + 1 < placed.len() {
+      placed.at(event-index + 1)
+    } else {
+      none
+    }
     // In chords the outermost ties curve away from the chord; inner ties
     // follow the stem rule.
     let chord = item.layout.pitches.len() >= 2
@@ -1962,10 +2031,10 @@
     draw-bow(
       tie.start,
       tie.end,
-      dir: tie.dir,
+      direction-sign: tie.dir,
       height: tie.height,
-      h-inf: 1.0,
-      r-0: 0.333,
+      maximum-control-height: 1.0,
+      initial-rise-ratio: 0.333,
       unit: unit,
     )
   }
@@ -1984,7 +2053,7 @@
     none
   } else {
     let direction = _annotation-stem-direction(item, placed, beams: beams, bottom-y: bottom-y)
-    let data = _stem-data-for-layout(
+    let stem-geometry = _event-stem-geometry(
       item.layout,
       item.x,
       bottom-y: bottom-y,
@@ -1993,22 +2062,22 @@
     )
     let y-values = item.layout.pitches.map(p => staff-y(p.staff_position, bottom-y: bottom-y, line-gap: line-gap))
     let head-edge = if dir == 1 { calc.max(..y-values) } else { calc.min(..y-values) }
-    let same-side-stem = data != none and (
+    let same-side-stem = stem-geometry != none and (
       (dir == 1 and direction == "up") or (dir == -1 and direction == "down")
     )
     let (x, y) = if same-side-stem {
-      (data.point.at(0) - 0.2, data.point.at(1) + 0.4)
+      (stem-geometry.point.at(0) - 0.2, stem-geometry.point.at(1) + 0.4)
     } else {
       // Half a space of head ink plus half a space of air: the tip sits one
       // space beyond the outermost pitch center on the free side.
       (item.x, head-edge + dir * 1.0)
     }
     if same-side-stem and dir == -1 {
-      x = data.point.at(0) + 0.2
-      y = data.point.at(1) - 0.4
+      x = stem-geometry.point.at(0) + 0.2
+      y = stem-geometry.point.at(1) - 0.4
     }
-    let top = if data != none and direction == "up" {
-      calc.max(calc.max(..y-values), data.point.at(1))
+    let top = if stem-geometry != none and direction == "up" {
+      calc.max(calc.max(..y-values), stem-geometry.point.at(1))
     } else {
       calc.max(..y-values)
     }
@@ -2083,34 +2152,37 @@
   points
 }
 
-#let _slur-overlaps(a, b) = {
-  a.start.at(0) < b.end.at(0) and b.start.at(0) < a.end.at(0)
+#let _slur-overlaps(left-slur, right-slur) = {
+  (
+    left-slur.start.at(0) < right-slur.end.at(0)
+      and right-slur.start.at(0) < left-slur.end.at(0)
+  )
 }
 
-#let _validate-staff-slurs(layout-bars, staff-name) = {
-  let open = (:)
-  for bar-index in range(layout-bars.len()) {
-    for layout in layout-bars.at(bar-index) {
+#let _validate-staff-slurs(layout-measures, staff-name) = {
+  let open-slurs = (:)
+  for measure-index in range(layout-measures.len()) {
+    for layout in layout-measures.at(measure-index) {
       for annotation in layout.annotations {
-        let raw = str(annotation)
-        if raw.starts-with("s") and raw.ends-with("(") {
-          let id = raw.slice(0, -1)
-          if id in open {
-            panic("typed-scores error: slur " + id + " opened twice in " + staff-name + " bar " + str(bar-index + 1))
+        let annotation-text = str(annotation)
+        if annotation-text.starts-with("s") and annotation-text.ends-with("(") {
+          let span-id = annotation-text.slice(0, -1)
+          if span-id in open-slurs {
+            panic("typed-scores error: slur " + span-id + " opened twice in " + staff-name + " bar " + str(measure-index + 1))
           }
-          open.insert(id, bar-index + 1)
-        } else if raw.starts-with("s") and raw.ends-with(")") {
-          let id = raw.slice(0, -1)
-          if id not in open {
-            panic("typed-scores error: slur " + id + " closes without opening in " + staff-name + " bar " + str(bar-index + 1))
+          open-slurs.insert(span-id, measure-index + 1)
+        } else if annotation-text.starts-with("s") and annotation-text.ends-with(")") {
+          let span-id = annotation-text.slice(0, -1)
+          if span-id not in open-slurs {
+            panic("typed-scores error: slur " + span-id + " closes without opening in " + staff-name + " bar " + str(measure-index + 1))
           }
-          let _ = open.remove(id)
+          let _ = open-slurs.remove(span-id)
         }
       }
     }
   }
-  if open.len() > 0 {
-    panic("typed-scores error: slur " + open.keys().first() + " was opened but never closed in " + staff-name)
+  if open-slurs.len() > 0 {
+    panic("typed-scores error: slur " + open-slurs.keys().first() + " was opened but never closed in " + staff-name)
   }
 }
 
@@ -2134,24 +2206,24 @@
 // A tie joins immediately adjacent events of the same written pitch set.
 // Enharmonic respellings remain available as slurs, where re-articulation is
 // semantically correct and an accidental may be shown normally.
-#let _validate-staff-ties(layout-bars, staff-name) = {
+#let _validate-staff-ties(layout-measures, staff-name) = {
   let events = ()
-  for (bar-index, layouts) in layout-bars.enumerate() {
+  for (measure-index, layouts) in layout-measures.enumerate() {
     for layout in layouts {
-      events.push((layout: layout, bar: bar-index + 1))
+      events.push((layout: layout, bar: measure-index + 1))
     }
   }
-  for i in range(events.len()) {
-    let source = events.at(i)
+  for event-index in range(events.len()) {
+    let source = events.at(event-index)
     if source.layout.at("tie_to_next", default: false) {
-      if i + 1 >= events.len() {
+      if event-index + 1 >= events.len() {
         panic(
           "typed-scores error: tie after " + _layout-pitch-label(source.layout)
             + " has no following event in " + staff-name
             + " bar " + str(source.bar)
         )
       }
-      let target = events.at(i + 1)
+      let target = events.at(event-index + 1)
       let source-pitches = _layout-pitch-label(source.layout)
       let target-pitches = _layout-pitch-label(target.layout)
       if target.layout.rest or source-pitches != target-pitches {
@@ -2165,46 +2237,49 @@
   }
 }
 
-#let _validate-staff-direction-spans(layout-bars, staff-name) = {
-  let pedal-open = (:)
-  let hairpin-open = (:)
-  for (bar-index, layouts) in layout-bars.enumerate() {
+#let _validate-staff-direction-spans(layout-measures, staff-name) = {
+  let open-pedals = (:)
+  let open-hairpins = (:)
+  for (measure-index, layouts) in layout-measures.enumerate() {
     for layout in layouts {
       for annotation in layout.annotations {
-        let raw = str(annotation)
-        if raw.starts-with("p") and raw.ends-with("(") {
-          let id = raw.slice(0, -1)
-          if id in pedal-open {
-            panic("typed-scores error: pedal " + id + " opened twice in " + staff-name + " bar " + str(bar-index + 1))
+        let annotation-text = str(annotation)
+        if annotation-text.starts-with("p") and annotation-text.ends-with("(") {
+          let span-id = annotation-text.slice(0, -1)
+          if span-id in open-pedals {
+            panic("typed-scores error: pedal " + span-id + " opened twice in " + staff-name + " bar " + str(measure-index + 1))
           }
-          pedal-open.insert(id, bar-index + 1)
-        } else if raw.starts-with("p") and raw.ends-with(")") {
-          let id = raw.slice(0, -1)
-          if id not in pedal-open {
-            panic("typed-scores error: pedal " + id + " closes without opening in " + staff-name + " bar " + str(bar-index + 1))
+          open-pedals.insert(span-id, measure-index + 1)
+        } else if annotation-text.starts-with("p") and annotation-text.ends-with(")") {
+          let span-id = annotation-text.slice(0, -1)
+          if span-id not in open-pedals {
+            panic("typed-scores error: pedal " + span-id + " closes without opening in " + staff-name + " bar " + str(measure-index + 1))
           }
-          let _ = pedal-open.remove(id)
-        } else if raw.starts-with("h") and (raw.ends-with("<") or raw.ends-with(">")) {
-          let id = raw.slice(0, -1)
-          if id in hairpin-open {
-            panic("typed-scores error: hairpin " + id + " opened twice in " + staff-name + " bar " + str(bar-index + 1))
+          let _ = open-pedals.remove(span-id)
+        } else if (
+          annotation-text.starts-with("h")
+            and (annotation-text.ends-with("<") or annotation-text.ends-with(">"))
+        ) {
+          let span-id = annotation-text.slice(0, -1)
+          if span-id in open-hairpins {
+            panic("typed-scores error: hairpin " + span-id + " opened twice in " + staff-name + " bar " + str(measure-index + 1))
           }
-          hairpin-open.insert(id, bar-index + 1)
-        } else if raw.starts-with("h") and raw.ends-with("!") {
-          let id = raw.slice(0, -1)
-          if id not in hairpin-open {
-            panic("typed-scores error: hairpin " + id + " closes without opening in " + staff-name + " bar " + str(bar-index + 1))
+          open-hairpins.insert(span-id, measure-index + 1)
+        } else if annotation-text.starts-with("h") and annotation-text.ends-with("!") {
+          let span-id = annotation-text.slice(0, -1)
+          if span-id not in open-hairpins {
+            panic("typed-scores error: hairpin " + span-id + " closes without opening in " + staff-name + " bar " + str(measure-index + 1))
           }
-          let _ = hairpin-open.remove(id)
+          let _ = open-hairpins.remove(span-id)
         }
       }
     }
   }
-  if pedal-open.len() > 0 {
-    panic("typed-scores error: pedal " + pedal-open.keys().first() + " was opened but never closed in " + staff-name)
+  if open-pedals.len() > 0 {
+    panic("typed-scores error: pedal " + open-pedals.keys().first() + " was opened but never closed in " + staff-name)
   }
-  if hairpin-open.len() > 0 {
-    panic("typed-scores error: hairpin " + hairpin-open.keys().first() + " was opened but never closed in " + staff-name)
+  if open-hairpins.len() > 0 {
+    panic("typed-scores error: hairpin " + open-hairpins.keys().first() + " was opened but never closed in " + staff-name)
   }
 }
 
@@ -2228,7 +2303,7 @@
 // Collect slurs for one staff across a system. Slurs that continue past
 // the system run to the continuation edges.
 #let _collect-system-slurs(
-  placed-bars,
+  placed-measures,
   staff-name,
   bottom-y: 0,
   continuation-left-x: 0,
@@ -2236,36 +2311,44 @@
   beams: false,
 ) = {
   let events = ()
-  for (bar-index, placed) in placed-bars.enumerate() {
-    for item in placed {
-      events.push((item: item, placed: placed, bar: bar-index + 1))
+  for (measure-index, placed-events) in placed-measures.enumerate() {
+    for item in placed-events {
+      events.push((item: item, placed: placed-events, bar: measure-index + 1))
     }
   }
-  let open = (:)
-  let closed = ()
+  let open-slurs = (:)
+  let completed-slurs = ()
   for (event-index, entry) in events.enumerate() {
     let item = entry.item
     for annotation in item.layout.annotations {
-      let raw = str(annotation)
-      if raw.starts-with("s") and raw.ends-with("(") {
-        let id = raw.slice(0, -1)
-        open.insert(id, (index: event-index, entry: entry))
-      } else if raw.starts-with("s") and raw.ends-with(")") {
-        let id = raw.slice(0, -1)
-        let start-index = if id in open { open.at(id).index } else { 0 }
+      let annotation-text = str(annotation)
+      if annotation-text.starts-with("s") and annotation-text.ends-with("(") {
+        let span-id = annotation-text.slice(0, -1)
+        open-slurs.insert(span-id, (index: event-index, entry: entry))
+      } else if annotation-text.starts-with("s") and annotation-text.ends-with(")") {
+        let span-id = annotation-text.slice(0, -1)
+        let start-index = if span-id in open-slurs {
+          open-slurs.at(span-id).index
+        } else {
+          0
+        }
         let segment = events.slice(start-index, event-index + 1)
-        let dir = _automatic-slur-direction(segment, beams: beams, bottom-y: bottom-y)
+        let direction-sign = _automatic-slur-direction(
+          segment,
+          beams: beams,
+          bottom-y: bottom-y,
+        )
         let end = _slur-anchor(
           item,
           placed: entry.placed,
           beams: beams,
-          dir: dir,
+          dir: direction-sign,
           bottom-y: bottom-y,
         )
         if end != none {
-          let start-entry = if id in open {
-            let opened = open.at(id)
-            let _ = open.remove(id)
+          let start-entry = if span-id in open-slurs {
+            let opened = open-slurs.at(span-id)
+            let _ = open-slurs.remove(span-id)
             opened.entry
           } else {
             none
@@ -2275,19 +2358,19 @@
               start-entry.item,
               placed: start-entry.placed,
               beams: beams,
-              dir: dir,
+              dir: direction-sign,
               bottom-y: bottom-y,
             )
           } else {
             (continuation-left-x, end.at(1))
           }
           if start != none {
-            closed.push((
-              id: id,
+            completed-slurs.push((
+              id: span-id,
               start: start,
               end: end,
               span: end.at(0) - start.at(0),
-              dir: dir,
+              dir: direction-sign,
               edge-beamed: beams and (
                 item.layout.at("beam_group", default: none) != none
                   or (start-entry != none and start-entry.item.layout.at("beam_group", default: none) != none)
@@ -2298,37 +2381,49 @@
       }
     }
   }
-  for id in open.keys() {
-    let opened = open.at(id)
+  for span-id in open-slurs.keys() {
+    let opened = open-slurs.at(span-id)
     let segment = events.slice(opened.index)
-    let dir = _automatic-slur-direction(segment, beams: beams, bottom-y: bottom-y)
+    let direction-sign = _automatic-slur-direction(
+      segment,
+      beams: beams,
+      bottom-y: bottom-y,
+    )
     let start = _slur-anchor(
       opened.entry.item,
       placed: opened.entry.placed,
       beams: beams,
-      dir: dir,
+      dir: direction-sign,
       bottom-y: bottom-y,
     )
     if start != none {
-      closed.push((
-        id: id,
+      completed-slurs.push((
+        id: span-id,
         start: start,
         end: (continuation-right-x, start.at(1)),
         span: continuation-right-x - start.at(0),
-        dir: dir,
+        dir: direction-sign,
         edge-beamed: beams and opened.entry.item.layout.at("beam_group", default: none) != none,
       ))
     }
   }
-  closed
+  completed-slurs
 }
 
 // Nudge a slur attachment point that would land on a staff line into the
 // adjacent space on its side, so the tip does not merge with the line ink.
 #let _off-staff-line(y, bottom-y, dir) = {
-  let pos = y - bottom-y
-  let line = calc.round(pos)
-  if line >= 0 and line <= 4 and calc.abs(pos - line) < 0.2 { y + dir * 0.15 } else { y }
+  let staff-space-offset = y - bottom-y
+  let nearest-line = calc.round(staff-space-offset)
+  if (
+    nearest-line >= 0
+      and nearest-line <= 4
+      and calc.abs(staff-space-offset - nearest-line) < 0.2
+  ) {
+    y + dir * 0.15
+  } else {
+    y
+  }
 }
 
 // Endpoint offsets tried outward from the base attachments, in staff spaces.
@@ -2366,7 +2461,15 @@
   let height = calc.max(h0, calc.min(h0 * fit, max-h))
   (
     height: height,
-    samples: bow-samples(bow-control-points((sx, sy), (ex, ey), height, 2.0, dir: dir)),
+    samples: bow-samples(
+      bow-control-points(
+        (sx, sy),
+        (ex, ey),
+        height,
+        2.0,
+        direction-sign: dir,
+      ),
+    ),
   )
 }
 
@@ -2525,7 +2628,14 @@
 
 #let _draw-slur-bows(layouts, unit: 8pt) = {
   for layout in layouts {
-    draw-bow(layout.start, layout.end, dir: layout.dir, height: layout.height, h-inf: 2.0, unit: unit)
+    draw-bow(
+      layout.start,
+      layout.end,
+      direction-sign: layout.dir,
+      height: layout.height,
+      maximum-control-height: 2.0,
+      unit: unit,
+    )
   }
 }
 
@@ -2586,7 +2696,7 @@
   total
 }
 
-#let _validate-bar-duration(layouts, time, staff-name, bar-number) = {
+#let _validate-measure-duration(layouts, time, staff-name, measure-number) = {
   let expected = _parse-time-rational(time)
   if expected != none {
     let actual = _duration-sum(layouts)
@@ -2595,7 +2705,7 @@
         "typed-scores error in "
           + staff-name
           + " bar "
-          + str(bar-number)
+          + str(measure-number)
           + ": durations sum to "
           + _format-rational(actual)
           + ", expected "
@@ -2736,7 +2846,7 @@
   content((after-note, y), text(..style, suffix), anchor: "west", padding: 0pt)
 }
 
-#let _bar-metadata-fields = (
+#let _measure-metadata-fields = (
   "key", "time", "clef", "partial", "tempo", "harmony", "barline", "ending",
   "rehearsal", "navigation",
 )
@@ -2806,177 +2916,203 @@
   if type(staves) != dictionary or staves.len() == 0 {
     panic("typed-scores error: staves must be a non-empty dictionary")
   }
-  let out = ()
-  for id in staves.keys() {
-    if id in _bar-metadata-fields or id == "notes" {
-      panic("typed-scores error: staff id " + id + " is reserved")
+  let normalized-staves = ()
+  for staff-id in staves.keys() {
+    if staff-id in _measure-metadata-fields or staff-id == "notes" {
+      panic("typed-scores error: staff id " + staff-id + " is reserved")
     }
-    let spec = staves.at(id)
-    if type(spec) != dictionary {
-      panic("typed-scores error: staff " + id + " must be a dictionary")
+    let staff-config = staves.at(staff-id)
+    if type(staff-config) != dictionary {
+      panic("typed-scores error: staff " + staff-id + " must be a dictionary")
     }
-    for field in spec.keys() {
+    for field in staff-config.keys() {
       if field not in ("clef", "label", "short-label") {
-        panic("typed-scores error: staff " + id + " has unknown field " + field)
+        panic("typed-scores error: staff " + staff-id + " has unknown field " + field)
       }
     }
-    let staff-clef = spec.at("clef", default: none)
+    let staff-clef = staff-config.at("clef", default: none)
     if staff-clef == none {
-      panic("typed-scores error: staff " + id + " is missing a clef")
+      panic("typed-scores error: staff " + staff-id + " is missing a clef")
     }
-    let staff-label = spec.at("label", default: none)
-    let short-label = spec.at("short-label", default: none)
+    let staff-label = staff-config.at("label", default: none)
+    let short-label = staff-config.at("short-label", default: none)
     if staff-label != none and (type(staff-label) != str or staff-label.trim() == "") {
-      panic("typed-scores error: staff " + id + " label must be a non-empty string")
+      panic("typed-scores error: staff " + staff-id + " label must be a non-empty string")
     }
     if short-label != none and (type(short-label) != str or short-label.trim() == "") {
-      panic("typed-scores error: staff " + id + " short-label must be a non-empty string")
+      panic("typed-scores error: staff " + staff-id + " short-label must be a non-empty string")
     }
-    out.push((
-      id: id,
-      field: id,
-      clef: _required-string(staff-clef, "staff " + id + " clef"),
+    normalized-staves.push((
+      id: staff-id,
+      field: staff-id,
+      clef: _required-string(staff-clef, "staff " + staff-id + " clef"),
       label: staff-label,
       short-label: short-label,
     ))
   }
-  out
+  normalized-staves
 }
 
-#let _normalize-score-bars(staves, bars, clef, key, time, tempo) = {
+#let _normalize-score-measures(staves, bars, clef, key, time, tempo) = {
   if type(bars) != array or bars.len() == 0 {
     panic("typed-scores error: bars must be a non-empty array of dictionaries")
   }
   let staff-specs = _normalize-staves(staves, clef)
-  let allowed-fields = _bar-metadata-fields + staff-specs.map(spec => spec.field)
-  let out = ()
+  let allowed-fields = _measure-metadata-fields + staff-specs.map(staff => staff.field)
+  let normalized-measures = ()
   let current-key = key
   let current-time = time
   let current-clefs = (:)
-  for spec in staff-specs {
-    current-clefs.insert(spec.id, spec.clef)
+  for staff in staff-specs {
+    current-clefs.insert(staff.id, staff.clef)
   }
-  let layer-counts = (:)
-  for i in range(bars.len()) {
-    let item = bars.at(i)
-    let label = "bar " + str(i + 1)
-    if type(item) != dictionary {
-      panic("typed-scores error: " + label + " must be a dictionary")
+  let voice-counts = (:)
+  for measure-index in range(bars.len()) {
+    let measure-input = bars.at(measure-index)
+    let measure-label = "bar " + str(measure-index + 1)
+    if type(measure-input) != dictionary {
+      panic("typed-scores error: " + measure-label + " must be a dictionary")
     }
-    for field in item.keys() {
+    for field in measure-input.keys() {
       if field not in allowed-fields {
-        panic("typed-scores error: " + label + " has unknown field " + field)
+        panic("typed-scores error: " + measure-label + " has unknown field " + field)
       }
     }
-    current-key = item.at("key", default: current-key)
-    current-time = item.at("time", default: current-time)
-    let clef-change = item.at("clef", default: none)
+    current-key = measure-input.at("key", default: current-key)
+    current-time = measure-input.at("time", default: current-time)
+    let clef-change = measure-input.at("clef", default: none)
     if clef-change != none {
       if type(clef-change) == str {
         if staff-specs.len() != 1 {
-          panic("typed-scores error: " + label + " clef must be a staff-id dictionary in a multi-staff score")
+          panic("typed-scores error: " + measure-label + " clef must be a staff-id dictionary in a multi-staff score")
         }
         current-clefs.insert(staff-specs.first().id, clef-change)
       } else if type(clef-change) == dictionary {
-        for id in clef-change.keys() {
-          if not staff-specs.any(spec => spec.id == id) {
-            panic("typed-scores error: " + label + " clef has unknown staff " + id)
+        for staff-id in clef-change.keys() {
+          if not staff-specs.any(staff => staff.id == staff-id) {
+            panic("typed-scores error: " + measure-label + " clef has unknown staff " + staff-id)
           }
-          current-clefs.insert(id, _required-string(clef-change.at(id), label + " clef " + id))
+          current-clefs.insert(
+            staff-id,
+            _required-string(
+              clef-change.at(staff-id),
+              measure-label + " clef " + staff-id,
+            ),
+          )
         }
       } else {
-        panic("typed-scores error: " + label + " clef must be a string or staff-id dictionary")
+        panic("typed-scores error: " + measure-label + " clef must be a string or staff-id dictionary")
       }
     }
-    let bar-voices = ()
-    for (staff-index, spec) in staff-specs.enumerate() {
-      let notes = item.at(spec.field, default: none)
+    let measure-voices = ()
+    for (staff-index, staff) in staff-specs.enumerate() {
+      let notes = measure-input.at(staff.field, default: none)
       if notes == none {
-        panic("typed-scores error: " + label + " is missing notes for " + spec.field)
+        panic("typed-scores error: " + measure-label + " is missing notes for " + staff.field)
       }
-      let layers = if type(notes) == str { (notes,) } else if type(notes) == array {
+      let voice-sequences = if type(notes) == str { (notes,) } else if type(notes) == array {
         if notes.len() == 0 or notes.len() > 4 {
-          panic("typed-scores error: " + label + " " + spec.field + " must contain one to four voice strings")
+          panic("typed-scores error: " + measure-label + " " + staff.field + " must contain one to four voice strings")
         }
         notes
       } else {
-        panic("typed-scores error: " + label + " " + spec.field + " must be a string or array of voice strings")
+        panic("typed-scores error: " + measure-label + " " + staff.field + " must be a string or array of voice strings")
       }
-      let known-layer-count = layer-counts.at(spec.id, default: none)
-      if known-layer-count == none {
-        layer-counts.insert(spec.id, layers.len())
-      } else if known-layer-count != layers.len() {
-        panic("typed-scores error: " + label + " " + spec.field + " has " + str(layers.len()) + " voices; expected " + str(known-layer-count))
+      let known-voice-count = voice-counts.at(staff.id, default: none)
+      if known-voice-count == none {
+        voice-counts.insert(staff.id, voice-sequences.len())
+      } else if known-voice-count != voice-sequences.len() {
+        panic("typed-scores error: " + measure-label + " " + staff.field + " has " + str(voice-sequences.len()) + " voices; expected " + str(known-voice-count))
       }
-      for (layer-index, layer) in layers.enumerate() {
-        bar-voices.push((
-          id: spec.id + ".voice" + str(layer-index + 1),
-          staff-id: spec.id,
+      for (voice-index, voice-sequence) in voice-sequences.enumerate() {
+        measure-voices.push((
+          id: staff.id + ".voice" + str(voice-index + 1),
+          staff-id: staff.id,
           staff-index: staff-index,
-          layer-index: layer-index,
-          layer-count: layers.len(),
-          clef: current-clefs.at(spec.id),
-          label: spec.label,
-          short-label: spec.short-label,
-          notes: _required-string(layer, label + " " + spec.field + " voice " + str(layer-index + 1)),
+          layer-index: voice-index,
+          layer-count: voice-sequences.len(),
+          clef: current-clefs.at(staff.id),
+          label: staff.label,
+          short-label: staff.short-label,
+          notes: _required-string(
+            voice-sequence,
+            measure-label + " " + staff.field + " voice " + str(voice-index + 1),
+          ),
         ))
       }
     }
-    out.push((
+    normalized-measures.push((
       key: current-key,
       time: current-time,
-      partial: item.at("partial", default: none),
+      partial: measure-input.at("partial", default: none),
       tempo: _normalize-tempo(
-        item.at("tempo", default: if i == 0 { tempo } else { none }),
-        "tempo in bar " + str(i + 1),
+        measure-input.at("tempo", default: if measure-index == 0 { tempo } else { none }),
+        "tempo in bar " + str(measure-index + 1),
       ),
-      harmony: item.at("harmony", default: none),
-      barline: _normalize-barline(item.at("barline", default: none), label),
-      ending: _normalize-ending(item.at("ending", default: none), label),
-      rehearsal: _normalize-boundary-mark(item.at("rehearsal", default: none), label + " rehearsal"),
-      navigation: _normalize-boundary-mark(item.at("navigation", default: none), label + " navigation"),
+      harmony: measure-input.at("harmony", default: none),
+      barline: _normalize-barline(
+        measure-input.at("barline", default: none),
+        measure-label,
+      ),
+      ending: _normalize-ending(
+        measure-input.at("ending", default: none),
+        measure-label,
+      ),
+      rehearsal: _normalize-boundary-mark(
+        measure-input.at("rehearsal", default: none),
+        measure-label + " rehearsal",
+      ),
+      navigation: _normalize-boundary-mark(
+        measure-input.at("navigation", default: none),
+        measure-label + " navigation",
+      ),
       staff-count: staff-specs.len(),
-      voices: bar-voices,
+      voices: measure-voices,
     ))
   }
-  out
+  normalized-measures
 }
 
 // Parse, validate, and pre-compute shared positions for every measure.
-#let _prepare-grand-measures(staves, bars, clef, key, time, tempo, note-spacing: 3.1, beams: false) = {
-  let raw-bars = _normalize-score-bars(staves, bars, clef, key, time, tempo)
-  let out = ()
+#let _prepare-score-measures(staves, bars, clef, key, time, tempo, note-spacing: 3.1, beams: false) = {
+  let normalized-measures = _normalize-score-measures(staves, bars, clef, key, time, tempo)
+  let prepared-measures = ()
   let previous-key = none
   let previous-time = none
   let previous-clefs = (:)
   let pitch-anchors = (:)
   let duration-anchors = (:)
-  for i in range(raw-bars.len()) {
-    let item = raw-bars.at(i)
-    let validation-time = item.at("partial", default: none)
+  for measure-index in range(normalized-measures.len()) {
+    let normalized-measure = normalized-measures.at(measure-index)
+    let validation-time = normalized-measure.at("partial", default: none)
     if validation-time == none {
-      validation-time = item.time
+      validation-time = normalized-measure.time
     }
     let prepared-voices = ()
-    for voice in item.voices {
-      let result = _layout-sequence(
+    for voice in normalized-measure.voices {
+      let layout-response = _layout-sequence(
         voice.notes,
         clef: voice.clef,
         time: validation-time,
         anchor: pitch-anchors.at(voice.id, default: none),
         duration-anchor: duration-anchors.at(voice.id, default: none),
       )
-      let layouts = result.layouts
-      pitch-anchors.insert(voice.id, result.anchor)
-      duration-anchors.insert(voice.id, result.duration_anchor)
-      _validate-bar-duration(layouts, validation-time, voice.id, i + 1)
+      let event-layouts = layout-response.layouts
+      pitch-anchors.insert(voice.id, layout-response.anchor)
+      duration-anchors.insert(voice.id, layout-response.duration_anchor)
+      _validate-measure-duration(
+        event-layouts,
+        validation-time,
+        voice.id,
+        measure-index + 1,
+      )
       let forced-direction = if voice.layer-count == 1 { none }
         else if calc.rem(voice.layer-index, 2) == 0 { "up" }
         else { "down" }
       let rest-offset = if voice.layer-count == 1 { 0 }
         else if calc.rem(voice.layer-index, 2) == 0 { 1.0 + calc.floor(voice.layer-index / 2) }
         else { -1.0 - calc.floor(voice.layer-index / 2) }
-      let layouts = layouts.map(layout => layout + (
+      let event-layouts = event-layouts.map(layout => layout + (
         stem-direction: forced-direction,
         rest-offset: rest-offset,
       ))
@@ -2987,47 +3123,52 @@
         layer-index: voice.layer-index,
         layer-count: voice.layer-count,
         clef: voice.clef,
-        show-clef: i == 0 or voice.clef != previous-clefs.at(voice.staff-id, default: none),
+        show-clef: measure-index == 0
+          or voice.clef != previous-clefs.at(voice.staff-id, default: none),
         label: voice.label,
         short-label: voice.short-label,
         notes: voice.notes,
-        layouts: layouts,
+        layouts: event-layouts,
       ))
     }
-    let harmony = _layout-harmony(item.harmony, validation-time, i + 1)
+    let harmony = _layout-harmony(
+      normalized-measure.harmony,
+      validation-time,
+      measure-index + 1,
+    )
     let spacing = _measure-positions(
       prepared-voices.map(voice => voice.layouts),
       harmony: harmony,
       note-spacing: note-spacing,
       beams: beams,
-      key: item.key,
+      key: normalized-measure.key,
     )
-    out.push((
-      key: item.key,
+    prepared-measures.push((
+      key: normalized-measure.key,
       previous-key: previous-key,
-      time: item.time,
-      partial: item.at("partial", default: none),
-      tempo: item.at("tempo", default: none),
+      time: normalized-measure.time,
+      partial: normalized-measure.at("partial", default: none),
+      tempo: normalized-measure.at("tempo", default: none),
       harmony: harmony,
-      barline: item.barline,
-      ending: item.ending,
-      rehearsal: item.rehearsal,
-      navigation: item.navigation,
-      staff-count: item.staff-count,
+      barline: normalized-measure.barline,
+      ending: normalized-measure.ending,
+      rehearsal: normalized-measure.rehearsal,
+      navigation: normalized-measure.navigation,
+      staff-count: normalized-measure.staff-count,
       voices: prepared-voices,
       positions: spacing.positions,
       content-width: spacing.width,
-      show-key: i == 0 or item.key != previous-key,
-      show-time: i == 0 or item.time != previous-time,
+      show-key: measure-index == 0 or normalized-measure.key != previous-key,
+      show-time: measure-index == 0 or normalized-measure.time != previous-time,
       show-clef: prepared-voices.any(voice => voice.show-clef),
     ))
     for voice in prepared-voices {
       previous-clefs.insert(voice.staff-id, voice.clef)
     }
-    previous-key = item.key
-    previous-time = item.time
+    previous-key = normalized-measure.key
+    previous-time = normalized-measure.time
   }
-  out
+  prepared-measures
 }
 
 // ---------------------------------------------------------------------------
@@ -3035,27 +3176,27 @@
 // ---------------------------------------------------------------------------
 
 #let _min-staff-position(layouts) = {
-  let out = none
+  let minimum-position = none
   for layout in layouts {
     for item in layout.pitches {
-      if out == none or item.staff_position < out {
-        out = item.staff_position
+      if minimum-position == none or item.staff_position < minimum-position {
+        minimum-position = item.staff_position
       }
     }
   }
-  if out == none { 2 } else { out }
+  if minimum-position == none { 2 } else { minimum-position }
 }
 
 #let _max-staff-position(layouts) = {
-  let out = none
+  let maximum-position = none
   for layout in layouts {
     for item in layout.pitches {
-      if out == none or item.staff_position > out {
-        out = item.staff_position
+      if maximum-position == none or item.staff_position > maximum-position {
+        maximum-position = item.staff_position
       }
     }
   }
-  if out == none { 10 } else { out }
+  if maximum-position == none { 10 } else { maximum-position }
 }
 
 #let _lane-layouts-for-measures(measures) = {
@@ -3127,9 +3268,12 @@
     }
     // A slur endpoint implies a bow arching a couple of spaces past the
     // outermost head on the side away from the stem.
-    let slurred = layout.annotations.any(a => {
-      let raw = str(a)
-      raw.starts-with("s") and (raw.ends-with("(") or raw.ends-with(")"))
+    let slurred = layout.annotations.any(annotation => {
+      let annotation-text = str(annotation)
+      (
+        annotation-text.starts-with("s")
+          and (annotation-text.ends-with("(") or annotation-text.ends-with(")"))
+      )
     })
     if slurred {
       if layout.stem and _layout-stem-direction(layout) == "up" {
@@ -3149,12 +3293,22 @@
   if _annotation-with-prefix(layout, "text=") != none { low = calc.min(low, -2.4) }
   if _annotation-with-prefix(layout, "text-below=") != none { low = calc.min(low, -7.8) }
   for annotation in layout.annotations {
-    let raw = str(annotation)
-    if raw.starts-with("h") and (raw.ends-with("<") or raw.ends-with(">") or raw.ends-with("!")) {
+    let annotation-text = str(annotation)
+    if (
+      annotation-text.starts-with("h")
+        and (
+          annotation-text.ends-with("<")
+            or annotation-text.ends-with(">")
+            or annotation-text.ends-with("!")
+        )
+    ) {
       // Hairpins ride the shared dynamics baseline, which sinks below the
       // system's deepest note ink.
       low = calc.min(low, -3.6, note-ink-low - 2.4)
-    } else if raw.starts-with("p") and (raw.ends-with("(") or raw.ends-with(")")) {
+    } else if (
+      annotation-text.starts-with("p")
+        and (annotation-text.ends-with("(") or annotation-text.ends-with(")"))
+    ) {
       low = calc.min(low, -7.8)
     }
   }
@@ -3331,12 +3485,12 @@
 #let _allocate-measure-widths(measures, widths, prefixes, available, ragged: false) = {
   let natural = ()
   let minimum = ()
-  for i in range(widths.len()) {
-    let flexible = widths.at(i) - prefixes.at(i)
+  for measure-index in range(widths.len()) {
+    let flexible = widths.at(measure-index) - prefixes.at(measure-index)
     natural.push(flexible)
     minimum.push(calc.max(
       0,
-      _boundary-mark-min-width(measures.at(i)) - prefixes.at(i),
+      _boundary-mark-min-width(measures.at(measure-index)) - prefixes.at(measure-index),
     ))
   }
   let natural-total = natural.sum()
@@ -3356,17 +3510,18 @@
     let scale = if compressible <= 0 { 0 } else {
       (available - minimum-total) / compressible
     }
-    for i in range(natural.len()) {
+    for measure-index in range(natural.len()) {
       allocated.push(
-        minimum.at(i) + (natural.at(i) - minimum.at(i)) * scale,
+        minimum.at(measure-index)
+          + (natural.at(measure-index) - minimum.at(measure-index)) * scale,
       )
     }
   }
 
   let density = none
-  for i in range(natural.len()) {
-    if natural.at(i) > 0 {
-      let ratio = allocated.at(i) / natural.at(i)
+  for measure-index in range(natural.len()) {
+    if natural.at(measure-index) > 0 {
+      let ratio = allocated.at(measure-index) / natural.at(measure-index)
       density = if density == none { ratio } else { calc.min(density, ratio) }
     }
   }
@@ -3405,13 +3560,13 @@
       measure,
       is-first-in-system,
       system-left-bar-x,
-      system-left-bar-x + _grand-clef-after-bar-gap,
+      system-left-bar-x + _system-clef-after-barline-gap,
     )
     let measure-width = _measure-width-in-system(
       measure,
       is-first-in-system,
       system-left-bar-x,
-      system-left-bar-x + _grand-clef-after-bar-gap,
+      system-left-bar-x + _system-clef-after-barline-gap,
     )
     widths.push(measure-width)
     prefixes.push(prefix)
@@ -3545,15 +3700,15 @@
 
 #let _finalize-systems(systems, max-width, ragged-right, ragged-last) = {
   let all-ragged = if ragged-right == auto { systems.len() == 1 } else { ragged-right }
-  let out = ()
-  for (i, system) in systems.enumerate() {
-    let is-last = i + 1 == systems.len()
+  let finalized-systems = ()
+  for (system-index, system) in systems.enumerate() {
+    let is-last = system-index + 1 == systems.len()
     let width = if all-ragged or (is-last and ragged-last) {
       system.natural-width
     } else {
       max-width
     }
-    out.push((
+    finalized-systems.push((
       start: system.start,
       widths: system.widths,
       natural-width: system.natural-width,
@@ -3563,28 +3718,28 @@
       label-reserve: system.label-reserve,
     ))
   }
-  out
+  finalized-systems
 }
 
 #let _collect-ending-spans(measures) = {
   let spans = ()
   let open = none
-  for i in range(measures.len()) {
-    let ending = measures.at(i).ending
+  for measure-index in range(measures.len()) {
+    let ending = measures.at(measure-index).ending
     if ending.start {
       if open != none {
-        panic("typed-scores error: ending " + open.label + " is still open at bar " + str(i + 1))
+        panic("typed-scores error: ending " + open.label + " is still open at bar " + str(measure-index + 1))
       }
-      open = (label: ending.label, start: i)
+      open = (label: ending.label, start: measure-index)
     }
     if ending.stop {
       if open == none {
-        panic("typed-scores error: ending " + ending.label + " stops without opening at bar " + str(i + 1))
+        panic("typed-scores error: ending " + ending.label + " stops without opening at bar " + str(measure-index + 1))
       }
       if ending.label != open.label {
         panic("typed-scores error: ending " + ending.label + " stops but ending " + open.label + " is open")
       }
-      spans.push((label: ending.label, start: open.start, stop: i))
+      spans.push((label: ending.label, start: open.start, stop: measure-index))
       open = none
     }
   }
@@ -3734,7 +3889,7 @@
   }
 }
 
-#let _render-grand-system(
+#let _render-score-system(
   measures,
   system,
   unit,
@@ -3758,16 +3913,16 @@
   let system-bottom = stack.bottom
   let system-top = stack.top
   let left-bar-x = system.left-bar-x
-  let clef-x = left-bar-x + _grand-clef-after-bar-gap
+  let clef-x = left-bar-x + _system-clef-after-barline-gap
   let system-width = system.width
 
   // Prefixes (clefs, signatures, and repeat clearance) retain their exact
   // geometry. Only the timed body of each measure stretches or contracts.
   let prefixes = ()
-  for i in range(system.widths.len()) {
+  for measure-index in range(system.widths.len()) {
     let prefix = _measure-prefix-in-system(
-      system-measures.at(i),
-      i == 0,
+      system-measures.at(measure-index),
+      measure-index == 0,
       left-bar-x,
       clef-x,
     )
@@ -3782,9 +3937,9 @@
     ragged: system-width == system.natural-width,
   )
   let measure-widths = allocation.widths
-  let measure-justifications = range(system.widths.len()).map(i => (
-    (measure-widths.at(i) - prefixes.at(i))
-      / (system.widths.at(i) - prefixes.at(i))
+  let measure-justifications = range(system.widths.len()).map(measure-index => (
+    (measure-widths.at(measure-index) - prefixes.at(measure-index))
+      / (system.widths.at(measure-index) - prefixes.at(measure-index))
   ))
 
   let measure-starts = ()
@@ -3812,10 +3967,10 @@
   }
   let continuation-left-x = first-note-start + system-repeat-gap - 1.1
   let continuation-right-x = system-width - 0.15
-  for i in range(system-measures.len()) {
-    let measure = system-measures.at(i)
-    let measure-start = measure-starts.at(i)
-    let note-start = if i == 0 {
+  for measure-index in range(system-measures.len()) {
+    let measure = system-measures.at(measure-index)
+    let measure-start = measure-starts.at(measure-index)
+    let note-start = if measure-index == 0 {
       first-note-start + system-repeat-gap
     } else {
       _inline-signature-note-start(
@@ -3832,11 +3987,11 @@
     for voice-index in range(lane-count) {
       let voice = measure.voices.at(voice-index)
       placed-by-voice.at(voice-index).push(
-        _place-at-positions(
+        _place-voice-at-onsets(
           voice.layouts,
           measure.positions,
           note-start,
-          scale: measure-justifications.at(i),
+          scale: measure-justifications.at(measure-index),
           voice: voice,
           all-voices: measure.voices,
         )
@@ -3891,19 +4046,19 @@
           beams: beams,
           bottom-y: bottom-y,
         )
-        let data = _stem-data-for-layout(
+        let stem-geometry = _event-stem-geometry(
           item.layout,
           item.x,
           bottom-y: bottom-y,
           direction-override: direction,
         )
-        let outer-top = if data != none and data.direction == "up" {
-          calc.max(data.point.at(1), head-top)
+        let outer-top = if stem-geometry != none and stem-geometry.direction == "up" {
+          calc.max(stem-geometry.point.at(1), head-top)
         } else {
           head-top
         }
-        let outer-bottom = if data != none and data.direction == "down" {
-          calc.min(data.point.at(1), head-bottom)
+        let outer-bottom = if stem-geometry != none and stem-geometry.direction == "down" {
+          calc.min(stem-geometry.point.at(1), head-bottom)
         } else {
           head-bottom
         }
@@ -4022,10 +4177,10 @@
       )
     }
 
-    for i in range(system-measures.len()) {
-      let measure = system-measures.at(i)
-      let measure-start = measure-starts.at(i)
-      let note-start = if i == 0 {
+    for measure-index in range(system-measures.len()) {
+      let measure = system-measures.at(measure-index)
+      let measure-start = measure-starts.at(measure-index)
+      let note-start = if measure-index == 0 {
         first-note-start + system-repeat-gap
       } else {
         _inline-signature-note-start(
@@ -4075,7 +4230,7 @@
         }
       }
       let show-bar-number = bar-numbers == "all" or (
-        bar-numbers == "systems" and i == 0 and system.start > 0
+        bar-numbers == "systems" and measure-index == 0 and system.start > 0
       )
       if show-bar-number {
         import cetz.draw: *
@@ -4083,7 +4238,10 @@
           // LilyPond places BarNumber (outside-staff priority 100) before and
           // therefore closer to the staff than RehearsalMark (priority 1500).
           (measure-start + 0.12, system-top + 1.05),
-          text(size: unit * 0.78, str(first-bar-number + system.start + i)),
+          text(
+            size: unit * 0.78,
+            str(first-bar-number + system.start + measure-index),
+          ),
           anchor: "south-west",
           padding: 0pt,
         )
@@ -4092,7 +4250,11 @@
         import cetz.draw: *
         // Chord names are time-point items: their center sits at the onset
         // where the harmony becomes active, independent of its duration.
-        let onset-x = note-start + measure.positions.at(str(_onset-key(harmony.onset))) * measure-justifications.at(i)
+        let onset-x = (
+          note-start
+            + measure.positions.at(str(_onset-key(harmony.onset)))
+              * measure-justifications.at(measure-index)
+        )
         content(
           (
             onset-x,
@@ -4106,7 +4268,7 @@
       for voice-index in range(lane-count) {
         let voice = measure.voices.at(voice-index)
         let bottom-y = bottom-map.at(str(voice.staff-index))
-        if voice.layer-index == 0 and i == 0 {
+        if voice.layer-index == 0 and measure-index == 0 {
           _draw-prologue(
             voice.clef,
             measure.key,
@@ -4132,13 +4294,13 @@
             reserve-clef: measure.at("show-clef"),
           )
         }
-        let global-measure-index = system.start + i
+        let global-measure-index = system.start + measure-index
         let tied-from-previous = global-measure-index > 0 and {
           let previous-layouts = measures.at(global-measure-index - 1).voices.at(voice-index).layouts
           previous-layouts.len() > 0 and previous-layouts.last().at("tie_to_next", default: false)
         }
         _draw-placed-sequence(
-          placed-by-voice.at(voice-index).at(i),
+          placed-by-voice.at(voice-index).at(measure-index),
           bottom-y: bottom-y,
           unit: unit,
           beams: beams,
@@ -4146,13 +4308,13 @@
           tied-from-previous: tied-from-previous,
         )
         _draw-tuplets(
-          placed-by-voice.at(voice-index).at(i),
+          placed-by-voice.at(voice-index).at(measure-index),
           bottom-y: bottom-y,
           unit: unit,
           beams: beams,
         )
         _draw-placed-annotations(
-          placed-by-voice.at(voice-index).at(i),
+          placed-by-voice.at(voice-index).at(measure-index),
           bottom-y: bottom-y,
           unit: unit,
           beams: beams,
@@ -4299,7 +4461,7 @@
       panic("typed-scores error: first-bar-number must be a positive integer")
     }
     let unit = 8pt * scale
-    let measures = _prepare-grand-measures(
+    let measures = _prepare-score-measures(
       staves, bars, clef, key, time, tempo,
       note-spacing: note-spacing,
       beams: beams,
@@ -4330,7 +4492,7 @@
     let first-label-reserve = _staff-label-reserve(measures.first().voices, unit)
     let short-label-reserve = _staff-label-reserve(measures.first().voices, unit, short: true)
     let max-width = if width == none { size.width / unit } else { width }
-    let raw-systems = if wrap {
+    let packed-systems = if wrap {
       _pack-score-systems(
         measures,
         max-width,
@@ -4347,12 +4509,12 @@
       let system-name-left = indent
       let system-left-bar-x = left-bar-x + system-name-left + first-label-reserve
       let system-width = system-left-bar-x
-      for i in range(measures.len()) {
+      for measure-index in range(measures.len()) {
         let measure-width = _measure-width-in-system(
-          measures.at(i),
-          i == 0,
+          measures.at(measure-index),
+          measure-index == 0,
           system-left-bar-x,
-          system-left-bar-x + _grand-clef-after-bar-gap,
+          system-left-bar-x + _system-clef-after-barline-gap,
         )
         widths.push(measure-width)
         system-width += measure-width
@@ -4366,21 +4528,21 @@
         label-reserve: first-label-reserve,
       ),)
     }
-    let systems = _finalize-systems(raw-systems, max-width, ragged-right, ragged-last)
-    for i in range(systems.len()) {
-      _render-grand-system(
+    let systems = _finalize-systems(packed-systems, max-width, ragged-right, ragged-last)
+    for system-index in range(systems.len()) {
+      _render-score-system(
         measures,
-        systems.at(i),
+        systems.at(system-index),
         unit,
         beams: beams,
           staff-gap: staff-gap,
-          composer: if i == 0 { composer } else { none },
+          composer: if system-index == 0 { composer } else { none },
           ending-spans: ending-spans,
           group-style: group-style,
           bar-numbers: bar-numbers,
           first-bar-number: first-bar-number,
         )
-      if i + 1 < systems.len() {
+      if system-index + 1 < systems.len() {
         v(system-gap)
       }
     }

@@ -7,7 +7,7 @@ import argparse
 from pathlib import Path
 
 
-def read_token(stream) -> bytes:
+def read_ppm_header_token(stream) -> bytes:
     while True:
         token = stream.readline()
         if not token:
@@ -19,16 +19,23 @@ def read_token(stream) -> bytes:
 
 def read_ppm(path: Path) -> tuple[int, int, bytes]:
     with path.open("rb") as stream:
-        if read_token(stream) != b"P6":
+        if read_ppm_header_token(stream) != b"P6":
             raise ValueError(f"{path} is not a binary PPM image")
-        width, height = (int(value) for value in read_token(stream).split())
-        maximum = int(read_token(stream))
-        if maximum != 255:
-            raise ValueError(f"{path} uses unsupported channel maximum {maximum}")
+        width, height = (
+            int(dimension) for dimension in read_ppm_header_token(stream).split()
+        )
+        channel_maximum = int(read_ppm_header_token(stream))
+        if channel_maximum != 255:
+            raise ValueError(
+                f"{path} uses unsupported channel maximum {channel_maximum}"
+            )
         pixels = stream.read()
-    expected = width * height * 3
-    if len(pixels) != expected:
-        raise ValueError(f"{path} contains {len(pixels)} pixel bytes; expected {expected}")
+    expected_pixel_bytes = width * height * 3
+    if len(pixels) != expected_pixel_bytes:
+        raise ValueError(
+            f"{path} contains {len(pixels)} pixel bytes; "
+            f"expected {expected_pixel_bytes}"
+        )
     return width, height, pixels
 
 
@@ -37,22 +44,22 @@ def page_number(path: Path) -> int:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("reference", type=Path)
-    parser.add_argument("actual", type=Path)
-    parser.add_argument("--channel-tolerance", type=int, default=8)
-    parser.add_argument("--pixel-ratio", type=float, default=0.0005)
-    args = parser.parse_args()
+    argument_parser = argparse.ArgumentParser()
+    argument_parser.add_argument("reference", type=Path)
+    argument_parser.add_argument("actual", type=Path)
+    argument_parser.add_argument("--channel-tolerance", type=int, default=8)
+    argument_parser.add_argument("--pixel-ratio", type=float, default=0.0005)
+    arguments = argument_parser.parse_args()
 
-    reference_pages = sorted(args.reference.glob("page-*.ppm"), key=page_number)
-    actual_pages = sorted(args.actual.glob("page-*.ppm"), key=page_number)
+    reference_pages = sorted(arguments.reference.glob("page-*.ppm"), key=page_number)
+    actual_pages = sorted(arguments.actual.glob("page-*.ppm"), key=page_number)
     if len(reference_pages) != len(actual_pages):
         raise SystemExit(
             f"rendering page count changed: {len(reference_pages)} reference, "
             f"{len(actual_pages)} actual"
         )
 
-    failed = False
+    has_visual_regression = False
     for reference_path, actual_path in zip(reference_pages, actual_pages):
         ref_width, ref_height, reference = read_ppm(reference_path)
         new_width, new_height, actual = read_ppm(actual_path)
@@ -61,33 +68,34 @@ def main() -> None:
                 f"{actual_path.name}: dimensions changed from "
                 f"{ref_width}x{ref_height} to {new_width}x{new_height}"
             )
-            failed = True
+            has_visual_regression = True
             continue
 
         if reference == actual:
             continue
 
-        changed = 0
-        largest_delta = 0
+        changed_pixels = 0
+        largest_channel_delta = 0
         for offset in range(0, len(reference), 3):
-            delta = max(
+            channel_delta = max(
                 abs(reference[offset + channel] - actual[offset + channel])
                 for channel in range(3)
             )
-            largest_delta = max(largest_delta, delta)
-            if delta > args.channel_tolerance:
-                changed += 1
+            largest_channel_delta = max(largest_channel_delta, channel_delta)
+            if channel_delta > arguments.channel_tolerance:
+                changed_pixels += 1
 
-        pixels = ref_width * ref_height
-        ratio = changed / pixels
-        if ratio > args.pixel_ratio:
+        total_pixels = ref_width * ref_height
+        changed_ratio = changed_pixels / total_pixels
+        if changed_ratio > arguments.pixel_ratio:
             print(
-                f"{actual_path.name}: {changed} pixels changed ({ratio:.4%}); "
-                f"maximum channel delta {largest_delta}"
+                f"{actual_path.name}: {changed_pixels} pixels changed "
+                f"({changed_ratio:.4%}); maximum channel delta "
+                f"{largest_channel_delta}"
             )
-            failed = True
+            has_visual_regression = True
 
-    if failed:
+    if has_visual_regression:
         raise SystemExit("visual regression detected; inspect and regenerate tests/test.pdf")
     print(f"Visual regression comparison passed for {len(reference_pages)} pages.")
 
