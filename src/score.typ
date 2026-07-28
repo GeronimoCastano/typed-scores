@@ -3,6 +3,97 @@
 #let score-plugin = plugin("plugin.wasm")
 
 // ---------------------------------------------------------------------------
+// Diagnostics
+// ---------------------------------------------------------------------------
+
+#let _score-error(
+  location,
+  problem,
+  value: auto,
+  expected: none,
+  fix: none,
+) = {
+  let message = "typed-scores error in " + location + ": " + problem
+  if value != auto {
+    message += "; got " + repr(value)
+  }
+  if expected != none {
+    message += "; expected " + expected
+  }
+  if fix != none {
+    message += "; fix: " + fix
+  }
+  panic(message)
+}
+
+#let _validate-plugin-response(response, location, sequence-str) = {
+  if type(response) != dictionary {
+    _score-error(
+      location,
+      "the parser returned malformed data",
+      value: response,
+      expected: "a typed-scores plugin response dictionary",
+      fix: "rebuild or reinstall typed-scores so plugin.wasm matches the Typst sources",
+    )
+  }
+  let ok = response.at("ok", default: none)
+  if type(ok) != bool {
+    _score-error(
+      location,
+      "the parser response is missing its boolean ok field",
+      value: response,
+      fix: "rebuild or reinstall typed-scores so plugin.wasm matches the Typst sources",
+    )
+  }
+  if not ok {
+    let parser-message = response.at("error", default: none)
+    if type(parser-message) != str or parser-message.trim() == "" {
+      _score-error(
+        location,
+        "the parser failed without an actionable message",
+        value: response,
+        fix: "rebuild or reinstall typed-scores so plugin.wasm matches the Typst sources",
+      )
+    }
+    _score-error(
+      location,
+      parser-message,
+      value: sequence-str,
+      fix: "correct the quoted notes token or delimiter using the syntax named above",
+    )
+  }
+  let data = response.at("data", default: none)
+  if (
+    type(data) != dictionary
+      or type(data.at("layouts", default: none)) != array
+  ) {
+    _score-error(
+      location,
+      "the parser returned an invalid layout payload",
+      value: data,
+      expected: "a dictionary containing a layouts array",
+      fix: "rebuild or reinstall typed-scores so plugin.wasm matches the Typst sources",
+    )
+  }
+  let anchor = data.at("anchor", default: none)
+  let duration-anchor = data.at("duration_anchor", default: none)
+  if (
+    (anchor != none and type(anchor) != str)
+      or (duration-anchor != none and type(duration-anchor) != str)
+      or data.layouts.any(layout => type(layout) != dictionary)
+  ) {
+    _score-error(
+      location,
+      "the parser returned malformed layout state",
+      value: data,
+      expected: "dictionary layouts plus optional string anchors",
+      fix: "rebuild or reinstall typed-scores so plugin.wasm matches the Typst sources",
+    )
+  }
+  data
+}
+
+// ---------------------------------------------------------------------------
 // Plugin calls
 // ---------------------------------------------------------------------------
 
@@ -12,18 +103,23 @@
   time: none,
   anchor: none,
   duration-anchor: none,
+  location: "notes",
 ) = {
   let anchor-str = if anchor == none { "" } else { anchor }
   let duration-anchor-str = if duration-anchor == none { "" } else { duration-anchor }
-  if time == none {
+  let response = if time == none {
     json(score-plugin.layout_sequence_relative(bytes(
-      clef + "\n" + anchor-str + "\n" + duration-anchor-str + "\n" + sequence-str,
+      (clef, "\n", anchor-str, "\n", duration-anchor-str, "\n", sequence-str).join(),
     )))
   } else {
     json(score-plugin.layout_sequence_timed_relative(bytes(
-      clef + "\n" + time + "\n" + anchor-str + "\n" + duration-anchor-str + "\n" + sequence-str,
+      (
+        clef, "\n", time, "\n", anchor-str, "\n",
+        duration-anchor-str, "\n", sequence-str,
+      ).join(),
     )))
   }
+  _validate-plugin-response(response, location, sequence-str)
 }
 
 // ---------------------------------------------------------------------------
@@ -2168,13 +2264,23 @@
         if annotation-text.starts-with("s") and annotation-text.ends-with("(") {
           let span-id = annotation-text.slice(0, -1)
           if span-id in open-slurs {
-            panic("typed-scores error: slur " + span-id + " opened twice in " + staff-name + " bar " + str(measure-index + 1))
+            _score-error(
+              staff-name + " bar " + str(measure-index + 1),
+              "slur " + span-id + " opens twice; its first opening is in bar " + str(open-slurs.at(span-id)),
+              expected: "one opening followed by one closing marker",
+              fix: "close the first slur or use a different slur ID",
+            )
           }
           open-slurs.insert(span-id, measure-index + 1)
         } else if annotation-text.starts-with("s") and annotation-text.ends-with(")") {
           let span-id = annotation-text.slice(0, -1)
           if span-id not in open-slurs {
-            panic("typed-scores error: slur " + span-id + " closes without opening in " + staff-name + " bar " + str(measure-index + 1))
+            _score-error(
+              staff-name + " bar " + str(measure-index + 1),
+              "slur " + span-id + " closes without opening",
+              expected: span-id + "( on an earlier note or chord",
+              fix: "add the opening marker or remove this closing marker",
+            )
           }
           let _ = open-slurs.remove(span-id)
         }
@@ -2182,7 +2288,13 @@
     }
   }
   if open-slurs.len() > 0 {
-    panic("typed-scores error: slur " + open-slurs.keys().first() + " was opened but never closed in " + staff-name)
+    let span-id = open-slurs.keys().first()
+    _score-error(
+      staff-name,
+      "slur " + span-id + " opened in bar " + str(open-slurs.at(span-id)) + " was never closed",
+      expected: span-id + ") on a later note or chord",
+      fix: "add the matching closing marker",
+    )
   }
 }
 
@@ -2217,20 +2329,23 @@
     let source = events.at(event-index)
     if source.layout.at("tie_to_next", default: false) {
       if event-index + 1 >= events.len() {
-        panic(
-          "typed-scores error: tie after " + _layout-pitch-label(source.layout)
-            + " has no following event in " + staff-name
-            + " bar " + str(source.bar)
+        _score-error(
+          staff-name + " bar " + str(source.bar),
+          "tie after " + _layout-pitch-label(source.layout) + " has no following event",
+          expected: "an immediately following note or chord with the same written pitch set",
+          fix: "add the tied target or remove the trailing ~",
         )
       }
       let target = events.at(event-index + 1)
       let source-pitches = _layout-pitch-label(source.layout)
       let target-pitches = _layout-pitch-label(target.layout)
       if target.layout.rest or source-pitches != target-pitches {
-        panic(
-          "typed-scores error: tie in " + staff-name + " bar " + str(source.bar)
-            + " must connect the same written pitch or chord; got "
-            + source-pitches + " followed by " + target-pitches
+        _score-error(
+          staff-name + " bar " + str(source.bar),
+          "tie must connect the same written pitch or chord",
+          value: source-pitches + " followed by " + target-pitches,
+          expected: source-pitches + " followed immediately by the same written pitch set",
+          fix: "correct the target pitch or replace the tie with a slur",
         )
       }
     }
@@ -2247,13 +2362,23 @@
         if annotation-text.starts-with("p") and annotation-text.ends-with("(") {
           let span-id = annotation-text.slice(0, -1)
           if span-id in open-pedals {
-            panic("typed-scores error: pedal " + span-id + " opened twice in " + staff-name + " bar " + str(measure-index + 1))
+            _score-error(
+              staff-name + " bar " + str(measure-index + 1),
+              "pedal " + span-id + " opens twice",
+              expected: "one opening followed by one closing marker",
+              fix: "close the first pedal span or use a different ID",
+            )
           }
           open-pedals.insert(span-id, measure-index + 1)
         } else if annotation-text.starts-with("p") and annotation-text.ends-with(")") {
           let span-id = annotation-text.slice(0, -1)
           if span-id not in open-pedals {
-            panic("typed-scores error: pedal " + span-id + " closes without opening in " + staff-name + " bar " + str(measure-index + 1))
+            _score-error(
+              staff-name + " bar " + str(measure-index + 1),
+              "pedal " + span-id + " closes without opening",
+              expected: span-id + "( on an earlier event",
+              fix: "add the opening marker or remove this closing marker",
+            )
           }
           let _ = open-pedals.remove(span-id)
         } else if (
@@ -2262,13 +2387,23 @@
         ) {
           let span-id = annotation-text.slice(0, -1)
           if span-id in open-hairpins {
-            panic("typed-scores error: hairpin " + span-id + " opened twice in " + staff-name + " bar " + str(measure-index + 1))
+            _score-error(
+              staff-name + " bar " + str(measure-index + 1),
+              "hairpin " + span-id + " opens twice",
+              expected: "one < or > opening followed by one ! closing marker",
+              fix: "close the first hairpin or use a different ID",
+            )
           }
           open-hairpins.insert(span-id, measure-index + 1)
         } else if annotation-text.starts-with("h") and annotation-text.ends-with("!") {
           let span-id = annotation-text.slice(0, -1)
           if span-id not in open-hairpins {
-            panic("typed-scores error: hairpin " + span-id + " closes without opening in " + staff-name + " bar " + str(measure-index + 1))
+            _score-error(
+              staff-name + " bar " + str(measure-index + 1),
+              "hairpin " + span-id + " closes without opening",
+              expected: span-id + "< or " + span-id + "> on an earlier event",
+              fix: "add the opening marker or remove this closing marker",
+            )
           }
           let _ = open-hairpins.remove(span-id)
         }
@@ -2276,10 +2411,22 @@
     }
   }
   if open-pedals.len() > 0 {
-    panic("typed-scores error: pedal " + open-pedals.keys().first() + " was opened but never closed in " + staff-name)
+    let span-id = open-pedals.keys().first()
+    _score-error(
+      staff-name,
+      "pedal " + span-id + " opened in bar " + str(open-pedals.at(span-id)) + " was never closed",
+      expected: span-id + ") on a later event",
+      fix: "add the matching pedal closing marker",
+    )
   }
   if open-hairpins.len() > 0 {
-    panic("typed-scores error: hairpin " + open-hairpins.keys().first() + " was opened but never closed in " + staff-name)
+    let span-id = open-hairpins.keys().first()
+    _score-error(
+      staff-name,
+      "hairpin " + span-id + " opened in bar " + str(open-hairpins.at(span-id)) + " was never closed",
+      expected: span-id + "! on a later event",
+      fix: "add the matching hairpin closing marker",
+    )
   }
 }
 
@@ -2663,6 +2810,10 @@
   a.numerator * b.denominator == b.numerator * a.denominator
 }
 
+#let _rational-lte(a, b) = {
+  a.numerator * b.denominator <= b.numerator * a.denominator
+}
+
 #let _format-rational(value) = {
   if value.denominator == 1 {
     str(value.numerator)
@@ -2671,18 +2822,58 @@
   }
 }
 
-#let _parse-time-rational(time) = {
+#let _time-digits = ("0", "1", "2", "3", "4", "5", "6", "7", "8", "9")
+
+#let _parse-time-rational(time, label: "time signature", optional: true) = {
   if time == none {
-    none
+    if optional {
+      none
+    } else {
+      _score-error(
+        label,
+        "a meter is required",
+        value: time,
+        expected: "a string such as \"4/4\" or \"12/8\"",
+        fix: "set time to the active meter",
+      )
+    }
   } else {
+    if type(time) != str {
+      _score-error(
+        label,
+        "meter must be a string",
+        value: time,
+        expected: "a value such as \"4/4\" or \"12/8\"",
+        fix: "quote the meter",
+      )
+    }
     let parts = time.split("/")
-    if parts.len() != 2 {
-      panic("typed-scores error: time signature must look like 4/4 or 12/8, got " + repr(time))
+    if (
+      parts.len() != 2
+        or parts.any(part => (
+          part == ""
+            or part.len() > 9
+            or part.codepoints().any(digit => digit not in _time-digits)
+        ))
+    ) {
+      _score-error(
+        label,
+        "meter has invalid syntax",
+        value: time,
+        expected: "positive whole numbers separated by one slash, such as \"4/4\" or \"12/8\"",
+        fix: "write the numerator and denominator with ASCII digits",
+      )
     }
     let numerator = int(parts.at(0))
     let denominator = int(parts.at(1))
     if numerator <= 0 or denominator <= 0 {
-      panic("typed-scores error: time signature values must be positive, got " + repr(time))
+      _score-error(
+        label,
+        "meter values must be positive",
+        value: time,
+        expected: "a numerator and denominator greater than zero",
+        fix: "replace zero with the intended positive meter value",
+      )
     }
     _rational(numerator, denominator)
   }
@@ -2697,19 +2888,18 @@
 }
 
 #let _validate-measure-duration(layouts, time, staff-name, measure-number) = {
-  let expected = _parse-time-rational(time)
+  let expected = _parse-time-rational(
+    time,
+    label: staff-name + " bar " + str(measure-number) + " meter",
+  )
   if expected != none {
     let actual = _duration-sum(layouts)
     if not _rational-eq(actual, expected) {
-      panic(
-        "typed-scores error in "
-          + staff-name
-          + " bar "
-          + str(measure-number)
-          + ": durations sum to "
-          + _format-rational(actual)
-          + ", expected "
-          + time
+      _score-error(
+        staff-name + " bar " + str(measure-number),
+        "voice durations sum to " + _format-rational(actual),
+        expected: time,
+        fix: "add, remove, or change event durations so this voice fills the active bar or partial",
       )
     }
   }
@@ -2741,7 +2931,22 @@
 #let _layout-harmony(sequence, time, bar-number) = {
   if sequence == none { return () }
   if type(sequence) != str or sequence.trim() == "" {
-    panic("typed-scores error: harmony in bar " + str(bar-number) + " must be a non-empty string")
+    _score-error(
+      "harmony in bar " + str(bar-number),
+      "harmony must be a non-empty string",
+      value: sequence,
+      expected: "space-separated symbol:duration tokens such as \"Cmaj7:h G7:h\"",
+      fix: "provide timed harmony text or remove the harmony field",
+    )
+  }
+  if time == none {
+    _score-error(
+      "harmony in bar " + str(bar-number),
+      "timed harmony requires an active meter",
+      value: sequence,
+      expected: "a bar time or partial value",
+      fix: "set time for the score or partial for this bar",
+    )
   }
   let layouts = ()
   let onset = _rational(0, 1)
@@ -2749,20 +2954,25 @@
     if token == "" { continue }
     let parts = token.split(":")
     if parts.len() != 2 or parts.first().trim() == "" or parts.last() not in _harmony-duration-values {
-      panic(
-        "typed-scores error: harmony " + repr(token) + " in bar " + str(bar-number)
-          + " must look like Cmaj7:h"
+      _score-error(
+        "harmony token in bar " + str(bar-number),
+        "harmony token has invalid syntax",
+        value: token,
+        expected: "one symbol, one colon, and a duration such as Cmaj7:h",
+        fix: "add the missing symbol, colon, or supported duration code",
       )
     }
     let duration = _harmony-duration-values.at(parts.last())
     layouts.push((symbol: parts.first(), onset: onset, duration-value: duration))
     onset = _rational-add(onset, duration)
   }
-  let expected = _parse-time-rational(time)
+  let expected = _parse-time-rational(time, label: "harmony bar " + str(bar-number) + " meter")
   if not _rational-eq(onset, expected) {
-    panic(
-      "typed-scores error in harmony bar " + str(bar-number) + ": durations sum to "
-        + _format-rational(onset) + ", expected " + time
+    _score-error(
+      "harmony bar " + str(bar-number),
+      "durations sum to " + _format-rational(onset),
+      expected: time,
+      fix: "change the harmony durations so they fill the active bar or partial",
     )
   }
   layouts
@@ -2774,21 +2984,145 @@
 
 #let _required-string(value, label) = {
   if type(value) != str {
-    panic("typed-scores error: " + label + " must be a string")
+    _score-error(
+      label,
+      "value must be a string",
+      value: value,
+      expected: "quoted text",
+      fix: "replace the value with a string",
+    )
   }
   value
 }
 
+#let _required-nonempty-string(value, label) = {
+  let validated = _required-string(value, label)
+  if validated.trim() == "" {
+    _score-error(
+      label,
+      "string must contain at least one musical token",
+      value: value,
+      expected: "a note, chord, rest, group, or automatic-rest token",
+      fix: "add the intended event or remove the empty voice",
+    )
+  }
+  validated
+}
+
 #let _positive-number(value, label, optional: false) = {
   if optional and value == none { return }
-  if type(value) not in (int, float) or value <= 0 {
-    panic("typed-scores error: " + label + " must be a positive number")
+  if (
+    type(value) not in (int, float)
+      or value != value
+      or value in (float.inf, -float.inf)
+      or value <= 0
+  ) {
+    _score-error(
+      label,
+      "value must be a positive number",
+      value: value,
+      expected: "an integer or float greater than zero",
+      fix: "use a positive staff-space value",
+    )
   }
 }
 
 #let _nonnegative-number(value, label) = {
-  if type(value) not in (int, float) or value < 0 {
-    panic("typed-scores error: " + label + " must be a non-negative number")
+  if (
+    type(value) not in (int, float)
+      or value != value
+      or value in (float.inf, -float.inf)
+      or value < 0
+  ) {
+    _score-error(
+      label,
+      "value must be a non-negative number",
+      value: value,
+      expected: "an integer or float greater than or equal to zero",
+      fix: "use zero or a positive staff-space value",
+    )
+  }
+}
+
+#let _valid-clefs = ("treble", "bass", "alto", "tenor")
+
+#let _validate-clef(value, label) = {
+  if type(value) != str or value not in _valid-clefs {
+    _score-error(
+      label,
+      "unknown clef",
+      value: value,
+      expected: "treble, bass, alto, or tenor",
+      fix: "choose one of the supported clef names",
+    )
+  }
+  value
+}
+
+#let _valid-keys = (
+  "C", "G", "D", "A", "E", "B", "F#", "C#",
+  "F", "Bb", "Eb", "Ab", "Db", "Gb", "Cb",
+  "Am", "Em", "Bm", "F#m", "C#m", "G#m", "D#m", "A#m",
+  "Dm", "Gm", "Cm", "Fm", "Bbm", "Ebm", "Abm",
+)
+
+#let _validate-key(value, label) = {
+  if value != none and (type(value) != str or value not in _valid-keys) {
+    _score-error(
+      label,
+      "unsupported key signature",
+      value: value,
+      expected: "a supported major or minor key such as C, Eb, F#, Am, or F#m",
+      fix: "use a conventional key name with exact capitalization",
+    )
+  }
+  value
+}
+
+#let _validate-marking(value, label, optional: true) = {
+  if optional and value == none { return value }
+  if type(value) not in (str, content) {
+    _score-error(
+      label,
+      "value must be text or content",
+      value: value,
+      expected: "a string, content value, or none",
+      fix: "quote plain text or wrap styled material as Typst content",
+    )
+  }
+  if type(value) == str and value.trim() == "" {
+    _score-error(
+      label,
+      "text must not be empty",
+      value: value,
+      fix: "provide visible text or remove the argument",
+    )
+  }
+  value
+}
+
+#let _validate-system-gap(value) = {
+  if type(value) != length {
+    _score-error(
+      "score system-gap",
+      "value must be a non-negative length",
+      value: value,
+      expected: "a Typst length such as 1.2em or 12pt",
+      fix: "add a length unit and use zero or a positive value",
+    )
+  }
+  if (
+    value != value
+      or value in (float.inf * 1pt, -float.inf * 1pt)
+      or value < 0pt
+  ) {
+    _score-error(
+      "score system-gap",
+      "value must be a finite non-negative length",
+      value: value,
+      expected: "a finite length greater than or equal to zero",
+      fix: "replace the value with a normal length such as 1.2em or 12pt",
+    )
   }
 }
 
@@ -2802,22 +3136,50 @@
 )
 
 #let _normalize-tempo(value, label) = {
-  if value == none or type(value) != dictionary { return value }
+  if value == none { return none }
+  if type(value) != dictionary {
+    return _validate-marking(value, label)
+  }
   let allowed = ("text", "beat", "bpm")
   for key in value.keys() {
     if key not in allowed {
-      panic("typed-scores error: " + label + " has unknown field " + repr(key))
+      _score-error(
+        label,
+        "tempo dictionary has unknown field",
+        value: key,
+        expected: "text, beat, and bpm fields only",
+        fix: "remove or rename the unknown field",
+      )
     }
   }
+  let tempo-text = value.at("text", default: none)
+  let _ = _validate-marking(tempo-text, label + " text")
   let beat = value.at("beat", default: none)
   let bpm = value.at("bpm", default: none)
   if type(beat) != str or beat not in _tempo-beat-glyphs {
-    panic("typed-scores error: " + label + " beat must be whole, half, quarter, eighth, sixteenth, or thirty-second")
+    _score-error(
+      label + " beat",
+      "unsupported metronome beat",
+      value: beat,
+      expected: "whole, half, quarter, eighth, sixteenth, or thirty-second",
+      fix: "choose one of the supported beat names",
+    )
   }
-  if type(bpm) not in (int, float) or bpm <= 0 {
-    panic("typed-scores error: " + label + " bpm must be a positive number")
+  if (
+    type(bpm) not in (int, float)
+      or bpm != bpm
+      or bpm in (float.inf, -float.inf)
+      or bpm <= 0
+  ) {
+    _score-error(
+      label + " bpm",
+      "tempo must be a positive number",
+      value: bpm,
+      expected: "an integer or float greater than zero",
+      fix: "set bpm to the intended positive tempo",
+    )
   }
-  (text: value.at("text", default: none), beat: beat, bpm: bpm)
+  (text: tempo-text, beat: beat, bpm: bpm)
 }
 
 #let _draw-tempo(tempo, x, y, unit) = {
@@ -2856,33 +3218,59 @@
     return (left: none, right: none)
   }
   if type(value) != dictionary {
-    panic("typed-scores error: " + label + " barline must be a dictionary")
+    _score-error(
+      label + " barline",
+      "barline must be a dictionary",
+      value: value,
+      expected: "left and/or right fields",
+      fix: "write barline: (right: \"final\") or remove it",
+    )
   }
   for field in value.keys() {
     if field != "left" and field != "right" {
-      panic("typed-scores error: " + label + " barline has unknown field " + field)
+      _score-error(
+        label + " barline",
+        "barline has unknown field",
+        value: field,
+        expected: "left or right",
+        fix: "remove or rename the unknown field",
+      )
     }
   }
   let left = value.at("left", default: none)
   let right = value.at("right", default: none)
+  if left == none and right == none {
+    _score-error(
+      label + " barline",
+      "barline dictionary does not select a boundary style",
+      value: value,
+      expected: "a supported left or right value",
+      fix: "add a barline style or remove the empty dictionary",
+    )
+  }
   if left != none and left != "repeat-start" {
-    panic("typed-scores error: " + label + " barline left must be repeat-start")
+    _score-error(
+      label + " barline left",
+      "unsupported left barline",
+      value: left,
+      expected: "repeat-start or none",
+      fix: "use repeat-start on the left boundary",
+    )
   }
   if right != none and right not in ("repeat-end", "double", "final", "dashed") {
-    panic("typed-scores error: " + label + " barline right must be repeat-end, double, final, or dashed")
+    _score-error(
+      label + " barline right",
+      "unsupported right barline",
+      value: right,
+      expected: "repeat-end, double, final, dashed, or none",
+      fix: "choose one of the supported right-boundary styles",
+    )
   }
   (left: left, right: right)
 }
 
 #let _normalize-boundary-mark(value, label) = {
-  if value == none { return none }
-  if type(value) not in (str, content) {
-    panic("typed-scores error: " + label + " must be text or content")
-  }
-  if type(value) == str and value.trim() == "" {
-    panic("typed-scores error: " + label + " must not be empty")
-  }
-  value
+  _validate-marking(value, label)
 }
 
 #let _normalize-ending(value, label) = {
@@ -2890,62 +3278,140 @@
     return (label: none, start: false, stop: false)
   }
   if type(value) != dictionary {
-    panic("typed-scores error: " + label + " ending must be a dictionary")
+    _score-error(
+      label + " ending",
+      "ending must be a dictionary",
+      value: value,
+      expected: "label plus start and/or stop",
+      fix: "write ending: (label: \"1.\", start: true)",
+    )
   }
   for field in value.keys() {
     if field != "label" and field != "start" and field != "stop" {
-      panic("typed-scores error: " + label + " ending has unknown field " + field)
+      _score-error(
+        label + " ending",
+        "ending has unknown field",
+        value: field,
+        expected: "label, start, or stop",
+        fix: "remove or rename the unknown field",
+      )
     }
   }
   let ending-label = value.at("label", default: none)
   let start = value.at("start", default: false)
   let stop = value.at("stop", default: false)
   if type(start) != bool or type(stop) != bool {
-    panic("typed-scores error: " + label + " ending start and stop must be booleans")
+    _score-error(
+      label + " ending",
+      "start and stop must be booleans",
+      value: value,
+      expected: "true or false for each lifecycle flag",
+      fix: "replace the invalid flag with a boolean",
+    )
   }
   if type(ending-label) != str or ending-label.trim() == "" or (not start and not stop) {
-    panic("typed-scores error: " + label + " ending needs a non-empty label and start or stop")
+    _score-error(
+      label + " ending",
+      "ending needs a non-empty label and at least one lifecycle flag",
+      value: value,
+      expected: "label: \"1.\" with start: true and/or stop: true",
+      fix: "add the label and the intended start or stop flag",
+    )
   }
   (label: ending-label, start: start, stop: stop)
 }
 
 #let _normalize-staves(staves, clef) = {
   if staves == none {
-    return ((id: "staff", field: "notes", clef: clef, label: none, short-label: none),)
+    return ((
+      id: "staff",
+      field: "notes",
+      clef: _validate-clef(clef, "score clef"),
+      label: none,
+      short-label: none,
+    ),)
+  }
+  if clef != "treble" {
+    _score-error(
+      "score clef",
+      "clef applies only to the implicit single-staff form and cannot be combined with staves",
+      value: clef,
+      expected: "clefs inside each staves entry",
+      fix: "remove the top-level clef argument and set every staff's clef field",
+    )
   }
   if type(staves) != dictionary or staves.len() == 0 {
-    panic("typed-scores error: staves must be a non-empty dictionary")
+    _score-error(
+      "score staves",
+      "staves must be a non-empty dictionary",
+      value: staves,
+      expected: "staff-id dictionaries with clef fields",
+      fix: "declare each staff or omit staves and use notes for one staff",
+    )
   }
   let normalized-staves = ()
   for staff-id in staves.keys() {
     if staff-id in _measure-metadata-fields or staff-id == "notes" {
-      panic("typed-scores error: staff id " + staff-id + " is reserved")
+      _score-error(
+        "staff id " + staff-id,
+        "staff ID is reserved for bar metadata",
+        value: staff-id,
+        expected: "an ID not used by notes, key, time, clef, partial, tempo, harmony, barline, ending, rehearsal, or navigation",
+        fix: "rename the staff and update its field in every bar",
+      )
     }
     let staff-config = staves.at(staff-id)
     if type(staff-config) != dictionary {
-      panic("typed-scores error: staff " + staff-id + " must be a dictionary")
+      _score-error(
+        "staff " + staff-id,
+        "staff configuration must be a dictionary",
+        value: staff-config,
+        expected: "a dictionary containing clef and optional label fields",
+        fix: "wrap the staff settings in parentheses",
+      )
     }
     for field in staff-config.keys() {
       if field not in ("clef", "label", "short-label") {
-        panic("typed-scores error: staff " + staff-id + " has unknown field " + field)
+        _score-error(
+          "staff " + staff-id,
+          "staff configuration has unknown field",
+          value: field,
+          expected: "clef, label, or short-label",
+          fix: "remove or rename the unknown field",
+        )
       }
     }
     let staff-clef = staff-config.at("clef", default: none)
     if staff-clef == none {
-      panic("typed-scores error: staff " + staff-id + " is missing a clef")
+      _score-error(
+        "staff " + staff-id,
+        "staff configuration is missing clef",
+        expected: "clef: \"treble\", \"bass\", \"alto\", or \"tenor\"",
+        fix: "add a supported clef field",
+      )
     }
     let staff-label = staff-config.at("label", default: none)
     let short-label = staff-config.at("short-label", default: none)
     if staff-label != none and (type(staff-label) != str or staff-label.trim() == "") {
-      panic("typed-scores error: staff " + staff-id + " label must be a non-empty string")
+      _score-error(
+        "staff " + staff-id + " label",
+        "label must be a non-empty string",
+        value: staff-label,
+        fix: "provide visible text or remove label",
+      )
     }
     if short-label != none and (type(short-label) != str or short-label.trim() == "") {
-      panic("typed-scores error: staff " + staff-id + " short-label must be a non-empty string")
+      _score-error(
+        "staff " + staff-id + " short-label",
+        "short-label must be a non-empty string",
+        value: short-label,
+        fix: "provide visible abbreviated text or remove short-label",
+      )
     }
     normalized-staves.push((
       id: staff-id,
       field: staff-id,
-      clef: _required-string(staff-clef, "staff " + staff-id + " clef"),
+      clef: _validate-clef(staff-clef, "staff " + staff-id + " clef"),
       label: staff-label,
       short-label: short-label,
     ))
@@ -2955,13 +3421,20 @@
 
 #let _normalize-score-measures(staves, bars, clef, key, time, tempo) = {
   if type(bars) != array or bars.len() == 0 {
-    panic("typed-scores error: bars must be a non-empty array of dictionaries")
+    _score-error(
+      "score bars",
+      "bars must be a non-empty array",
+      value: bars,
+      expected: "one or more bar dictionaries",
+      fix: "add a dictionary such as (notes: \"c4:w\")",
+    )
   }
   let staff-specs = _normalize-staves(staves, clef)
   let allowed-fields = _measure-metadata-fields + staff-specs.map(staff => staff.field)
   let normalized-measures = ()
-  let current-key = key
+  let current-key = _validate-key(key, "score key")
   let current-time = time
+  let _ = _parse-time-rational(current-time, label: "score time")
   let current-clefs = (:)
   for staff in staff-specs {
     current-clefs.insert(staff.id, staff.clef)
@@ -2971,58 +3444,146 @@
     let measure-input = bars.at(measure-index)
     let measure-label = "bar " + str(measure-index + 1)
     if type(measure-input) != dictionary {
-      panic("typed-scores error: " + measure-label + " must be a dictionary")
+      _score-error(
+        measure-label,
+        "bar must be a dictionary",
+        value: measure-input,
+        expected: "staff content plus optional metadata fields",
+        fix: "wrap the bar fields in parentheses",
+      )
     }
     for field in measure-input.keys() {
       if field not in allowed-fields {
-        panic("typed-scores error: " + measure-label + " has unknown field " + field)
+        _score-error(
+          measure-label,
+          "bar has unknown field",
+          value: field,
+          expected: allowed-fields.map(field => repr(field)).join(", "),
+          fix: "remove the field or use a declared staff ID",
+        )
       }
     }
-    current-key = measure-input.at("key", default: current-key)
+    current-key = _validate-key(
+      measure-input.at("key", default: current-key),
+      measure-label + " key",
+    )
     current-time = measure-input.at("time", default: current-time)
+    let current-time-value = _parse-time-rational(
+      current-time,
+      label: measure-label + " time",
+    )
+    let partial = measure-input.at("partial", default: none)
+    let partial-value = _parse-time-rational(
+      partial,
+      label: measure-label + " partial",
+    )
+    if (
+      partial-value != none and current-time-value != none
+        and not _rational-lte(partial-value, current-time-value)
+    ) {
+      _score-error(
+        measure-label + " partial",
+        "pickup duration is longer than the active meter",
+        value: partial,
+        expected: "a positive duration no greater than " + current-time,
+        fix: "reduce partial or change the active time signature",
+      )
+    }
     let clef-change = measure-input.at("clef", default: none)
     if clef-change != none {
       if type(clef-change) == str {
         if staff-specs.len() != 1 {
-          panic("typed-scores error: " + measure-label + " clef must be a staff-id dictionary in a multi-staff score")
+          _score-error(
+            measure-label + " clef",
+            "a single clef string cannot target a multi-staff score",
+            value: clef-change,
+            expected: "a dictionary mapping declared staff IDs to clefs",
+            fix: "write clef: (staff-id: \"bass\")",
+          )
         }
-        current-clefs.insert(staff-specs.first().id, clef-change)
+        current-clefs.insert(
+          staff-specs.first().id,
+          _validate-clef(clef-change, measure-label + " clef"),
+        )
       } else if type(clef-change) == dictionary {
+        if clef-change.len() == 0 {
+          _score-error(
+            measure-label + " clef",
+            "clef-change dictionary must not be empty",
+            value: clef-change,
+            fix: "map at least one declared staff ID to a supported clef or remove clef",
+          )
+        }
         for staff-id in clef-change.keys() {
           if not staff-specs.any(staff => staff.id == staff-id) {
-            panic("typed-scores error: " + measure-label + " clef has unknown staff " + staff-id)
+            _score-error(
+              measure-label + " clef",
+              "clef change references an unknown staff",
+              value: staff-id,
+              expected: staff-specs.map(staff => staff.id).join(", "),
+              fix: "use a declared staff ID",
+            )
           }
           current-clefs.insert(
             staff-id,
-            _required-string(
+            _validate-clef(
               clef-change.at(staff-id),
               measure-label + " clef " + staff-id,
             ),
           )
         }
       } else {
-        panic("typed-scores error: " + measure-label + " clef must be a string or staff-id dictionary")
+        _score-error(
+          measure-label + " clef",
+          "clef change has the wrong type",
+          value: clef-change,
+          expected: "a clef string for one staff or a staff-ID dictionary",
+          fix: "quote the clef or map each changed staff to its clef",
+        )
       }
     }
     let measure-voices = ()
     for (staff-index, staff) in staff-specs.enumerate() {
       let notes = measure-input.at(staff.field, default: none)
       if notes == none {
-        panic("typed-scores error: " + measure-label + " is missing notes for " + staff.field)
+        _score-error(
+          measure-label,
+          "bar is missing content for staff " + staff.field,
+          expected: "a non-empty event string or an array of one to four voice strings",
+          fix: "add the " + staff.field + " field",
+        )
       }
       let voice-sequences = if type(notes) == str { (notes,) } else if type(notes) == array {
         if notes.len() == 0 or notes.len() > 4 {
-          panic("typed-scores error: " + measure-label + " " + staff.field + " must contain one to four voice strings")
+          _score-error(
+            measure-label + " " + staff.field,
+            "voice array has an unsupported size",
+            value: notes.len(),
+            expected: "one to four voice strings",
+            fix: "add a voice or reduce the array to at most four voices",
+          )
         }
         notes
       } else {
-        panic("typed-scores error: " + measure-label + " " + staff.field + " must be a string or array of voice strings")
+        _score-error(
+          measure-label + " " + staff.field,
+          "staff content has the wrong type",
+          value: notes,
+          expected: "a string or array of one to four strings",
+          fix: "quote the event sequence or wrap voice strings in an array",
+        )
       }
       let known-voice-count = voice-counts.at(staff.id, default: none)
       if known-voice-count == none {
         voice-counts.insert(staff.id, voice-sequences.len())
       } else if known-voice-count != voice-sequences.len() {
-        panic("typed-scores error: " + measure-label + " " + staff.field + " has " + str(voice-sequences.len()) + " voices; expected " + str(known-voice-count))
+        _score-error(
+          measure-label + " " + staff.field,
+          "voice count changed from earlier bars",
+          value: voice-sequences.len(),
+          expected: str(known-voice-count) + " voices",
+          fix: "keep the same number of voice strings for this staff in every bar",
+        )
       }
       for (voice-index, voice-sequence) in voice-sequences.enumerate() {
         measure-voices.push((
@@ -3034,7 +3595,7 @@
           clef: current-clefs.at(staff.id),
           label: staff.label,
           short-label: staff.short-label,
-          notes: _required-string(
+          notes: _required-nonempty-string(
             voice-sequence,
             measure-label + " " + staff.field + " voice " + str(voice-index + 1),
           ),
@@ -3044,7 +3605,7 @@
     normalized-measures.push((
       key: current-key,
       time: current-time,
-      partial: measure-input.at("partial", default: none),
+      partial: partial,
       tempo: _normalize-tempo(
         measure-input.at("tempo", default: if measure-index == 0 { tempo } else { none }),
         "tempo in bar " + str(measure-index + 1),
@@ -3090,12 +3651,18 @@
     }
     let prepared-voices = ()
     for voice in normalized-measure.voices {
+      let voice-location = (
+        "bar " + str(measure-index + 1)
+          + ", staff " + voice.staff-id
+          + ", voice " + str(voice.layer-index + 1)
+      )
       let layout-response = _layout-sequence(
         voice.notes,
         clef: voice.clef,
         time: validation-time,
         anchor: pitch-anchors.at(voice.id, default: none),
         duration-anchor: duration-anchors.at(voice.id, default: none),
+        location: voice-location,
       )
       let event-layouts = layout-response.layouts
       pitch-anchors.insert(voice.id, layout-response.anchor)
@@ -3103,7 +3670,7 @@
       _validate-measure-duration(
         event-layouts,
         validation-time,
-        voice.id,
+        "staff " + voice.staff-id + " voice " + str(voice.layer-index + 1),
         measure-index + 1,
       )
       let forced-direction = if voice.layer-count == 1 { none }
@@ -3693,7 +4260,13 @@
     }
   }
   if selected == none {
-    panic("typed-scores error: no legal system layout fits the requested width")
+    _score-error(
+      "score layout",
+      "no legal system partition fits the requested width",
+      value: max-width,
+      expected: "enough staff-space width for every system prologue, label, and complete bar",
+      fix: "increase width, reduce indent or note-spacing, shorten labels, or disable wrap",
+    )
   }
   selected.systems
 }
@@ -3728,23 +4301,43 @@
     let ending = measures.at(measure-index).ending
     if ending.start {
       if open != none {
-        panic("typed-scores error: ending " + open.label + " is still open at bar " + str(measure-index + 1))
+        _score-error(
+          "bar " + str(measure-index + 1) + " ending",
+          "ending " + open.label + " is still open when " + ending.label + " starts",
+          expected: "the open ending to stop before another starts",
+          fix: "add a matching stop or remove the overlapping start",
+        )
       }
       open = (label: ending.label, start: measure-index)
     }
     if ending.stop {
       if open == none {
-        panic("typed-scores error: ending " + ending.label + " stops without opening at bar " + str(measure-index + 1))
+        _score-error(
+          "bar " + str(measure-index + 1) + " ending",
+          "ending " + ending.label + " stops without opening",
+          expected: "a matching start in this or an earlier bar",
+          fix: "add the start or remove this stop",
+        )
       }
       if ending.label != open.label {
-        panic("typed-scores error: ending " + ending.label + " stops but ending " + open.label + " is open")
+        _score-error(
+          "bar " + str(measure-index + 1) + " ending",
+          "ending " + ending.label + " stops while " + open.label + " is open",
+          expected: "the stop label to match " + open.label,
+          fix: "use the same label on both lifecycle markers",
+        )
       }
       spans.push((label: ending.label, start: open.start, stop: measure-index))
       open = none
     }
   }
   if open != none {
-    panic("typed-scores error: ending " + open.label + " was opened but never stopped")
+    _score-error(
+      "score endings",
+      "ending " + open.label + " opened in bar " + str(open.start + 1) + " was never stopped",
+      expected: "a later bar with the same label and stop: true",
+      fix: "add the matching stop marker",
+    )
   }
   spans
 }
@@ -4436,29 +5029,110 @@
   first-bar-number: 1,
 ) = {
   layout(size => context {
+    let _ = _validate-clef(clef, "score clef")
+    let _ = _validate-key(key, "score key")
+    let _ = _parse-time-rational(time, label: "score time")
+    let _ = _normalize-tempo(tempo, "score tempo")
+    let _ = _validate-marking(composer, "score composer")
     _positive-number(scale, "scale")
     _positive-number(note-spacing, "note-spacing")
     _positive-number(width, "width", optional: true)
     _positive-number(staff-gap, "staff-gap", optional: true)
     _nonnegative-number(indent, "indent")
     _nonnegative-number(short-indent, "short-indent")
+    _validate-system-gap(system-gap)
     if type(beams) != bool {
-      panic("typed-scores error: beams must be true or false")
+      _score-error(
+        "score beams",
+        "value must be a boolean",
+        value: beams,
+        expected: "true or false",
+        fix: "choose whether automatic beam groups are drawn",
+      )
     }
     if type(wrap) != bool {
-      panic("typed-scores error: wrap must be true or false")
+      _score-error(
+        "score wrap",
+        "value must be a boolean",
+        value: wrap,
+        expected: "true or false",
+        fix: "choose whether bars may wrap across systems",
+      )
     }
     if ragged-right != auto and type(ragged-right) != bool {
-      panic("typed-scores error: ragged-right must be auto, true, or false")
+      _score-error(
+        "score ragged-right",
+        "unsupported value",
+        value: ragged-right,
+        expected: "auto, true, or false",
+        fix: "choose automatic, ragged, or justified system widths",
+      )
     }
     if type(ragged-last) != bool {
-      panic("typed-scores error: ragged-last must be true or false")
+      _score-error(
+        "score ragged-last",
+        "value must be a boolean",
+        value: ragged-last,
+        expected: "true or false",
+        fix: "choose whether the final system stays at natural width",
+      )
     }
     if bar-numbers != false and bar-numbers not in ("systems", "all") {
-      panic("typed-scores error: bar-numbers must be false, systems, or all")
+      _score-error(
+        "score bar-numbers",
+        "unsupported numbering mode",
+        value: bar-numbers,
+        expected: "false, systems, or all",
+        fix: "disable numbering or choose a documented mode",
+      )
     }
     if type(first-bar-number) != int or first-bar-number < 1 {
-      panic("typed-scores error: first-bar-number must be a positive integer")
+      _score-error(
+        "score first-bar-number",
+        "value must be a positive integer",
+        value: first-bar-number,
+        expected: "an integer greater than zero",
+        fix: "set the number assigned to the first bar",
+      )
+    }
+    if not wrap and short-indent != 0 {
+      _score-error(
+        "score short-indent",
+        "short-indent has no later system when wrap is false",
+        value: short-indent,
+        expected: "zero for an unwrapped score",
+        fix: "remove short-indent or enable wrap",
+      )
+    }
+    if not wrap and ragged-last {
+      _score-error(
+        "score ragged-last",
+        "ragged-last has no distinct effect on a one-system unwrapped score",
+        value: ragged-last,
+        expected: "false when wrap is false",
+        fix: "remove ragged-last or enable wrap",
+      )
+    }
+    if (
+      not wrap and width != none
+        and (ragged-right != false or ragged-last)
+    ) {
+      _score-error(
+        "score width",
+        "width is ignored by an unwrapped ragged score",
+        value: width,
+        expected: "ragged-right: false when combining width with wrap: false",
+        fix: "set ragged-right to false or remove width",
+      )
+    }
+    if not wrap and bar-numbers == "systems" {
+      _score-error(
+        "score bar-numbers",
+        "systems mode cannot produce a later system when wrap is false",
+        value: bar-numbers,
+        expected: "false or all for an unwrapped score",
+        fix: "use bar-numbers: \"all\" or enable wrap",
+      )
     }
     let unit = 8pt * scale
     let measures = _prepare-score-measures(
@@ -4468,13 +5142,37 @@
     )
     let lane-count = measures.first().voices.len()
     let staff-count = measures.first().staff-count
+    if staff-count == 1 and staff-gap != none {
+      _score-error(
+        "score staff-gap",
+        "staff-gap requires at least two staves",
+        value: staff-gap,
+        expected: "none for a single-staff score",
+        fix: "remove staff-gap or declare multiple staves",
+      )
+    }
     let group-style = if group == auto {
       if staff-count == 1 { "none" }
       else if staff-count == 2 { "brace" }
       else { "bracket" }
     } else {
       if type(group) != str or group not in ("brace", "bracket", "line", "none") {
-        panic("typed-scores error: group must be auto, brace, bracket, line, or none")
+        _score-error(
+          "score group",
+          "unsupported grouping style",
+          value: group,
+          expected: "auto, brace, bracket, line, or none",
+          fix: "choose a documented grouping style",
+        )
+      }
+      if staff-count == 1 and group != "none" {
+        _score-error(
+          "score group",
+          "a visible staff group requires at least two staves",
+          value: group,
+          expected: "auto or none for a single staff",
+          fix: "remove group or declare the intended staves",
+        )
       }
       group
     }

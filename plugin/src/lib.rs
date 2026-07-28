@@ -152,11 +152,15 @@ fn parse_pitch_spec(input: &str) -> Result<PitchSpec, String> {
     let octave = if octave_str.is_empty() {
         None
     } else {
-        Some(
-            octave_str
-                .parse::<i32>()
-                .map_err(|_| format!("invalid octave {octave_str:?} in pitch {input:?}"))?,
-        )
+        let octave = octave_str
+            .parse::<i32>()
+            .map_err(|_| format!("invalid octave {octave_str:?} in pitch {input:?}"))?;
+        if !(-1..=9).contains(&octave) {
+            return Err(format!(
+                "octave {octave} in pitch {input:?} is outside the supported range -1 through 9; use a renderable staff octave"
+            ));
+        }
+        Some(octave)
     };
 
     Ok(PitchSpec {
@@ -187,7 +191,7 @@ fn resolve_pitch(spec: PitchSpec, anchor: Option<&Pitch>, clef: Clef) -> Pitch {
         let base_octave = anchor.octave;
         ((base_octave - 1)..=(base_octave + 1))
             .min_by_key(|octave| (octave * 7 + spec.letter.diatonic_index() - anchor_index).abs())
-            .expect("three relative-octave candidates")
+            .unwrap_or(base_octave)
     });
     Pitch {
         letter: spec.letter,
@@ -274,7 +278,7 @@ pub fn parse_duration(input: &str) -> Result<Duration, String> {
         format!("invalid duration base {base_ch:?}; expected w, h, q, e, s, or t")
     })?;
 
-    let mut dots = 0_u8;
+    let mut dots = 0_usize;
     for ch in chars {
         if ch != '.' {
             return Err(format!(
@@ -290,17 +294,20 @@ pub fn parse_duration(input: &str) -> Result<Duration, String> {
         ));
     }
 
-    Ok(Duration { base, dots })
+    Ok(Duration {
+        base,
+        dots: dots as u8,
+    })
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Rational {
-    pub numerator: u32,
-    pub denominator: u32,
+    pub numerator: u64,
+    pub denominator: u64,
 }
 
 impl Rational {
-    pub fn new(numerator: u32, denominator: u32) -> Self {
+    pub fn new(numerator: u64, denominator: u64) -> Self {
         assert!(denominator != 0, "rational denominator must not be zero");
         let common_divisor = gcd(numerator, denominator);
         Self {
@@ -309,35 +316,41 @@ impl Rational {
         }
     }
 
-    pub fn mul(self, other: Self) -> Self {
-        Self::new(
-            self.numerator * other.numerator,
-            self.denominator * other.denominator,
+    pub fn checked_mul(self, other: Self) -> Result<Self, String> {
+        rational_from_u128(
+            u128::from(self.numerator) * u128::from(other.numerator),
+            u128::from(self.denominator) * u128::from(other.denominator),
         )
     }
 
-    pub fn add(self, other: Self) -> Self {
-        Self::new(
-            self.numerator * other.denominator + other.numerator * self.denominator,
-            self.denominator * other.denominator,
-        )
+    pub fn checked_add(self, other: Self) -> Result<Self, String> {
+        let left = u128::from(self.numerator) * u128::from(other.denominator);
+        let right = u128::from(other.numerator) * u128::from(self.denominator);
+        let numerator = left.checked_add(right).ok_or_else(rhythmic_overflow)?;
+        let denominator = u128::from(self.denominator) * u128::from(other.denominator);
+        rational_from_u128(numerator, denominator)
     }
 
     pub fn sub(self, other: Self) -> Option<Self> {
-        let left = self.numerator * other.denominator;
-        let right = other.numerator * self.denominator;
+        let left = u128::from(self.numerator) * u128::from(other.denominator);
+        let right = u128::from(other.numerator) * u128::from(self.denominator);
         if left < right {
             None
         } else {
-            Some(Self::new(
+            rational_from_u128(
                 left - right,
-                self.denominator * other.denominator,
-            ))
+                u128::from(self.denominator) * u128::from(other.denominator),
+            )
+            .ok()
         }
     }
 
-    pub fn div_u32(self, divisor: u32) -> Self {
-        Self::new(self.numerator, self.denominator * divisor)
+    pub fn checked_div_u64(self, divisor: u64) -> Option<Self> {
+        rational_from_u128(
+            u128::from(self.numerator),
+            u128::from(self.denominator) * u128::from(divisor),
+        )
+        .ok()
     }
 }
 
@@ -351,7 +364,7 @@ impl fmt::Display for Rational {
     }
 }
 
-fn gcd(mut left: u32, mut right: u32) -> u32 {
+fn gcd(mut left: u64, mut right: u64) -> u64 {
     while right != 0 {
         let remainder = left % right;
         left = right;
@@ -360,15 +373,44 @@ fn gcd(mut left: u32, mut right: u32) -> u32 {
     left.max(1)
 }
 
+fn gcd_u128(mut left: u128, mut right: u128) -> u128 {
+    while right != 0 {
+        let remainder = left % right;
+        left = right;
+        right = remainder;
+    }
+    left.max(1)
+}
+
+fn rhythmic_overflow() -> String {
+    "rhythmic arithmetic exceeds the supported range; simplify nested tuplets or use smaller reduced ratios"
+        .to_string()
+}
+
+fn rational_from_u128(numerator: u128, denominator: u128) -> Result<Rational, String> {
+    if denominator == 0 {
+        return Err(rhythmic_overflow());
+    }
+    let common_divisor = gcd_u128(numerator, denominator);
+    let numerator = numerator / common_divisor;
+    let denominator = denominator / common_divisor;
+    if numerator > u128::from(u64::MAX) || denominator > u128::from(u64::MAX) {
+        return Err(rhythmic_overflow());
+    }
+    Ok(Rational::new(numerator as u64, denominator as u64))
+}
+
 pub fn duration_to_rational(duration: Duration) -> Rational {
-    let base = Rational::new(1, duration.base.denominator());
-    let dot_multiplier = match duration.dots {
-        0 => Rational::new(1, 1),
-        1 => Rational::new(3, 2),
-        2 => Rational::new(7, 4),
+    let (dot_numerator, dot_denominator) = match duration.dots {
+        0 => (1, 1),
+        1 => (3, 2),
+        2 => (7, 4),
         _ => unreachable!("parse_duration guarantees dots <= 2"),
     };
-    base.mul(dot_multiplier)
+    Rational::new(
+        dot_numerator,
+        u64::from(duration.base.denominator()) * dot_denominator,
+    )
 }
 
 fn supported_durations_descending() -> Vec<Duration> {
@@ -397,9 +439,10 @@ fn distribute_auto_rests(remaining: Rational, count: usize) -> Option<Vec<Durati
         };
     }
 
-    let equal_share = remaining.div_u32(count as u32);
-    if let Some(duration) = rational_to_duration(equal_share) {
-        return Some(vec![duration; count]);
+    if let Some(equal_share) = remaining.checked_div_u64(count as u64) {
+        if let Some(duration) = rational_to_duration(equal_share) {
+            return Some(vec![duration; count]);
+        }
     }
 
     fn find_rest_durations(
@@ -662,6 +705,16 @@ fn parse_event_relative(
     }
 }
 
+fn parse_sequence_event_relative(
+    event_text: &str,
+    pitch_anchor: &mut Option<Pitch>,
+    duration_anchor: &mut Option<Duration>,
+    clef: Clef,
+) -> Result<ParsedEvent, String> {
+    parse_event_relative(event_text, pitch_anchor, duration_anchor, clef)
+        .map_err(|error| format!("invalid event {event_text:?}: {error}"))
+}
+
 fn split_note_pitch_and_tail(input: &str) -> Result<(&str, &str, bool), String> {
     if let Some((pitch_part, duration_and_annotations)) = input.split_once(':') {
         return Ok((pitch_part, duration_and_annotations, true));
@@ -784,6 +837,7 @@ fn parse_chord_event_relative(
     if notes.is_empty() {
         return Err(format!("empty chord in {input:?}"));
     }
+    validate_chord_pitches(&notes, input)?;
 
     Ok(ParsedEvent::Chord {
         notes,
@@ -811,6 +865,7 @@ fn build_chord_event(
     if notes.is_empty() {
         return Err(format!("empty chord in {input:?}"));
     }
+    validate_chord_pitches(&notes, input)?;
 
     Ok(ParsedEvent::Chord {
         notes,
@@ -818,6 +873,25 @@ fn build_chord_event(
         tie_to_next: false,
         annotations,
     })
+}
+
+fn validate_chord_pitches(notes: &[Note], input: &str) -> Result<(), String> {
+    if notes.len() < 2 {
+        return Err(format!(
+            "chord {input:?} must contain at least two pitches; remove the parentheses for a single note"
+        ));
+    }
+    for (index, note) in notes.iter().enumerate() {
+        if notes[..index]
+            .iter()
+            .any(|previous| previous.pitch == note.pitch)
+        {
+            return Err(format!(
+                "chord {input:?} repeats the same written pitch; remove the duplicate pitch"
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn parse_duration_part_and_annotations(input: &str) -> Result<(&str, Vec<String>), String> {
@@ -834,6 +908,11 @@ fn parse_duration_part_and_annotations(input: &str) -> Result<(&str, Vec<String>
         (input, None)
     };
 
+    if annotation_part.is_some_and(|part| part.trim().is_empty()) {
+        return Err(
+            "empty annotation block []; remove it or add a documented annotation".to_string(),
+        );
+    }
     let annotations = annotation_part
         .map(|part| {
             part.split_whitespace()
@@ -844,6 +923,7 @@ fn parse_duration_part_and_annotations(input: &str) -> Result<(&str, Vec<String>
     for annotation in &annotations {
         validate_annotation(annotation)?;
     }
+    validate_annotation_combinations(&annotations)?;
 
     Ok((duration_part.trim(), annotations))
 }
@@ -971,6 +1051,44 @@ fn validate_annotation(annotation: &str) -> Result<(), String> {
     }
 }
 
+fn validate_annotation_combinations(annotations: &[String]) -> Result<(), String> {
+    for (index, annotation) in annotations.iter().enumerate() {
+        if annotations[..index].contains(annotation) {
+            return Err(format!(
+                "annotation {annotation:?} is repeated on the same event; keep it only once"
+            ));
+        }
+    }
+
+    for (label, prefix) in [
+        ("fingering", "f="),
+        ("turn fingering", "turn-f="),
+        ("text direction", "text="),
+        ("below-staff text direction", "text-below="),
+        ("dynamic", "dyn="),
+        ("arpeggio", "arpeggio"),
+        ("single-note tremolo", "tremolo="),
+    ] {
+        let count = annotations
+            .iter()
+            .filter(|annotation| {
+                if prefix == "arpeggio" {
+                    annotation.as_str() == "arpeggio" || annotation.starts_with("arpeggio=")
+                } else {
+                    annotation.starts_with(prefix)
+                }
+            })
+            .count();
+        if count > 1 {
+            return Err(format!(
+                "event has more than one {label} annotation; keep exactly one"
+            ));
+        }
+    }
+
+    Ok(())
+}
+
 pub fn parse_sequence(input: &str) -> Result<Vec<ParsedEvent>, String> {
     Ok(parse_sequence_marked(input, Clef::Treble, None, None)?
         .events
@@ -1009,14 +1127,19 @@ fn parse_tuplet_tokens(
         return Err("tuplet ratio values must be positive".to_string());
     }
     let start = events.len();
-    let scale = scale.mul(Rational::new(denominator, numerator));
+    let scale = scale.checked_mul(Rational::new(u64::from(denominator), u64::from(numerator)))?;
     let mut pending_beam = BeamDirective::Auto;
 
     for token in tokens {
         match token {
             Token::Event(event_text) => {
                 events.push(SequencedEvent {
-                    event: parse_event_relative(event_text, pitch_anchor, duration_anchor, clef)?,
+                    event: parse_sequence_event_relative(
+                        event_text,
+                        pitch_anchor,
+                        duration_anchor,
+                        clef,
+                    )?,
                     beam_directive: pending_beam,
                     duration_scale: scale,
                     grace: None,
@@ -1102,7 +1225,12 @@ fn parse_grace_tokens(
         match token {
             Token::Event(event_text) => {
                 grace_events.push(SequencedEvent {
-                    event: parse_event_relative(event_text, pitch_anchor, duration_anchor, clef)?,
+                    event: parse_sequence_event_relative(
+                        event_text,
+                        pitch_anchor,
+                        duration_anchor,
+                        clef,
+                    )?,
                     beam_directive: pending_beam,
                     duration_scale: Rational::new(0, 1),
                     grace: None,
@@ -1175,7 +1303,7 @@ fn parse_tremolo_tokens(
         match token {
             Token::Event(event_text) => {
                 let tremolo_event =
-                    parse_event_relative(event_text, pitch_anchor, duration_anchor, clef)?;
+                    parse_sequence_event_relative(event_text, pitch_anchor, duration_anchor, clef)?;
                 if matches!(tremolo_event, ParsedEvent::Rest(_)) {
                     return Err(
                         "alternating tremolo requires notes or chords, not rests".to_string()
@@ -1245,7 +1373,7 @@ fn parse_sequence_marked(
         match token {
             Token::Event(event_text) => {
                 events.push(SequencedEvent {
-                    event: parse_event_relative(
+                    event: parse_sequence_event_relative(
                         &event_text,
                         &mut pitch_anchor,
                         &mut duration_anchor,
@@ -1356,6 +1484,16 @@ fn parse_sequence_marked(
 }
 
 fn tokenize_sequence(input: &str) -> Result<Vec<Token>, String> {
+    tokenize_sequence_with_depth(input, 0)
+}
+
+fn tokenize_sequence_with_depth(input: &str, nesting_depth: usize) -> Result<Vec<Token>, String> {
+    if nesting_depth > 8 {
+        return Err(
+            "notation groups may nest at most eight levels; simplify or split the nested tuplets"
+                .to_string(),
+        );
+    }
     let chars: Vec<char> = input.chars().collect();
     let mut tokens = Vec::new();
     let mut cursor = 0_usize;
@@ -1404,7 +1542,7 @@ fn tokenize_sequence(input: &str) -> Result<Vec<Token>, String> {
                     && cursor + 7 < chars.len()
                     && chars[cursor + 7].is_whitespace()
                 {
-                    tokens.push(parse_tremolo_token(&chars, &mut cursor)?);
+                    tokens.push(parse_tremolo_token(&chars, &mut cursor, nesting_depth)?);
                     continue;
                 }
                 let mut parsed_grace = false;
@@ -1418,7 +1556,13 @@ fn tokenize_sequence(input: &str) -> Result<Vec<Token>, String> {
                         && cursor + keyword_chars.len() < chars.len()
                         && chars[cursor + keyword_chars.len()].is_whitespace()
                     {
-                        tokens.push(parse_grace_token(&chars, &mut cursor, keyword, style)?);
+                        tokens.push(parse_grace_token(
+                            &chars,
+                            &mut cursor,
+                            keyword,
+                            style,
+                            nesting_depth,
+                        )?);
                         parsed_grace = true;
                         break;
                     }
@@ -1430,7 +1574,7 @@ fn tokenize_sequence(input: &str) -> Result<Vec<Token>, String> {
                     && cursor + 6 < chars.len()
                     && chars[cursor + 6].is_whitespace()
                 {
-                    tokens.push(parse_tuplet_token(&chars, &mut cursor)?);
+                    tokens.push(parse_tuplet_token(&chars, &mut cursor, nesting_depth)?);
                     continue;
                 }
                 let event_start = cursor;
@@ -1460,7 +1604,11 @@ fn tokenize_sequence(input: &str) -> Result<Vec<Token>, String> {
     Ok(tokens)
 }
 
-fn parse_tremolo_token(chars: &[char], cursor: &mut usize) -> Result<Token, String> {
+fn parse_tremolo_token(
+    chars: &[char],
+    cursor: &mut usize,
+    nesting_depth: usize,
+) -> Result<Token, String> {
     *cursor += "tremolo".len();
     while *cursor < chars.len() && chars[*cursor].is_whitespace() {
         *cursor += 1;
@@ -1502,7 +1650,7 @@ fn parse_tremolo_token(chars: &[char], cursor: &mut usize) -> Result<Token, Stri
     let contents: String = chars[contents_start..*cursor - 1].iter().collect();
     Ok(Token::Tremolo {
         subdivision,
-        contents: tokenize_sequence(&contents)?,
+        contents: tokenize_sequence_with_depth(&contents, nesting_depth + 1)?,
     })
 }
 
@@ -1511,6 +1659,7 @@ fn parse_grace_token(
     cursor: &mut usize,
     keyword: &str,
     style: &str,
+    nesting_depth: usize,
 ) -> Result<Token, String> {
     *cursor += keyword.chars().count();
     while *cursor < chars.len() && chars[*cursor].is_whitespace() {
@@ -1536,11 +1685,15 @@ fn parse_grace_token(
     let contents: String = chars[contents_start..*cursor - 1].iter().collect();
     Ok(Token::Grace {
         style: style.to_string(),
-        contents: tokenize_sequence(&contents)?,
+        contents: tokenize_sequence_with_depth(&contents, nesting_depth + 1)?,
     })
 }
 
-fn parse_tuplet_token(chars: &[char], cursor: &mut usize) -> Result<Token, String> {
+fn parse_tuplet_token(
+    chars: &[char],
+    cursor: &mut usize,
+    nesting_depth: usize,
+) -> Result<Token, String> {
     *cursor += "tuplet".len();
     while *cursor < chars.len() && chars[*cursor].is_whitespace() {
         *cursor += 1;
@@ -1571,9 +1724,10 @@ fn parse_tuplet_token(chars: &[char], cursor: &mut usize) -> Result<Token, Strin
     if numerator == 0 || denominator == 0 {
         return Err("tuplet ratio values must be positive".to_string());
     }
-
     let mut bracket = "auto".to_string();
     let mut side = "auto".to_string();
+    let mut has_bracket_option = false;
+    let mut has_side_option = false;
     if *cursor < chars.len() && chars[*cursor] == '[' {
         *cursor += 1;
         let options_start = *cursor;
@@ -1587,14 +1741,26 @@ fn parse_tuplet_token(chars: &[char], cursor: &mut usize) -> Result<Token, Strin
         *cursor += 1;
         for option in options.replace(',', " ").split_whitespace() {
             if let Some(value) = option.strip_prefix("bracket=") {
+                if has_bracket_option {
+                    return Err(
+                        "tuplet bracket option is repeated; specify bracket only once".to_string(),
+                    );
+                }
                 if !matches!(value, "auto" | "always" | "never") {
                     return Err("tuplet bracket must be auto, always, or never".to_string());
                 }
+                has_bracket_option = true;
                 bracket = value.to_string();
             } else if let Some(value) = option.strip_prefix("side=") {
+                if has_side_option {
+                    return Err(
+                        "tuplet side option is repeated; specify side only once".to_string()
+                    );
+                }
                 if !matches!(value, "auto" | "above" | "below") {
                     return Err("tuplet side must be auto, above, or below".to_string());
                 }
+                has_side_option = true;
                 side = value.to_string();
             } else {
                 return Err(format!("unknown tuplet option {option:?}"));
@@ -1627,7 +1793,7 @@ fn parse_tuplet_token(chars: &[char], cursor: &mut usize) -> Result<Token, Strin
         denominator,
         bracket,
         side,
-        contents: tokenize_sequence(&contents)?,
+        contents: tokenize_sequence_with_depth(&contents, nesting_depth + 1)?,
     })
 }
 
@@ -1674,13 +1840,14 @@ fn parse_sequence_with_auto_rests_relative(
     for token in tokens {
         match token {
             Token::Event(event_text) => {
-                let parsed_event = parse_event_relative(
+                let parsed_event = parse_sequence_event_relative(
                     &event_text,
                     &mut pitch_anchor,
                     &mut duration_anchor,
                     clef,
                 )?;
-                known_total = known_total.add(duration_to_rational(parsed_event.duration()));
+                known_total =
+                    known_total.checked_add(duration_to_rational(parsed_event.duration()))?;
                 slots.push(Some(SequencedEvent {
                     event: parsed_event,
                     beam_directive: pending_beam,
@@ -1735,7 +1902,8 @@ fn parse_sequence_with_auto_rests_relative(
                     &mut group_tremolos,
                 )?;
                 for item in group_events {
-                    known_total = known_total.add(duration_to_rational(item.event.duration()));
+                    known_total =
+                        known_total.checked_add(duration_to_rational(item.event.duration()))?;
                     slots.push(Some(item));
                 }
                 for mut tremolo in group_tremolos {
@@ -1771,8 +1939,9 @@ fn parse_sequence_with_auto_rests_relative(
                     &mut tuplets,
                 )?;
                 for item in group_events {
-                    known_total = known_total
-                        .add(duration_to_rational(item.event.duration()).mul(item.duration_scale));
+                    let scaled_duration = duration_to_rational(item.event.duration())
+                        .checked_mul(item.duration_scale)?;
+                    known_total = known_total.checked_add(scaled_duration)?;
                     slots.push(Some(item));
                 }
                 for tuplet in tuplets.iter_mut().skip(tuplet_start) {
@@ -1854,17 +2023,20 @@ fn parse_sequence_with_auto_rests_relative(
     for slot in slots {
         match slot {
             Some(event) => expanded_events.push(event),
-            None => expanded_events.push(SequencedEvent {
-                event: ParsedEvent::Rest(Rest {
-                    duration: generated_rest_durations
-                        .next()
-                        .expect("one generated rest duration per placeholder"),
-                    annotations: Vec::new(),
-                }),
-                beam_directive: BeamDirective::Auto,
-                duration_scale: Rational::new(1, 1),
-                grace: None,
-            }),
+            None => {
+                let duration = generated_rest_durations.next().ok_or_else(|| {
+                    "internal auto-rest expansion produced too few durations".to_string()
+                })?;
+                expanded_events.push(SequencedEvent {
+                    event: ParsedEvent::Rest(Rest {
+                        duration,
+                        annotations: Vec::new(),
+                    }),
+                    beam_directive: BeamDirective::Auto,
+                    duration_scale: Rational::new(1, 1),
+                    grace: None,
+                });
+            }
         }
     }
     Ok(ParsedSequenceState {
@@ -1884,16 +2056,16 @@ pub struct TimeSignature {
 
 impl TimeSignature {
     fn value(self) -> Rational {
-        Rational::new(self.numerator, self.denominator)
+        Rational::new(u64::from(self.numerator), u64::from(self.denominator))
     }
 
     /// The beat used to group beams: a dotted unit in compound meters
     /// (6/8, 9/8, 12/8, ...), one denominator unit otherwise.
     fn beat_unit(self) -> Rational {
         if self.numerator > 3 && self.numerator.is_multiple_of(3) && self.denominator >= 8 {
-            Rational::new(3, self.denominator)
+            Rational::new(3, u64::from(self.denominator))
         } else {
-            Rational::new(1, self.denominator)
+            Rational::new(1, u64::from(self.denominator))
         }
     }
 }
@@ -2012,7 +2184,7 @@ fn layout_event(
     grace: Option<GraceMeta>,
 ) -> Result<NoteLayout, String> {
     let duration = event.duration();
-    let duration_value = duration_to_rational(duration).mul(duration_scale);
+    let duration_value = duration_to_rational(duration).checked_mul(duration_scale)?;
     let notehead = match duration.base {
         DurationBase::Whole => "whole",
         DurationBase::Half => "half",
@@ -2067,6 +2239,50 @@ fn layout_event(
             }
         }
     }
+    if kind == "rest" {
+        let invalid_annotation = annotations.iter().find(|mark| {
+            matches!(
+                mark.as_str(),
+                "stacc"
+                    | "staccatissimo"
+                    | "tenuto"
+                    | "legato"
+                    | "accent"
+                    | "marcato"
+                    | "strong"
+                    | "turn"
+                    | "chromatic-turn"
+                    | "arpeggio"
+            ) || mark.starts_with("f=")
+                || mark.starts_with("turn-f=")
+                || mark.starts_with("arpeggio=")
+                || mark.starts_with("tremolo=")
+                || (mark.starts_with('s') && (mark.ends_with('(') || mark.ends_with(')')))
+        });
+        if let Some(annotation) = invalid_annotation {
+            return Err(format!(
+                "annotation {annotation:?} requires a note or chord and cannot be attached to a rest; move it to a pitched event"
+            ));
+        }
+    }
+    if annotations.iter().any(|mark| mark.starts_with("turn-f="))
+        && !annotations
+            .iter()
+            .any(|mark| matches!(mark.as_str(), "turn" | "chromatic-turn"))
+    {
+        return Err(
+            "turn-f=... requires turn or chromatic-turn on the same event; add the ornament or remove its fingering"
+                .to_string(),
+        );
+    }
+    if annotations.iter().any(|mark| mark == "turn")
+        && annotations.iter().any(|mark| mark == "chromatic-turn")
+    {
+        return Err(
+            "turn and chromatic-turn cannot both annotate one event; choose one ornament"
+                .to_string(),
+        );
+    }
 
     let (is_grace, grace_style, grace_group, grace_index, grace_count) = match grace {
         Some(meta) => (
@@ -2112,7 +2328,7 @@ fn layout_events(events: Vec<SequencedEvent>, clef: Clef) -> Result<Vec<NoteLayo
     let mut event_layouts = Vec::with_capacity(events.len());
     for sequenced_event in events {
         let duration_value = duration_to_rational(sequenced_event.event.duration())
-            .mul(sequenced_event.duration_scale);
+            .checked_mul(sequenced_event.duration_scale)?;
         event_layouts.push(layout_event(
             sequenced_event.event,
             clef,
@@ -2121,7 +2337,7 @@ fn layout_events(events: Vec<SequencedEvent>, clef: Clef) -> Result<Vec<NoteLayo
             sequenced_event.duration_scale,
             sequenced_event.grace,
         )?);
-        onset = onset.add(duration_value);
+        onset = onset.checked_add(duration_value)?;
     }
     let mut pending_graces = 0_usize;
     for layout in &mut event_layouts {
@@ -2135,10 +2351,10 @@ fn layout_events(events: Vec<SequencedEvent>, clef: Clef) -> Result<Vec<NoteLayo
     Ok(event_layouts)
 }
 
-fn attach_tuplets(layouts: &mut [NoteLayout], tuplets: Vec<ParsedTuplet>) {
+fn attach_tuplets(layouts: &mut [NoteLayout], tuplets: Vec<ParsedTuplet>) -> Result<(), String> {
     for tuplet in &tuplets {
         if tuplet.start >= layouts.len() || tuplet.end == 0 || tuplet.end > layouts.len() {
-            continue;
+            return Err("internal tuplet range is outside the parsed event sequence".to_string());
         }
         let depth = tuplets
             .iter()
@@ -2157,21 +2373,24 @@ fn attach_tuplets(layouts: &mut [NoteLayout], tuplets: Vec<ParsedTuplet>) {
             depth,
         });
     }
+    Ok(())
 }
 
-fn attach_tremolos(layouts: &mut [NoteLayout], tremolos: Vec<ParsedTremolo>) {
+fn attach_tremolos(layouts: &mut [NoteLayout], tremolos: Vec<ParsedTremolo>) -> Result<(), String> {
     for tremolo in tremolos {
-        if tremolo.start < layouts.len() && tremolo.end < layouts.len() {
-            layouts[tremolo.start].tremolo_starts.push(TremoloLayout {
-                subdivision: tremolo.subdivision,
-                end_index: tremolo.end,
-            });
-            layouts[tremolo.start].alternating_tremolo = true;
-            layouts[tremolo.end].alternating_tremolo = true;
-            layouts[tremolo.start].beam_group = None;
-            layouts[tremolo.end].beam_group = None;
+        if tremolo.start >= layouts.len() || tremolo.end >= layouts.len() {
+            return Err("internal tremolo range is outside the parsed event sequence".to_string());
         }
+        layouts[tremolo.start].tremolo_starts.push(TremoloLayout {
+            subdivision: tremolo.subdivision,
+            end_index: tremolo.end,
+        });
+        layouts[tremolo.start].alternating_tremolo = true;
+        layouts[tremolo.end].alternating_tremolo = true;
+        layouts[tremolo.start].beam_group = None;
+        layouts[tremolo.end].beam_group = None;
     }
+    Ok(())
 }
 
 /// Group consecutive flagged notes into beams. With a beat unit, groups also
@@ -2196,7 +2415,9 @@ fn assign_beam_groups(layouts: &mut [NoteLayout], beat: Option<Rational>) -> Res
         }
         if layout.grace {
             current_beam_group = None;
-            let source_group = layout.grace_group.expect("grace event has a group id");
+            let source_group = layout.grace_group.ok_or_else(|| {
+                "internal grace event is missing its group identifier".to_string()
+            })?;
             if !matches!(grace_group, Some((group, _)) if group == source_group) {
                 grace_group = Some((source_group, next_group));
                 next_group += 1;
@@ -2231,7 +2452,9 @@ fn assign_beam_groups(layouts: &mut [NoteLayout], beat: Option<Rational>) -> Res
         } else if layout.beam_join_before {
             current_beam_group = current_beam_group.map(|(group, _)| (group, beat_index));
         }
-        layout.beam_group = Some(current_beam_group.expect("beam group was just ensured").0);
+        let group =
+            current_beam_group.ok_or_else(|| "internal beam group was not assigned".to_string())?;
+        layout.beam_group = Some(group.0);
     }
     Ok(())
 }
@@ -2299,8 +2522,8 @@ pub fn layout_sequence_relative_with_state_native(
     )?;
     let mut layouts = layout_events(parsed.events, clef)?;
     assign_beam_groups(&mut layouts, None)?;
-    attach_tuplets(&mut layouts, parsed.tuplets);
-    attach_tremolos(&mut layouts, parsed.tremolos);
+    attach_tuplets(&mut layouts, parsed.tuplets)?;
+    attach_tremolos(&mut layouts, parsed.tremolos)?;
     Ok(RelativeLayoutResponse {
         layouts,
         anchor: parsed.pitch_anchor.as_ref().map(pitch_anchor_string),
@@ -2334,8 +2557,8 @@ pub fn layout_sequence_with_time_relative_state_native(
     )?;
     let mut layouts = layout_events(parsed.events, clef)?;
     assign_beam_groups(&mut layouts, Some(signature.beat_unit()))?;
-    attach_tuplets(&mut layouts, parsed.tuplets);
-    attach_tremolos(&mut layouts, parsed.tremolos);
+    attach_tuplets(&mut layouts, parsed.tuplets)?;
+    attach_tremolos(&mut layouts, parsed.tremolos)?;
     Ok(RelativeLayoutResponse {
         layouts,
         anchor: parsed.pitch_anchor.as_ref().map(pitch_anchor_string),
@@ -2350,91 +2573,121 @@ mod wasm_entrypoint {
 
     initiate_protocol!();
 
+    #[derive(Serialize)]
+    struct PluginResponse<T> {
+        ok: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        data: Option<T>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    }
+
+    fn encode_plugin_response<T: Serialize>(result: Result<T, String>) -> Result<Vec<u8>, String> {
+        let response = match result {
+            Ok(data) => PluginResponse {
+                ok: true,
+                data: Some(data),
+                error: None,
+            },
+            Err(error) => PluginResponse {
+                ok: false,
+                data: None,
+                error: Some(error),
+            },
+        };
+        serde_json::to_vec(&response)
+            .map_err(|error| format!("typed-scores internal JSON serialization error: {error}"))
+    }
+
     #[wasm_func]
     pub fn layout_note(input: &[u8]) -> Result<Vec<u8>, String> {
-        let request_text =
-            core::str::from_utf8(input).map_err(|error| format!("UTF-8 error: {error}"))?;
-        let (clef_text, note_text) = request_text
-            .split_once('\n')
-            .map(|(clef, note)| (clef, note))
-            .unwrap_or(("treble", request_text));
-        let clef = parse_clef(clef_text)?;
-        let note_layout = layout_note_native(note_text, clef)?;
-        serde_json::to_vec(&note_layout).map_err(|error| format!("JSON error: {error}"))
+        encode_plugin_response((|| {
+            let request_text = core::str::from_utf8(input)
+                .map_err(|error| format!("input is not valid UTF-8: {error}"))?;
+            let (clef_text, note_text) = request_text
+                .split_once('\n')
+                .unwrap_or(("treble", request_text));
+            let clef = parse_clef(clef_text)?;
+            layout_note_native(note_text, clef)
+        })())
     }
 
     #[wasm_func]
     pub fn parse_events(input: &[u8]) -> Result<Vec<u8>, String> {
-        let request_text =
-            core::str::from_utf8(input).map_err(|error| format!("UTF-8 error: {error}"))?;
-        let parsed_events = parse_sequence(request_text)?;
-        serde_json::to_vec(&parsed_events).map_err(|error| format!("JSON error: {error}"))
+        encode_plugin_response((|| {
+            let request_text = core::str::from_utf8(input)
+                .map_err(|error| format!("input is not valid UTF-8: {error}"))?;
+            parse_sequence(request_text)
+        })())
     }
 
     #[wasm_func]
     pub fn layout_sequence(input: &[u8]) -> Result<Vec<u8>, String> {
-        let request_text =
-            core::str::from_utf8(input).map_err(|error| format!("UTF-8 error: {error}"))?;
-        let (clef_text, sequence_text) = request_text
-            .split_once('\n')
-            .map(|(clef, sequence)| (clef, sequence))
-            .unwrap_or(("treble", request_text));
-        let clef = parse_clef(clef_text)?;
-        let event_layouts = layout_sequence_native(sequence_text, clef)?;
-        serde_json::to_vec(&event_layouts).map_err(|error| format!("JSON error: {error}"))
+        encode_plugin_response((|| {
+            let request_text = core::str::from_utf8(input)
+                .map_err(|error| format!("input is not valid UTF-8: {error}"))?;
+            let (clef_text, sequence_text) = request_text
+                .split_once('\n')
+                .unwrap_or(("treble", request_text));
+            let clef = parse_clef(clef_text)?;
+            layout_sequence_native(sequence_text, clef)
+        })())
     }
 
     #[wasm_func]
     pub fn layout_sequence_timed(input: &[u8]) -> Result<Vec<u8>, String> {
-        let request_text =
-            core::str::from_utf8(input).map_err(|error| format!("UTF-8 error: {error}"))?;
-        let mut request_lines = request_text.splitn(3, '\n');
-        let clef_text = request_lines.next().unwrap_or("treble");
-        let time_signature = request_lines.next().unwrap_or("4/4");
-        let sequence_text = request_lines.next().unwrap_or("");
-        let clef = parse_clef(clef_text)?;
-        let event_layouts = layout_sequence_with_time_native(sequence_text, clef, time_signature)?;
-        serde_json::to_vec(&event_layouts).map_err(|error| format!("JSON error: {error}"))
+        encode_plugin_response((|| {
+            let request_text = core::str::from_utf8(input)
+                .map_err(|error| format!("input is not valid UTF-8: {error}"))?;
+            let mut request_lines = request_text.splitn(3, '\n');
+            let clef_text = request_lines.next().unwrap_or("treble");
+            let time_signature = request_lines.next().unwrap_or("4/4");
+            let sequence_text = request_lines.next().unwrap_or("");
+            let clef = parse_clef(clef_text)?;
+            layout_sequence_with_time_native(sequence_text, clef, time_signature)
+        })())
     }
 
     #[wasm_func]
     pub fn layout_sequence_relative(input: &[u8]) -> Result<Vec<u8>, String> {
-        let request_text =
-            core::str::from_utf8(input).map_err(|error| format!("UTF-8 error: {error}"))?;
-        let mut request_lines = request_text.splitn(4, '\n');
-        let clef_text = request_lines.next().unwrap_or("treble");
-        let pitch_anchor = request_lines.next().filter(|value| !value.is_empty());
-        let duration_anchor = request_lines.next().filter(|value| !value.is_empty());
-        let sequence_text = request_lines.next().unwrap_or("");
-        let clef = parse_clef(clef_text)?;
-        let layout_response = layout_sequence_relative_with_state_native(
-            sequence_text,
-            clef,
-            pitch_anchor,
-            duration_anchor,
-        )?;
-        serde_json::to_vec(&layout_response).map_err(|error| format!("JSON error: {error}"))
+        encode_plugin_response((|| {
+            let request_text = core::str::from_utf8(input)
+                .map_err(|error| format!("input is not valid UTF-8: {error}"))?;
+            let mut request_lines = request_text.splitn(4, '\n');
+            let clef_text = request_lines.next().unwrap_or("treble");
+            let pitch_anchor = request_lines.next().filter(|value| !value.is_empty());
+            let duration_anchor = request_lines.next().filter(|value| !value.is_empty());
+            let sequence_text = request_lines.next().unwrap_or("");
+            let clef = parse_clef(clef_text)?;
+            layout_sequence_relative_with_state_native(
+                sequence_text,
+                clef,
+                pitch_anchor,
+                duration_anchor,
+            )
+        })())
     }
 
     #[wasm_func]
     pub fn layout_sequence_timed_relative(input: &[u8]) -> Result<Vec<u8>, String> {
-        let request_text =
-            core::str::from_utf8(input).map_err(|error| format!("UTF-8 error: {error}"))?;
-        let mut request_lines = request_text.splitn(5, '\n');
-        let clef_text = request_lines.next().unwrap_or("treble");
-        let time_signature = request_lines.next().unwrap_or("4/4");
-        let pitch_anchor = request_lines.next().filter(|value| !value.is_empty());
-        let duration_anchor = request_lines.next().filter(|value| !value.is_empty());
-        let sequence_text = request_lines.next().unwrap_or("");
-        let clef = parse_clef(clef_text)?;
-        let layout_response = layout_sequence_with_time_relative_state_native(
-            sequence_text,
-            clef,
-            time_signature,
-            pitch_anchor,
-            duration_anchor,
-        )?;
-        serde_json::to_vec(&layout_response).map_err(|error| format!("JSON error: {error}"))
+        encode_plugin_response((|| {
+            let request_text = core::str::from_utf8(input)
+                .map_err(|error| format!("input is not valid UTF-8: {error}"))?;
+            let mut request_lines = request_text.splitn(5, '\n');
+            let clef_text = request_lines.next().unwrap_or("treble");
+            let time_signature = request_lines.next().unwrap_or("4/4");
+            let pitch_anchor = request_lines.next().filter(|value| !value.is_empty());
+            let duration_anchor = request_lines.next().filter(|value| !value.is_empty());
+            let sequence_text = request_lines.next().unwrap_or("");
+            let clef = parse_clef(clef_text)?;
+            layout_sequence_with_time_relative_state_native(
+                sequence_text,
+                clef,
+                time_signature,
+                pitch_anchor,
+                duration_anchor,
+            )
+        })())
     }
 }
 
@@ -2599,6 +2852,13 @@ mod tests {
         for (raw, expected) in cases {
             assert_eq!(duration_to_rational(parse_duration(raw).unwrap()), expected);
         }
+    }
+
+    #[test]
+    fn rhythmic_overflow_returns_an_error_instead_of_panicking() {
+        let maximum = Rational::new(u64::MAX, 1);
+        assert!(maximum.checked_mul(maximum).is_err());
+        assert!(maximum.checked_add(maximum).is_err());
     }
 
     #[test]
@@ -2908,6 +3168,59 @@ mod tests {
         assert!(parse_note("C4:q[unknown]").is_err());
         assert!(parse_note("C4:q[dyn=quiet]").is_err());
         assert!(parse_note("C4:q[s(]").is_err());
+    }
+
+    #[test]
+    fn rejects_annotations_that_would_be_ignored_or_ambiguous() {
+        assert!(parse_note("C4:q[]")
+            .unwrap_err()
+            .contains("empty annotation"));
+        assert!(parse_note("C4:q[dyn=p dyn=f]")
+            .unwrap_err()
+            .contains("more than one dynamic"));
+        assert!(parse_note("C4:q[stacc stacc]")
+            .unwrap_err()
+            .contains("repeated"));
+        assert!(layout_sequence_native("r:q[stacc]", Clef::Treble)
+            .unwrap_err()
+            .contains("cannot be attached to a rest"));
+        assert!(layout_sequence_native("C4:q[turn-f=3]", Clef::Treble)
+            .unwrap_err()
+            .contains("requires turn"));
+        assert!(
+            layout_sequence_native("C4:q[turn chromatic-turn]", Clef::Treble)
+                .unwrap_err()
+                .contains("choose one ornament")
+        );
+    }
+
+    #[test]
+    fn rejects_unrenderable_octaves_and_excessive_tuplet_options() {
+        assert!(parse_pitch("C10")
+            .unwrap_err()
+            .contains("supported range -1 through 9"));
+        assert!(layout_sequence_native(
+            "tuplet 3:2[side=above side=below] { C4:e D E }",
+            Clef::Treble,
+        )
+        .unwrap_err()
+        .contains("side option is repeated"));
+    }
+
+    #[test]
+    fn rejects_chords_that_cannot_produce_distinct_noteheads() {
+        assert!(parse_sequence("(C4):q")
+            .unwrap_err()
+            .contains("at least two pitches"));
+        assert!(parse_sequence("(C4 E4 C4):q")
+            .unwrap_err()
+            .contains("repeats the same written pitch"));
+    }
+
+    #[test]
+    fn sequence_errors_include_the_invalid_event_text() {
+        let error = layout_sequence_native("C4:q H4:q", Clef::Treble).unwrap_err();
+        assert!(error.contains("invalid event \"H4:q\""), "{error}");
     }
 
     #[test]
