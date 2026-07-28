@@ -9,7 +9,7 @@ strings are parsed by a Rust/WASM plugin; Typst and CeTZ lay out the resulting
 score with bundled Bravura glyphs.
 
 ```typst
-#import "@preview/typed-scores:0.1.0": *
+#import "@preview/typed-scores:0.2.0": *
 ```
 
 ## Quick start
