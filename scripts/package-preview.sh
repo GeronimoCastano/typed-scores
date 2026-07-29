@@ -14,6 +14,22 @@ fi
 version="$1"
 packages_repo="${2%/}"
 package_name="typed-scores"
+runtime_typst_files="
+lib.typ
+score.typ
+diagnostics.typ
+parser.typ
+score-input.typ
+meter.typ
+signatures.typ
+event-geometry.typ
+spacing.typ
+event-engraving.typ
+markings.typ
+ties-slurs.typ
+systems.typ
+render.typ
+"
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH= cd -- "$script_dir/.." && pwd)
@@ -34,14 +50,18 @@ for required_file in \
   "$repo_root/typst.toml" \
   "$repo_root/README.md" \
   "$repo_root/LICENSE" \
-  "$repo_root/src/lib.typ" \
-  "$repo_root/src/score.typ" \
-  "$repo_root/src/render.typ" \
   "$repo_root/src/plugin.wasm" \
   "$repo_root/src/assets/glyphs/BRAVURA-OFL.txt"
 do
   if [ ! -f "$required_file" ]; then
     echo "error: missing required file: $required_file" >&2
+    exit 1
+  fi
+done
+
+for runtime_typst_file in $runtime_typst_files; do
+  if [ ! -f "$repo_root/src/$runtime_typst_file" ]; then
+    echo "error: missing required file: $repo_root/src/$runtime_typst_file" >&2
     exit 1
   fi
 done
@@ -56,9 +76,9 @@ mkdir -p "$package_target/assets/readme" "$package_target/src/assets"
 cp "$repo_root/typst.toml" "$package_target/typst.toml"
 cp "$repo_root/README.md" "$package_target/README.md"
 cp "$repo_root/LICENSE" "$package_target/LICENSE"
-cp "$repo_root/src/lib.typ" "$package_target/src/lib.typ"
-cp "$repo_root/src/score.typ" "$package_target/src/score.typ"
-cp "$repo_root/src/render.typ" "$package_target/src/render.typ"
+for runtime_typst_file in $runtime_typst_files; do
+  cp "$repo_root/src/$runtime_typst_file" "$package_target/src/$runtime_typst_file"
+done
 cp "$repo_root/src/plugin.wasm" "$package_target/src/plugin.wasm"
 cp -R "$repo_root/src/assets/glyphs" "$package_target/src/assets/glyphs"
 
