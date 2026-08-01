@@ -4,12 +4,13 @@
 #import "meter.typ": _layout-harmony, _parse-time-rational, _rational-lte, _validate-measure-duration
 #import "spacing.typ": _measure-positions
 #import "markings.typ": _normalize-tempo
+#import "lyrics.typ": _layout-measure-lyrics, _normalize-measure-lyrics, _validate-lyric-continuations
 
 // Public score-shape normalization and eager musical preparation.
 
 #let _measure-metadata-fields = (
   "key", "time", "clef", "partial", "tempo", "harmony", "barline", "ending",
-  "rehearsal", "navigation",
+  "rehearsal", "navigation", "lyrics",
 )
 
 #let _normalize-barline(value, label) = {
@@ -426,6 +427,11 @@
         measure-input.at("navigation", default: none),
         measure-label + " navigation",
       ),
+      lyrics: _normalize-measure-lyrics(
+        measure-input.at("lyrics", default: none),
+        staff-specs,
+        measure-index + 1,
+      ),
       staff-count: staff-specs.len(),
       voices: measure-voices,
     ))
@@ -434,7 +440,18 @@
 }
 
 // Parse, validate, and pre-compute shared positions for every measure.
-#let _prepare-score-measures(staves, bars, clef, key, time, tempo, note-spacing: 3.1, beams: false) = {
+#let _prepare-score-measures(
+  staves,
+  bars,
+  clef,
+  key,
+  time,
+  tempo,
+  note-spacing: 3.1,
+  beams: false,
+  lyric-size: 0.9,
+  lyric-font: none,
+) = {
   let normalized-measures = _normalize-score-measures(staves, bars, clef, key, time, tempo)
   let prepared-measures = ()
   let previous-key = none
@@ -442,6 +459,7 @@
   let previous-clefs = (:)
   let pitch-anchors = (:)
   let duration-anchors = (:)
+  let lyric-states = (:)
   for measure-index in range(normalized-measures.len()) {
     let normalized-measure = normalized-measures.at(measure-index)
     let validation-time = normalized-measure.at("partial", default: none)
@@ -502,9 +520,20 @@
       validation-time,
       measure-index + 1,
     )
+    let lyric-layout = _layout-measure-lyrics(
+      normalized-measure.lyrics,
+      prepared-voices,
+      measure-index,
+      lyric-states,
+      lyric-size,
+      lyric-font,
+    )
+    let lyrics = lyric-layout.items
+    lyric-states = lyric-layout.states
     let spacing = _measure-positions(
       prepared-voices.map(voice => voice.layouts),
       harmony: harmony,
+      lyrics: lyrics,
       note-spacing: note-spacing,
       beams: beams,
       key: normalized-measure.key,
@@ -516,6 +545,7 @@
       partial: normalized-measure.at("partial", default: none),
       tempo: normalized-measure.at("tempo", default: none),
       harmony: harmony,
+      lyrics: lyrics,
       barline: normalized-measure.barline,
       ending: normalized-measure.ending,
       rehearsal: normalized-measure.rehearsal,
@@ -534,5 +564,6 @@
     previous-key = normalized-measure.key
     previous-time = normalized-measure.time
   }
+  _validate-lyric-continuations(prepared-measures)
   prepared-measures
 }

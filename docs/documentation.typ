@@ -10,7 +10,7 @@
 #import "../examples/mozart-eine-kleine-nachtmusik.typ": mozart-k525-opening
 #import "../examples/beethoven-ode-to-joy-alto-sax.typ": ode-to-joy-alto-sax
 
-#let version = "0.2.0"
+#let version = "0.3.0"
 #let accent = rgb("#7A2141")
 #let accent-soft = rgb("#F7E8EE")
 
@@ -208,7 +208,7 @@ should remain readable and versionable as text.
 Import the package from the Typst preview namespace:
 
 ```typ
-#import "@preview/typed-scores:0.2.0": *
+#import "@preview/typed-scores:0.3.0": *
 ```
 
 The examples in this guide use lowercase pitch letters for fast entry.
@@ -217,12 +217,13 @@ Uppercase remains accepted with identical pitch and octave semantics.
 == Quick measure with #raw("bar()")
 
 `bar` is a convenience wrapper over the same score pipeline used by `score`.
-It accepts a note string plus its clef, key, and optional meter.
+It accepts a note string, optional lyrics, and its clef, key, and optional meter.
 
 #demo[
   #example(```typ
 #bar(
   "g4:q a b c5",
+  lyrics: "Sing __ a -- gain",
   clef: "treble",
   key: "G",
   time: "4/4",
@@ -235,9 +236,14 @@ perform full-measure duration validation.
 
 #argtable(
   [#c("notes")], [`str`], [required], [One event string.],
+  [#c("lyrics")], [`str | array | none`], [`none`], [One lyric verse or an array of verses.],
   [#c("clef")], [`str`], [#c("\"treble\"")], [Treble, bass, alto, or tenor clef.],
   [#c("key")], [`str`], [#c("\"C\"")], [Major or minor key signature.],
   [#c("time")], [`str | none`], [`none`], [Meter and expected duration, such as #c("\"4/4\"").],
+  [#c("lyric-size")], [`number`], [`0.9`], [Lyric text size in staff spaces.],
+  [#c("lyric-font")], [`str | none`], [`none`], [Optional font family for lyrics.],
+  [#c("lyric-gap")], [`number`], [`0.8`], [Clearance above the first verse.],
+  [#c("verse-gap")], [`number`], [`1.45`], [Baseline distance between verses; must be at least `lyric-size`.],
 )
 
 = Scores and systems <scores>
@@ -297,7 +303,8 @@ ID.
 ]
 
 Staff IDs are Typst dictionary keys, so keep them short and machine-oriented.
-They cannot be `notes`, `key`, `time`, `partial`, or `tempo`.
+They cannot reuse reserved bar fields such as `notes`, `lyrics`, `key`,
+`time`, `partial`, `tempo`, or `harmony`.
 
 == Independent voices
 
@@ -430,6 +437,72 @@ so jazz spellings such as #c("Cmaj7"), #c("F#7(b9)"), #c("Bb/D"), and
 ```, side: false)
 ]
 
+== Lyrics
+
+Use a bar's #c("lyrics") field to align syllables with the main pitched events
+of a staff's first voice. A plain string creates one verse. #c("--") draws a
+hyphen without consuming an event, #c("__") consumes one event and extends the
+preceding syllable, and #c("_") consumes one event without printing text.
+Written rests and grace notes do not consume lyric tokens. Every verse present
+in a bar must account for all of that bar's main pitched events, which keeps
+alignment mistakes visible instead of silently shifting later words.
+
+#demo[
+  #example(```typ
+#score(
+  time: "4/4",
+  bars: (
+    (
+      notes: "c5:q c d e",
+      lyrics: "Twin -- kle twin -- kle",
+    ),
+  ),
+)
+```, side: false)
+]
+
+An array creates multiple verses. Use an underscore inside a syllable token to
+print a space, while a standalone underscore remains a skip. Hyphens and
+melisma extenders may cross barlines and resume when the score wraps.
+
+#demo[
+  #example(```typ
+#score(
+  time: "4/4",
+  width: 34,
+  bars: (
+    (
+      notes: "c5:q d e f",
+      lyrics: ("Glo -- ri -- a __", "Sing _ soft -- ly"),
+    ),
+    (
+      notes: "g5:q a b c6",
+      lyrics: ("in ex -- cel -- sis", "now __ a -- gain"),
+    ),
+  ),
+)
+```, side: false)
+]
+
+In a declared multi-staff score, #c("lyrics") is a dictionary whose keys are
+staff IDs. Each value is one verse string or an array of verses. Omit staves
+that have no lyrics in that bar. Lyrics always follow the first voice of their
+target staff; use that voice for the sung line when a staff is polyphonic.
+
+```typ
+lyrics: (
+  soprano: ("Hal -- le -- lu -- jah", "Praise _ the Lord"),
+  bass: "Low __",
+)
+```
+
+Lyric widths constrain the shared onset grid before measures are packed, so
+long syllables can widen bars and change line breaks. Verse lanes are also part
+of the staff's vertical ink extent: they clear dynamics and other below-staff
+marks, enlarge automatic multi-staff gaps, and contribute to system bounds.
+Use #c("lyric-size"), #c("lyric-font"), #c("lyric-gap"), and #c("verse-gap")
+to tune their typography and vertical rhythm.
+
 == Barlines, navigation, and labeled endings
 
 Repeat signs belong to a bar edge. Use `repeat-start` on a left edge and
@@ -497,6 +570,10 @@ matching LilyPond's usual sparse numbering; `"all"` prints every bar number.
   [#c("width")], [`number | none`], [`none`], [Packing width in staff spaces.],
   [#c("scale")], [`number`], [`1.0`], [Uniform staff-space scale.],
   [#c("note-spacing")], [`number`], [`3.1`], [Horizontal density: the width in staff spaces of a quarter note in a bar of quarters; other durations scale logarithmically from the bar's shortest note.],
+  [#c("lyric-size")], [`number`], [`0.9`], [Lyric text size in staff spaces.],
+  [#c("lyric-font")], [`str | none`], [`none`], [Optional lyric font family.],
+  [#c("lyric-gap")], [`number`], [`0.8`], [Clearance between existing below-staff ink and the first verse.],
+  [#c("verse-gap")], [`number`], [`1.45`], [Baseline distance between lyric verses; must be at least `lyric-size`.],
   [#c("beams")], [`bool`], [`false`], [Connect automatic beam groups.],
   [#c("staff-gap")], [`number | none`], [`none`], [Fixed distance between adjacent staff lines.],
   [#c("group")], [`auto | str`], [`auto`], [Auto, brace, bracket, line, or none.],
@@ -764,6 +841,8 @@ positions, and bars remain atomic when systems wrap.
   [Wrong full-bar duration], [Actual reduced duration and expected meter.],
   [Wrong pickup duration], [Actual duration and declared #c("partial") value.],
   [Wrong harmony duration], [Actual reduced duration and expected meter.],
+  [Invalid lyric token count or control], [Bar, staff, verse, expected event count, and a concrete correction.],
+  [Unknown lyric staff or dangling continuation], [The invalid staff reference, hyphen, or melisma source.],
   [Unknown or missing staff ID], [The one-based bar and offending field.],
   [Invalid span lifecycle], [The slur, pedal, hairpin, or ending that cannot be paired.],
   [Invalid tie or beam join], [The adjacent events that cannot legally connect.],
@@ -814,14 +893,14 @@ instrument whose written pitch has been prepared by the author:
 
 - One to four independent rhythmic voices per staff are supported; the count
   for a staff is fixed across its bars.
-- Lyrics and cross-staff notation are not yet in the public DSL.
+- Cross-staff notation is not yet in the public DSL.
 - Grace groups currently exclude rests, tuplets, and nested ornamental groups.
 - Arpeggio signs span one chord on one staff; cross-staff piano arpeggios are
   not yet supported.
 - Pedals and hairpins are event-anchored and do not split automatically at a
   system break.
-- Dense editorial markings may require `staff-gap`, `note-spacing`, or
-  `scale` adjustments.
+- Dense editorial markings or lyric verses may require `staff-gap`,
+  `note-spacing`, `lyric-gap`, `verse-gap`, or `scale` adjustments.
 
 == Grammar at a glance
 
@@ -838,6 +917,7 @@ instrument whose written pitch has been prepared by the author:
   [#c("acciaccatura { d:e } f:q")], [Slashed single grace note resolving to F.],
   [#c("tremolo 16 { c:h g:h }")], [Two-note alternating tremolo.],
   [#c("(c e g):h[arpeggio=up]")], [Upward arpeggio over a chord.],
+  [#c("lyrics: \"Twin -- kle __ _\"")], [Syllables with a hyphen, melisma extender, and skip.],
   [#c("[stacc dyn=pp]")], [One annotation block with multiple marks.],
   [#c("barline: (left: \"repeat-start\")")], [Repeat sign on a bar edge.],
   [#c("barline: (right: \"final\")")], [Final barline on the right edge.],

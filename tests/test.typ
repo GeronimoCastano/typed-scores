@@ -1256,3 +1256,120 @@ chords instead of cutting through their bows.
     ),
   ),
 )
+
+
+= First-class lyrics
+
+Syllables share the musical onset grid, reserve horizontal room, and use
+hyphens without consuming notes. Multiple verses occupy independent lanes.
+
+#score(
+  time: "4/4",
+  wrap: false,
+  bars: (
+    (
+      notes: "c5:q c d e",
+      lyrics: "Twin -- kle twin -- kle",
+    ),
+  ),
+)
+
+#score(
+  time: "4/4",
+  wrap: false,
+  lyric-size: 0.82,
+  lyric-gap: 1.0,
+  verse-gap: 1.55,
+  bars: (
+    (
+      notes: "c5:q[dyn=p] d e f",
+      lyrics: ("Glo -- ri -- a __", "Sing _ soft -- ly"),
+    ),
+    (
+      notes: "g5:q a b c6",
+      lyrics: ("in ex -- cel -- sis", "now __ a -- gain"),
+      barline: (right: "final"),
+    ),
+  ),
+)
+
+Lyrics target declared staves independently and enlarge the automatic gap
+between the vocal and accompaniment staves.
+
+#score(
+  staves: (
+    voice: (clef: "treble", label: "Voice"),
+    piano: (clef: "bass", label: "Piano"),
+  ),
+  time: "4/4",
+  wrap: false,
+  bars: (
+    (
+      voice: "c5:q d e f",
+      piano: "c3:h g2:h",
+      lyrics: (
+        voice: ("Hal -- le -- lu -- jah", "Praise _ the Lord"),
+        piano: "Low __",
+      ),
+      barline: (right: "final"),
+    ),
+  ),
+)
+
+Hyphens and melisma extenders continue across barlines and wrapped systems.
+
+#score(
+  time: "4/4",
+  width: 31,
+  bars: (
+    (notes: "c5:q d e f", lyrics: "Won -- der -- ful sing --"),
+    (notes: "g5:q a b c6", lyrics: "ing bright stars glow"),
+    (notes: "c6:q b a g", lyrics: "__ through the night"),
+  ),
+)
+
+#bar(
+  "c5:q d e f",
+  lyrics: "Sing __ a -- gain",
+  time: "4/4",
+)
+
+#pagebreak()
+
+= Multi-staff lyric and articulation stress test
+
+Extreme registers, outward articulations, slurs, dynamics, direction spans,
+and two verses on both staves exercise the complete horizontal and vertical
+collision model. The automatic staff gap must clear the upper staff's lyrics
+from the lower staff's high ink, while the lower lyrics sit below its dynamics,
+hairpin, articulations, and low ledger lines.
+
+#score(
+  staves: (
+    soprano: (clef: "treble", label: "Soprano"),
+    bass: (clef: "bass", label: "Bass"),
+  ),
+  group: "brace",
+  time: "4/4",
+  wrap: false,
+  lyric-size: 0.82,
+  lyric-gap: 0.9,
+  verse-gap: 1.55,
+  bars: (
+    (
+      soprano: "(c3 e3 g3 c4):q[accent dyn=ff s1( h1<] b3:q[marcato] a3:q[staccatissimo] g3:q[accent tenuto s1) h1!]",
+      bass: "(c3 g4 c4):q[accent dyn=pp h2<] d4:q[marcato] e4:q[staccatissimo] f4:q[accent tenuto h2!]",
+      lyrics: (
+        soprano: (
+          "Soar -- ing bright -- ly",
+          "Stars _ crown the",
+        ),
+        bass: (
+          "Deep -- er roots __",
+          "Earth _ holds __",
+        ),
+      ),
+      barline: (right: "final"),
+    ),
+  ),
+)

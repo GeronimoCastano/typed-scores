@@ -24,6 +24,7 @@ meter.typ
 signatures.typ
 event-geometry.typ
 spacing.typ
+lyrics.typ
 event-engraving.typ
 markings.typ
 ties-slurs.typ

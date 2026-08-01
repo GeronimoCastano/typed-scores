@@ -1,6 +1,7 @@
 #import "render.typ": accidental-width, notehead-half-width, rest-width, stem-thickness
 #import "event-geometry.typ": _accidental-gap, _dot-gap-from-head, _dot-step, _duration-base, _grace-main-gap, _grace-note-step, _head-half-width, _min-onset-step, _stem-direction
 #import "signatures.typ": _barline-clearance, _key-alters-natural, _key-suppresses-accidental
+#import "lyrics.typ": _add-lyric-spacing-demands
 
 // ---------------------------------------------------------------------------
 // Horizontal spacing: onset-aligned positions shared by all voices
@@ -191,6 +192,7 @@
 #let _measure-positions(
   voices-layouts,
   harmony: (),
+  lyrics: (),
   note-spacing: 3.1,
   beams: false,
   key: "C",
@@ -306,6 +308,16 @@
       measure-end-demands.push(demand)
     }
   }
+
+  let lyric-spacing = _add-lyric-spacing-demands(
+    lyrics,
+    first-onset-x,
+    demands-by-ending-onset,
+    measure-end-demands,
+  )
+  first-onset-x = lyric-spacing.first-onset-x
+  demands-by-ending-onset = lyric-spacing.demands-by-ending-onset
+  measure-end-demands = lyric-spacing.measure-end-demands
 
   let positions = (:)
   let previous-onset-x = none

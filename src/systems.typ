@@ -7,6 +7,7 @@
 #import "event-engraving.typ": _draw-placed-sequence, _draw-tuplets, _event-stem-geometry
 #import "markings.typ": _annotation-stem-direction, _annotation-with-prefix, _articulation-height, _articulation-stack, _collect-hairpins, _collect-pedal-spans, _draw-hairpins, _draw-pedal-spans, _draw-placed-annotations, _draw-tempo, _dynamics-baseline, _event-articulations, _event-decoration-top, _has-annotation
 #import "ties-slurs.typ": _collect-system-slurs, _collect-ties, _draw-slur-bows, _draw-ties, _layout-slurs, _slur-clearance-obstacles
+#import "lyrics.typ": _draw-system-lyrics, _lyric-lane-center, _lyric-verse-counts, _placed-lyric-items
 
 #let _system-repeat-start-gap = 1.7
 #let _default-left-bar-x = 1.36
@@ -169,15 +170,42 @@
   (high: high, low: low)
 }
 
-#let _staff-stack(voice-layouts, staff-gap: none) = {
+#let _staff-stack(
+  voice-layouts,
+  staff-gap: none,
+  lyric-verse-counts: (:),
+  lyric-size: 0.9,
+  lyric-gap: 0.8,
+  verse-gap: 1.45,
+) = {
   let voice-count = voice-layouts.len()
+  let note-extents = voice-layouts.map(_voice-vertical-extent)
+  let staff-extents = ()
+  for staff-index in range(voice-count) {
+    let note-extent = note-extents.at(staff-index)
+    let verse-count = lyric-verse-counts.at(str(staff-index), default: 0)
+    let low = note-extent.low
+    if verse-count > 0 {
+      low = calc.min(
+        low,
+        _lyric-lane-center(
+          note-extent.low,
+          verse-count - 1,
+          lyric-size,
+          lyric-gap,
+          verse-gap,
+        ) - lyric-size / 2,
+      )
+    }
+    staff-extents.push((high: note-extent.high, low: low))
+  }
   let bottom-map = (:)
   let current-bottom = 0
-  let lower-high = _voice-vertical-extent(voice-layouts.last()).high
+  let lower-high = staff-extents.last().high
   bottom-map.insert(str(voice-count - 1), current-bottom)
   if voice-count > 1 {
     for voice-index in range(voice-count - 2, -1, step: -1) {
-      let extent = _voice-vertical-extent(voice-layouts.at(voice-index))
+      let extent = staff-extents.at(voice-index)
       let gap = if staff-gap == none {
         calc.max(7, lower-high - extent.low + 1.2)
       } else {
@@ -192,14 +220,29 @@
     bottoms: bottom-map,
     bottom: bottom-map.at(str(voice-count - 1)),
     top: bottom-map.at("0") + 4,
+    note-extents: note-extents,
   )
 }
 
-#let _left-bar-x-for-group(group-style, measures, staff-gap) = {
+#let _left-bar-x-for-group(
+  group-style,
+  measures,
+  staff-gap,
+  lyric-size: 0.9,
+  lyric-gap: 0.8,
+  verse-gap: 1.45,
+) = {
   if group-style != "brace" {
     return _default-left-bar-x
   }
-  let stack = _staff-stack(_staff-layouts-for-measures(measures), staff-gap: staff-gap)
+  let stack = _staff-stack(
+    _staff-layouts-for-measures(measures),
+    staff-gap: staff-gap,
+    lyric-verse-counts: _lyric-verse-counts(measures, measures.first().staff-count),
+    lyric-size: lyric-size,
+    lyric-gap: lyric-gap,
+    verse-gap: verse-gap,
+  )
   let brace-width = brace-width-for-span(stack.top - stack.bottom)
   calc.max(
     _default-left-bar-x,
@@ -440,6 +483,12 @@
   if density < _minimum-justification-scale and stop - start > 1 {
     return none
   }
+  if (
+    density < _minimum-justification-scale
+      and measures.slice(start, stop).any(measure => measure.lyrics.len() > 0)
+  ) {
+    return none
+  }
   (
     start: start,
     stop: stop,
@@ -541,7 +590,7 @@
       "no legal system partition fits the requested width",
       value: max-width,
       expected: "enough staff-space width for every system prologue, label, and complete bar",
-      fix: "increase width, reduce indent or note-spacing, shorten labels, or disable wrap",
+      fix: "increase width, reduce indent, note-spacing, or lyric-size, shorten labels or lyric syllables, or disable wrap",
     )
   }
   selected.systems
@@ -769,6 +818,10 @@
   group-style: "none",
   bar-numbers: false,
   first-bar-number: 1,
+  lyric-size: 0.9,
+  lyric-font: none,
+  lyric-gap: 0.8,
+  verse-gap: 1.45,
 ) = {
   let system-measures = measures.slice(system.start, system.start + system.widths.len())
   let lane-count = system-measures.first().voices.len()
@@ -777,8 +830,16 @@
 
   // Stack staves bottom-up, leaving room for ledger-line excursions.
   // Extents are relative to each staff's own bottom line.
-  let stack = _staff-stack(staff-layouts, staff-gap: staff-gap)
+  let stack = _staff-stack(
+    staff-layouts,
+    staff-gap: staff-gap,
+    lyric-verse-counts: _lyric-verse-counts(measures, staff-count),
+    lyric-size: lyric-size,
+    lyric-gap: lyric-gap,
+    verse-gap: verse-gap,
+  )
   let bottom-map = stack.bottoms
+  let staff-note-extents = stack.note-extents
   let system-bottom = stack.bottom
   let system-top = stack.top
   let left-bar-x = system.left-bar-x
@@ -805,6 +866,18 @@
     available-flexible-width,
     ragged: system-width == system.natural-width,
   )
+  if (
+    allocation.density < _minimum-justification-scale
+      and system-measures.any(measure => measure.lyrics.len() > 0)
+  ) {
+    _score-error(
+      "score lyrics layout",
+      "requested width would compress lyric text into adjacent syllables",
+      value: system-width,
+      expected: "enough width to preserve lyric syllable clearance",
+      fix: "increase width, reduce lyric-size, shorten the lyric text, or enable wrapping",
+    )
+  }
   let measure-widths = allocation.widths
   let measure-justifications = range(system.widths.len()).map(measure-index => (
     (measure-widths.at(measure-index) - prefixes.at(measure-index))
@@ -836,6 +909,7 @@
   }
   let continuation-left-x = first-note-start + system-repeat-gap - 1.1
   let continuation-right-x = system-width - 0.15
+  let measure-note-starts = ()
   for measure-index in range(system-measures.len()) {
     let measure = system-measures.at(measure-index)
     let measure-start = measure-starts.at(measure-index)
@@ -853,6 +927,7 @@
         repeat-start: measure.barline.left == "repeat-start",
       )
     }
+    measure-note-starts.push(note-start)
     for voice-index in range(lane-count) {
       let voice = measure.voices.at(voice-index)
       placed-by-voice.at(voice-index).push(
@@ -867,6 +942,11 @@
       )
     }
   }
+  let placed-lyrics = _placed-lyric-items(
+    system-measures,
+    measure-note-starts,
+    measure-justifications,
+  )
   let slurs-by-voice = ()
   for voice-index in range(lane-count) {
     let voice = system-measures.first().voices.at(voice-index)
@@ -1229,6 +1309,21 @@
         unit: unit,
       )
     }
+
+    _draw-system-lyrics(
+      measures,
+      system,
+      placed-lyrics,
+      bottom-map,
+      staff-note-extents,
+      lyric-size,
+      lyric-font,
+      lyric-gap,
+      verse-gap,
+      left-bar-x + 0.25,
+      system-width - 0.25,
+      unit,
+    )
 
     _draw-system-endings(
       ending-spans,

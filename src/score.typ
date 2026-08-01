@@ -21,6 +21,10 @@
   width: none,
   scale: 1.0,
   note-spacing: 3.1,
+  lyric-size: 0.9,
+  lyric-font: none,
+  lyric-gap: 0.8,
+  verse-gap: 1.45,
   beams: false,
   staff-gap: none,
   group: auto,
@@ -40,6 +44,27 @@
   let _ = _validate-marking(composer, "score composer")
   _positive-number(scale, "scale")
   _positive-number(note-spacing, "note-spacing")
+  _positive-number(lyric-size, "lyric-size")
+  _nonnegative-number(lyric-gap, "lyric-gap")
+  _positive-number(verse-gap, "verse-gap")
+  if verse-gap < lyric-size {
+    _score-error(
+      "score verse-gap",
+      "verse baselines are closer than the lyric text size",
+      value: verse-gap,
+      expected: "a verse-gap greater than or equal to lyric-size (" + str(lyric-size) + ")",
+      fix: "increase verse-gap or reduce lyric-size so adjacent verses cannot overlap",
+    )
+  }
+  if lyric-font != none and (type(lyric-font) != str or lyric-font.trim() == "") {
+    _score-error(
+      "score lyric-font",
+      "value must be a non-empty font family string or none",
+      value: lyric-font,
+      expected: "a font family such as \"New Computer Modern\" or none",
+      fix: "quote an installed font family or remove lyric-font",
+    )
+  }
   _positive-number(width, "width", optional: true)
   _positive-number(staff-gap, "staff-gap", optional: true)
   _nonnegative-number(indent, "indent")
@@ -139,59 +164,68 @@
     )
   }
   let unit = 8pt * scale
-  let measures = _prepare-score-measures(
-    staves, bars, clef, key, time, tempo,
-    note-spacing: note-spacing,
-    beams: beams,
-  )
-  let lane-count = measures.first().voices.len()
-  let staff-count = measures.first().staff-count
-  if staff-count == 1 and staff-gap != none {
-    _score-error(
-      "score staff-gap",
-      "staff-gap requires at least two staves",
-      value: staff-gap,
-      expected: "none for a single-staff score",
-      fix: "remove staff-gap or declare multiple staves",
-    )
-  }
-  let group-style = if group == auto {
-    if staff-count == 1 { "none" }
-    else if staff-count == 2 { "brace" }
-    else { "bracket" }
-  } else {
-    if type(group) != str or group not in ("brace", "bracket", "line", "none") {
-      _score-error(
-        "score group",
-        "unsupported grouping style",
-        value: group,
-        expected: "auto, brace, bracket, line, or none",
-        fix: "choose a documented grouping style",
-      )
-    }
-    if staff-count == 1 and group != "none" {
-      _score-error(
-        "score group",
-        "a visible staff group requires at least two staves",
-        value: group,
-        expected: "auto or none for a single staff",
-        fix: "remove group or declare the intended staves",
-      )
-    }
-    group
-  }
-  let ending-spans = _collect-ending-spans(measures)
-  for voice-index in range(lane-count) {
-    let staff-layouts = measures.map(measure => measure.voices.at(voice-index).layouts)
-    _validate-staff-slurs(
-      staff-layouts,
-      measures.first().voices.at(voice-index).id,
-    )
-    _validate-staff-ties(staff-layouts, measures.first().voices.at(voice-index).id)
-    _validate-staff-direction-spans(staff-layouts, measures.first().voices.at(voice-index).id)
-  }
-  let left-bar-x = _left-bar-x-for-group(group-style, measures, staff-gap)
   layout(size => context {
+    let measures = _prepare-score-measures(
+      staves, bars, clef, key, time, tempo,
+      note-spacing: note-spacing,
+      beams: beams,
+      lyric-size: lyric-size,
+      lyric-font: lyric-font,
+    )
+    let lane-count = measures.first().voices.len()
+    let staff-count = measures.first().staff-count
+    if staff-count == 1 and staff-gap != none {
+      _score-error(
+        "score staff-gap",
+        "staff-gap requires at least two staves",
+        value: staff-gap,
+        expected: "none for a single-staff score",
+        fix: "remove staff-gap or declare multiple staves",
+      )
+    }
+    let group-style = if group == auto {
+      if staff-count == 1 { "none" }
+      else if staff-count == 2 { "brace" }
+      else { "bracket" }
+    } else {
+      if type(group) != str or group not in ("brace", "bracket", "line", "none") {
+        _score-error(
+          "score group",
+          "unsupported grouping style",
+          value: group,
+          expected: "auto, brace, bracket, line, or none",
+          fix: "choose a documented grouping style",
+        )
+      }
+      if staff-count == 1 and group != "none" {
+        _score-error(
+          "score group",
+          "a visible staff group requires at least two staves",
+          value: group,
+          expected: "auto or none for a single staff",
+          fix: "remove group or declare the intended staves",
+        )
+      }
+      group
+    }
+    let ending-spans = _collect-ending-spans(measures)
+    for voice-index in range(lane-count) {
+      let staff-layouts = measures.map(measure => measure.voices.at(voice-index).layouts)
+      _validate-staff-slurs(
+        staff-layouts,
+        measures.first().voices.at(voice-index).id,
+      )
+      _validate-staff-ties(staff-layouts, measures.first().voices.at(voice-index).id)
+      _validate-staff-direction-spans(staff-layouts, measures.first().voices.at(voice-index).id)
+    }
+    let left-bar-x = _left-bar-x-for-group(
+      group-style,
+      measures,
+      staff-gap,
+      lyric-size: lyric-size,
+      lyric-gap: lyric-gap,
+      verse-gap: verse-gap,
+    )
     let first-label-reserve = _staff-label-reserve(measures.first().voices, unit)
     let short-label-reserve = _staff-label-reserve(measures.first().voices, unit, short: true)
     let max-width = if width == none { size.width / unit } else { width }
@@ -244,6 +278,10 @@
         group-style: group-style,
         bar-numbers: bar-numbers,
         first-bar-number: first-bar-number,
+        lyric-size: lyric-size,
+        lyric-font: lyric-font,
+        lyric-gap: lyric-gap,
+        verse-gap: verse-gap,
       )
       if system-index + 1 < systems.len() {
         v(system-gap)
@@ -254,15 +292,24 @@
 
 #let bar(
   notes,
+  lyrics: none,
   key: "C",
   time: none,
   clef: "treble",
+  lyric-size: 0.9,
+  lyric-font: none,
+  lyric-gap: 0.8,
+  verse-gap: 1.45,
 ) = {
   score(
     clef: clef,
-    bars: ((notes: notes,),),
+    bars: ((notes: notes, lyrics: lyrics),),
     key: key,
     time: time,
     wrap: false,
+    lyric-size: lyric-size,
+    lyric-font: lyric-font,
+    lyric-gap: lyric-gap,
+    verse-gap: verse-gap,
   )
 }

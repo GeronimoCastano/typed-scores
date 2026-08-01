@@ -9,17 +9,18 @@ strings are parsed by a Rust/WASM plugin; Typst and CeTZ lay out the resulting
 score with bundled Bravura glyphs.
 
 ```typst
-#import "@preview/typed-scores:0.2.0": *
+#import "@preview/typed-scores:0.3.0": *
 ```
 
 ## Quick start
 
-`bar` is the quick one-staff, one-measure helper. It accepts only notes,
-clef, key, and time.
+`bar` is the quick one-staff, one-measure helper. It accepts notes, optional
+lyrics, clef, key, and time.
 
 ```typst
 #bar(
   "g4:e a4:e b4:e c5:e d5:e e5:e f#5:e g5:e",
+  lyrics: "Sing __ through _ the _ night __",
   clef: "treble",
   key: "G",
   time: "4/4",
@@ -115,6 +116,39 @@ active, including when a change falls between melody note onsets.
 Write each symbol as `symbol:duration`; the harmony sequence must fill the
 active bar. Symbols such as `F#7(b9)`, `Bb/D`, and `N.C.` are rendered as
 written.
+
+## Lyrics
+
+Add `lyrics` beside a bar's notes. Syllables align to the main pitched events
+of the staff's first voice and contribute to horizontal spacing, system
+packing, vertical staff gaps, and system bounds.
+
+```typst
+#score(
+  time: "4/4",
+  bars: (
+    (
+      notes: "c5:q c d e",
+      lyrics: "Twin -- kle twin -- kle",
+    ),
+  ),
+)
+```
+
+`--` draws a hyphen without consuming a note, `__` consumes a note and extends
+the preceding syllable, and `_` consumes a note as a silent lyric skip. An
+array supplies multiple verses. In a multi-staff score, map declared staff IDs
+to verse strings or arrays:
+
+```typst
+lyrics: (
+  soprano: ("Hal -- le -- lu -- jah", "Praise _ the Lord"),
+  bass: "Low __",
+)
+```
+
+Hyphens and extenders continue across barlines and wrapped systems. Customize
+the lanes with `lyric-size`, `lyric-font`, `lyric-gap`, and `verse-gap`.
 
 ## System layout
 
@@ -276,12 +310,13 @@ naturals before the new signature when required.
 
 - One to four rhythmic voices per staff are supported; each staff's voice count
   is fixed across its bars.
-- Lyrics and cross-staff notation are not yet in the public DSL.
+- Cross-staff notation is not yet in the public DSL.
 - Grace groups exclude rests, tuplets, and nested ornamental groups.
 - Arpeggio signs currently span a chord on one staff, not a cross-staff piano
   arpeggio.
 - Pedals and hairpins do not split automatically at system breaks.
-- Dense markings may need `staff-gap`, `note-spacing`, or `scale` adjustment.
+- Dense markings or lyric verses may need `staff-gap`, `note-spacing`,
+  `lyric-gap`, `verse-gap`, or `scale` adjustment.
 
 See the [user guide](https://github.com/GeronimoCastano/typed-scores/blob/8a548a009bf46ada16b9c2714fa6bc089f3f9616/docs/documentation.pdf)
 for the complete reference. The
