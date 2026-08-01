@@ -141,9 +141,20 @@ array supplies multiple verses. In a multi-staff score, map declared staff IDs
 to verse strings or arrays:
 
 ```typst
-lyrics: (
-  soprano: ("Hal -- le -- lu -- jah", "Praise _ the Lord"),
-  bass: "Low __",
+#score(
+  staves: (
+    soprano: (clef: "treble"),
+    bass: (clef: "bass"),
+  ),
+  time: "4/4",
+  bars: ((
+    soprano: "c5:q d e f",
+    bass: "c3:h g2:h",
+    lyrics: (
+      soprano: ("Hal -- le -- lu -- jah", "Praise _ the Lord"),
+      bass: "Low __",
+    ),
+  ),),
 )
 ```
 
