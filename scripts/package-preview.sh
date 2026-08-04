@@ -32,6 +32,43 @@ systems.typ
 render.typ
 "
 
+validate_package_exclusions() {
+  exclusion_check_dir=$(mktemp -d "${TMPDIR:-/tmp}/typed-scores-exclusions.XXXXXX")
+  trap 'rm -rf "$exclusion_check_dir"' EXIT HUP INT TERM
+
+  git -C "$exclusion_check_dir" init --quiet
+  sed -n '/^exclude = \[/,/^\]/p' "$repo_root/typst.toml" \
+    | sed -E -n 's/^[[:space:]]*"([^"]+)",?$/\1/p' \
+    >"$exclusion_check_dir/.git/info/exclude"
+
+  required_package_paths="
+typst.toml
+README.md
+LICENSE
+src/plugin.wasm
+"
+  for runtime_typst_file in $runtime_typst_files; do
+    required_package_paths="$required_package_paths
+src/$runtime_typst_file"
+  done
+  for glyph_file in "$repo_root"/src/assets/glyphs/*; do
+    required_package_paths="$required_package_paths
+src/assets/glyphs/$(basename "$glyph_file")"
+  done
+
+  for required_package_path in $required_package_paths; do
+    mkdir -p "$exclusion_check_dir/$(dirname "$required_package_path")"
+    touch "$exclusion_check_dir/$required_package_path"
+    if git -C "$exclusion_check_dir" check-ignore --quiet --no-index -- "$required_package_path"; then
+      echo "error: typst.toml excludes required runtime file: $required_package_path" >&2
+      exit 1
+    fi
+  done
+
+  rm -rf "$exclusion_check_dir"
+  trap - EXIT HUP INT TERM
+}
+
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH= cd -- "$script_dir/.." && pwd)
 package_target="$packages_repo/packages/preview/$package_name/$version"
@@ -66,6 +103,8 @@ for runtime_typst_file in $runtime_typst_files; do
     exit 1
   fi
 done
+
+validate_package_exclusions
 
 if [ -e "$package_target" ]; then
   echo "error: target already exists: $package_target" >&2
