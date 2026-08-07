@@ -10,7 +10,7 @@
 #import "../examples/mozart-eine-kleine-nachtmusik.typ": mozart-k525-opening
 #import "../examples/beethoven-ode-to-joy-alto-sax.typ": ode-to-joy-alto-sax
 
-#let version = "0.3.0"
+#let version = "0.4.0"
 #let accent = rgb("#7A2141")
 #let accent-soft = rgb("#F7E8EE")
 
@@ -208,7 +208,7 @@ should remain readable and versionable as text.
 Import the package from the Typst preview namespace:
 
 ```typ
-#import "@preview/typed-scores:0.3.0": *
+#import "@preview/typed-scores:0.4.0": *
 ```
 
 The examples in this guide use lowercase pitch letters for fast entry.
