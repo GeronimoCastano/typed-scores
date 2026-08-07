@@ -47,6 +47,7 @@
 #let chopin-opening(
   scale: 0.42,
   note-spacing: 4.0,
+  theme: "auto",
   // staff-gap: none computes each gap from the actual ink, keeping the
   // treble hairpins clear of the bass-staff slur arches.
   staff-gap: none,
@@ -64,6 +65,7 @@
   time: "12/8",
   tempo: (text: [Andante], beat: "eighth", bpm: 132),
   composer: composer,
+  theme: theme,
   scale: scale,
   note-spacing: note-spacing,
   staff-gap: staff-gap,

@@ -1389,14 +1389,21 @@ recolors both CeTZ geometry and embedded Bravura glyphs.
   #bar("c4:q d e f", time: "4/4", theme: "dark")
   #v(1em)
   #bar("g4:q a b c5", time: "4/4", theme: "auto")
-  #v(1em)
-  #score(
-    time: "2/4",
-    theme: "dark",
-    wrap: false,
-    bars: (
-      (notes: "c4:q d"),
-      (notes: "e:q f", barline: (right: "final")),
-    ),
-  )
 ]
+
+#pagebreak()
+#set page(fill: rgb("#202124"))
+#set text(fill: white)
+
+= Dark theme: Chopin Op. 9 No. 2
+
+The canonical release fixture exercises a wrapped grand staff with signatures,
+beams, dynamics, fingerings, slurs, hairpins, pedal spans, ornaments, grace
+notes, articulations, and text in explicit dark mode.
+
+#chopin-opening(
+  scale: 0.42,
+  note-spacing: 3.55,
+  wrap: true,
+  theme: "dark",
+)
