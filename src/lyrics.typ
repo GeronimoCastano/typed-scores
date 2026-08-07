@@ -12,8 +12,8 @@
   int(onset.numerator * 4096 / onset.denominator)
 }
 
-#let _lyric-text-style(unit, lyric-size, lyric-font) = {
-  let style = (size: unit * lyric-size,)
+#let _lyric-text-style(unit, lyric-size, lyric-font, paint: black) = {
+  let style = (size: unit * lyric-size, fill: paint)
   if lyric-font != none {
     style.insert("font", lyric-font)
   }
@@ -407,6 +407,7 @@
   lyric-size,
   lyric-font,
   unit,
+  paint,
 ) = {
   import cetz.draw: *
   let start-x = source-x + item.width / 2 + 0.18
@@ -418,7 +419,7 @@
     let x = start-x + span * (index + 0.5) / count
     content(
       (x, y),
-      text(.._lyric-text-style(unit, lyric-size * 0.85, lyric-font), "–"),
+      text(.._lyric-text-style(unit, lyric-size * 0.85, lyric-font, paint: paint), "–"),
       anchor: "center",
       padding: 0pt,
     )
@@ -438,6 +439,7 @@
   left-x,
   right-x,
   unit,
+  paint: black,
 ) = {
   import cetz.draw: *
   let all-items = ()
@@ -459,7 +461,7 @@
     )
     content(
       (item.x, y),
-      text(.._lyric-text-style(unit, lyric-size, lyric-font), item.text),
+      text(.._lyric-text-style(unit, lyric-size, lyric-font, paint: paint), item.text),
       anchor: "center",
       padding: 0pt,
     )
@@ -508,6 +510,7 @@
           lyric-size,
           lyric-font,
           unit,
+          paint,
         )
       }
     }
@@ -535,7 +538,7 @@
           line(
             (source-x, y - lyric-size * 0.34),
             (target-x, y - lyric-size * 0.34),
-            stroke: _lyric-extender-thickness * unit + black,
+            stroke: _lyric-extender-thickness * unit + paint,
           )
         }
       }

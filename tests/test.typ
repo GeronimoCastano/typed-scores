@@ -1373,3 +1373,20 @@ hairpin, articulations, and low ledger lines.
     ),
   ),
 )
+
+#pagebreak()
+
+= Light and dark notation themes
+
+The light theme uses black notation ink. The dark theme uses white ink, and
+the automatic theme follows the surrounding solid text color. Every case
+recolors both CeTZ geometry and embedded Bravura glyphs.
+
+#bar("c4:q d e f", time: "4/4", theme: "light")
+
+#block(fill: rgb("#202124"), inset: 12pt)[
+  #set text(fill: white)
+  #bar("c4:q d e f", time: "4/4", theme: "dark")
+  #v(1em)
+  #bar("g4:q a b c5", time: "4/4", theme: "auto")
+]

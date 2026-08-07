@@ -82,8 +82,8 @@
   if calc.rem(position, 2) == 0 { y + line-gap / 2 } else { y }
 }
 
-#let _draw-dots(x, y, dots, unit: 8pt) = {
+#let _draw-dots(x, y, dots, unit: 8pt, paint: black) = {
   for dot-index in range(dots) {
-    draw-augmentation-dot(x + dot-index * _dot-step, y, unit: unit)
+    draw-augmentation-dot(x + dot-index * _dot-step, y, unit: unit, paint: paint)
   }
 }

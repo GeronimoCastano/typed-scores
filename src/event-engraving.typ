@@ -18,14 +18,15 @@
   stem-length-override: none,
   stem-direction-override: none,
   key: "C",
+  paint: black,
 ) = {
   import cetz.draw: *
   let notation-scale = if layout.at("grace", default: false) { _grace-notation-scale } else { 1.0 }
   if layout.rest {
     let rest-bottom = bottom-y + layout.at("rest-offset", default: 0)
-    draw-rest(_duration-base(layout), x, bottom-y: rest-bottom, line-gap: line-gap, unit: unit)
+    draw-rest(_duration-base(layout), x, bottom-y: rest-bottom, line-gap: line-gap, unit: unit, paint: paint)
     let dot-x = x + rest-width(_duration-base(layout)) + _dot-gap-from-head
-    _draw-dots(dot-x, rest-bottom + 2.5 * line-gap, layout.duration.dots, unit: unit)
+    _draw-dots(dot-x, rest-bottom + 2.5 * line-gap, layout.duration.dots, unit: unit, paint: paint)
   } else {
     let positions = layout.pitches.map(p => p.staff_position)
     let y-values = positions.map(p => staff-y(p, bottom-y: bottom-y, line-gap: line-gap))
@@ -61,6 +62,7 @@
         left-extension: ledger-left-extension,
         right-extension: ledger-right-extension,
         unit: unit,
+        paint: paint,
       )
       let placement = accidental-plan.placements.at(str(pitch-index), default: none)
       if placement != none {
@@ -70,14 +72,15 @@
           notehead-y,
           unit: unit,
           scale: notation-scale,
+          paint: paint,
         )
       }
       if layout.notehead == "whole" {
-        draw-whole-notehead(head-x, notehead-y, unit: unit, scale: notation-scale)
+        draw-whole-notehead(head-x, notehead-y, unit: unit, scale: notation-scale, paint: paint)
       } else if layout.notehead == "half" {
-        draw-open-notehead(head-x, notehead-y, unit: unit, scale: notation-scale)
+        draw-open-notehead(head-x, notehead-y, unit: unit, scale: notation-scale, paint: paint)
       } else {
-        draw-filled-notehead(head-x, notehead-y, unit: unit, scale: notation-scale)
+        draw-filled-notehead(head-x, notehead-y, unit: unit, scale: notation-scale, paint: paint)
       }
       let dot-x = x + right-spread + head-half-width + _dot-gap-from-head + 0.2
       for dot-index in range(layout.duration.dots) {
@@ -86,6 +89,7 @@
           _dot-y(staff-position, notehead-y, line-gap),
           unit: unit,
           scale: notation-scale,
+          paint: paint,
         )
       }
     }
@@ -112,7 +116,7 @@
         // head-side strip retains LilyPond's clearance from the notehead.
         if strokes == 4 { stem-length += 0.82 }
       }
-      draw-stem(x, stem-start-y, direction: direction, length: stem-length, unit: unit, glyph-scale: notation-scale)
+      draw-stem(x, stem-start-y, direction: direction, length: stem-length, unit: unit, glyph-scale: notation-scale, paint: paint)
       if tremolo != none {
         let strokes = _single-tremolo-strokes(layout, tremolo)
         let sign = if direction == "up" { 1 } else { -1 }
@@ -130,18 +134,18 @@
         let near-tip-y = tip-y - sign * 0.6225 - if direction == "up" { 0.375 } else { 0 }
         for stroke-index in range(strokes) {
           let y = near-tip-y - sign * (strokes - 1 - stroke-index) * 0.81
-          draw-stem-tremolo(stem-x, y, unit: unit)
+          draw-stem-tremolo(stem-x, y, unit: unit, paint: paint)
         }
       }
       if layout.flags > 0 and not suppress-flags {
         let tip = stem-tip(x, stem-start-y, direction: direction, length: stem-length, glyph-scale: notation-scale)
-        draw-flag(tip.at(0), tip.at(1), direction: direction, count: layout.flags, unit: unit, scale: notation-scale)
+        draw-flag(tip.at(0), tip.at(1), direction: direction, count: layout.flags, unit: unit, scale: notation-scale, paint: paint)
       }
     } else if tremolo != none {
       let strokes = _single-tremolo-strokes(layout, tremolo)
       for stroke-index in range(strokes) {
         let y = calc.max(..y-values) + 0.8 + stroke-index * 0.81
-        draw-stem-tremolo(x, y, unit: unit)
+        draw-stem-tremolo(x, y, unit: unit, paint: paint)
       }
     }
     let arpeggio-direction = none
@@ -159,6 +163,7 @@
         calc.max(..y-values),
         direction: arpeggio-direction,
         unit: unit,
+        paint: paint,
       )
     }
   }
@@ -210,11 +215,11 @@
   if dy < 0 { -rise } else { rise }
 }
 
-#let _draw-beam-group(group, bottom-y: 0, line-gap: 1.0, unit: 8pt, key: "C") = {
+#let _draw-beam-group(group, bottom-y: 0, line-gap: 1.0, unit: 8pt, key: "C", paint: black) = {
   if group.len() == 0 { return }
   if group.len() == 1 {
     let item = group.first()
-    _draw-notated-event(item.layout, x: item.x, bottom-y: bottom-y, unit: unit, key: key)
+    _draw-notated-event(item.layout, x: item.x, bottom-y: bottom-y, unit: unit, key: key, paint: paint)
     return
   }
 
@@ -305,6 +310,7 @@
       stem-length-override: length,
       stem-direction-override: direction,
       key: key,
+      paint: paint,
     )
   }
 
@@ -322,6 +328,7 @@
         (left-item.sx, beam-y(left-item.sx) + dy),
         (right-item.sx, beam-y(right-item.sx) + dy),
         thickness: local-beam-thickness,
+        paint: paint,
       )
     }
   }
@@ -345,7 +352,7 @@
       let x2 = if toward-left { item.sx - _beam-stub-length * stem-length-scale } else { item.sx + _beam-stub-length * stem-length-scale }
       for level in range(covered, item.flags) {
         let dy = level-offset(level)
-        draw-beam((item.sx, beam-y(item.sx) + dy), (x2, beam-y(x2) + dy), thickness: local-beam-thickness)
+        draw-beam((item.sx, beam-y(item.sx) + dy), (x2, beam-y(x2) + dy), thickness: local-beam-thickness, paint: paint)
       }
     }
   }
@@ -447,7 +454,7 @@
   })
 }
 
-#let _draw-grace-details(placed, bottom-y: 0, unit: 8pt) = {
+#let _draw-grace-details(placed, bottom-y: 0, unit: 8pt, paint: black) = {
   import cetz.draw: *
   let groups = (:)
   for item in placed {
@@ -475,7 +482,7 @@
         line(
           (stem.point.at(0) - 0.47, y - 0.42),
           (stem.point.at(0) + 0.67, y + 0.42),
-          stroke: 0.20 * unit + black,
+          stroke: 0.20 * unit + paint,
         )
       }
     }
@@ -493,12 +500,13 @@
         height: 0.55,
         maximum-control-height: 1.2,
         unit: unit,
+        paint: paint,
       )
     }
   }
 }
 
-#let _draw-alternating-tremolos(placed, bottom-y: 0, unit: 8pt) = {
+#let _draw-alternating-tremolos(placed, bottom-y: 0, unit: 8pt, paint: black) = {
   for item in placed {
     for tremolo in item.layout.at("tremolo_starts", default: ()) {
       let end = placed.at(tremolo.end_index)
@@ -514,6 +522,7 @@
             (first-stem.point.at(0), first-stem.point.at(1) + offset),
             (last-stem.point.at(0), last-stem.point.at(1) + offset),
             thickness: 0.30,
+            paint: paint,
           )
         }
       }
@@ -532,6 +541,7 @@
   beams: false,
   key: "C",
   tied-from-previous: false,
+  paint: black,
 ) = {
   let placed = _resolve-measure-accidentals(placed, key, tied-from-previous: tied-from-previous)
   let placed = _resolve-ledger-clearance(placed)
@@ -551,7 +561,7 @@
         group-end-index += 1
       }
       if _beam-group-visible(group, beams) {
-        _draw-beam-group(group, bottom-y: bottom-y, unit: unit, key: key)
+        _draw-beam-group(group, bottom-y: bottom-y, unit: unit, key: key, paint: paint)
       } else {
         for member in group {
           _draw-notated-event(
@@ -560,6 +570,7 @@
             bottom-y: bottom-y,
             unit: unit,
             key: key,
+            paint: paint,
           )
         }
       }
@@ -572,12 +583,13 @@
         unit: unit,
         suppress-flags: item.layout.at("alternating_tremolo", default: false),
         key: key,
+        paint: paint,
       )
       event-index += 1
     }
   }
-  _draw-grace-details(placed, bottom-y: bottom-y, unit: unit)
-  _draw-alternating-tremolos(placed, bottom-y: bottom-y, unit: unit)
+  _draw-grace-details(placed, bottom-y: bottom-y, unit: unit, paint: paint)
+  _draw-alternating-tremolos(placed, bottom-y: bottom-y, unit: unit, paint: paint)
 }
 
 // LilyPond-style tuplets print their numerator by default. A bracket is
@@ -607,7 +619,7 @@
   if _stem-direction(positions) == "up" { "above" } else { "below" }
 }
 
-#let _draw-tuplets(placed, bottom-y: 0, unit: 8pt, beams: false) = {
+#let _draw-tuplets(placed, bottom-y: 0, unit: 8pt, beams: false, paint: black) = {
   import cetz.draw: *
   for start-index in range(placed.len()) {
     let start = placed.at(start-index)
@@ -655,7 +667,7 @@
         }))
         bottom - 0.66 - lane
       }
-      let number = text(size: unit * 1.55, style: "italic", str(tuplet.numerator))
+      let number = text(size: unit * 1.55, style: "italic", fill: paint, str(tuplet.numerator))
       let number-half = measure(number).width / unit / 2 + 0.32
       // Compensate for the rightward ink overhang of the italic digit so its
       // visible center, not merely its advance box, lands on the span center.
@@ -664,7 +676,7 @@
         tuplet.bracket == "auto" and not _tuplet-full-beam(group, beams)
       )
       if show-bracket {
-        let stroke = 0.16 * unit + black
+        let stroke = 0.16 * unit + paint
         if center - number-half > left {
           line((left, y), (center - number-half, y), stroke: stroke)
         }

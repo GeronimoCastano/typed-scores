@@ -10,12 +10,26 @@
 // Public API
 // ---------------------------------------------------------------------------
 
+#let _validate-theme(value) = {
+  if type(value) != str or value not in ("auto", "light", "dark") {
+    _score-error(
+      "score theme",
+      "unsupported notation theme",
+      value: value,
+      expected: "auto, light, or dark",
+      fix: "choose auto to follow the surrounding text color, light for black ink, or dark for white ink",
+    )
+  }
+  value
+}
+
 #let score(
   clef: "treble",
   staves: none,
   bars: (),
   key: "C",
   time: "4/4",
+  theme: "auto",
   tempo: none,
   composer: none,
   width: none,
@@ -40,6 +54,7 @@
   let _ = _validate-clef(clef, "score clef")
   let _ = _validate-key(key, "score key")
   let _ = _parse-time-rational(time, label: "score time")
+  let theme = _validate-theme(theme)
   let _ = _normalize-tempo(tempo, "score tempo")
   let _ = _validate-marking(composer, "score composer")
   _positive-number(scale, "scale")
@@ -165,6 +180,22 @@
   }
   let unit = 8pt * scale
   layout(size => context {
+    let paint = if theme == "light" {
+      black
+    } else if theme == "dark" {
+      white
+    } else {
+      if type(text.fill) != color {
+        _score-error(
+          "score theme",
+          "auto cannot follow a non-color text fill",
+          value: text.fill,
+          expected: "a solid surrounding text color",
+          fix: "set a solid text fill or choose theme: \"light\" or theme: \"dark\"",
+        )
+      }
+      text.fill
+    }
     let measures = _prepare-score-measures(
       staves, bars, clef, key, time, tempo,
       note-spacing: note-spacing,
@@ -282,6 +313,7 @@
         lyric-font: lyric-font,
         lyric-gap: lyric-gap,
         verse-gap: verse-gap,
+        paint: paint,
       )
       if system-index + 1 < systems.len() {
         v(system-gap)
@@ -296,6 +328,7 @@
   key: "C",
   time: none,
   clef: "treble",
+  theme: "auto",
   lyric-size: 0.9,
   lyric-font: none,
   lyric-gap: 0.8,
@@ -306,6 +339,7 @@
     bars: ((notes: notes, lyrics: lyrics),),
     key: key,
     time: time,
+    theme: theme,
     wrap: false,
     lyric-size: lyric-size,
     lyric-font: lyric-font,

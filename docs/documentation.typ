@@ -240,11 +240,31 @@ perform full-measure duration validation.
   [#c("clef")], [`str`], [#c("\"treble\"")], [Treble, bass, alto, or tenor clef.],
   [#c("key")], [`str`], [#c("\"C\"")], [Major or minor key signature.],
   [#c("time")], [`str | none`], [`none`], [Meter and expected duration, such as #c("\"4/4\"").],
+  [#c("theme")], [`str`], [#c("\"auto\"")], [Notation ink: `light` uses black, `dark` uses white, and `auto` follows the surrounding solid text fill.],
   [#c("lyric-size")], [`number`], [`0.9`], [Lyric text size in staff spaces.],
   [#c("lyric-font")], [`str | none`], [`none`], [Optional font family for lyrics.],
   [#c("lyric-gap")], [`number`], [`0.8`], [Clearance above the first verse.],
   [#c("verse-gap")], [`number`], [`1.45`], [Baseline distance between verses; must be at least `lyric-size`.],
 )
+
+== Light and dark notation
+
+Use #c("theme: \"dark\"") when placing a score on a dark surface. It recolors
+staff geometry, text, and every bundled Bravura glyph together. The default
+#c("theme: \"auto\"") follows the surrounding Typst text fill; it cannot
+inspect CSS changes applied by an HTML host after Typst has exported the SVG.
+
+#demo[
+  #example(```typ
+#block(fill: rgb("#202124"), inset: 10pt)[
+  #bar(
+    "c4:q d e f",
+    time: "4/4",
+    theme: "dark",
+  )
+]
+```)
+]
 
 = Scores and systems <scores>
 
@@ -565,6 +585,7 @@ matching LilyPond's usual sparse numbering; `"all"` prints every bar number.
   [#c("bars")], [`array`], [`()`], [Required non-empty array of bar dictionaries.],
   [#c("key")], [`str`], [#c("\"C\"")], [Initial key signature.],
   [#c("time")], [`str`], [#c("\"4/4\"")], [Initial meter and full-bar duration.],
+  [#c("theme")], [`str`], [#c("\"auto\"")], [Notation ink: `light` uses black, `dark` uses white, and `auto` follows the surrounding solid text fill.],
   [#c("tempo")], [`str | content | dictionary | none`], [`none`], [Tempo text, or `(text:, beat:, bpm:)` for an engraved metronome mark.],
   [#c("composer")], [`str | content | none`], [`none`], [Composer credit above the first system.],
   [#c("width")], [`number | none`], [`none`], [Packing width in staff spaces.],

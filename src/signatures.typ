@@ -116,7 +116,7 @@
   }
 }
 
-#let _draw-key-signature(clef, key, x, bottom-y: 0, unit: 8pt) = {
+#let _draw-key-signature(clef, key, x, bottom-y: 0, unit: 8pt, paint: black) = {
   let signature-accidentals = _key-accidentals(key)
   if signature-accidentals.count > 0 {
     let positions = if signature-accidentals.kind == "Flat" {
@@ -130,6 +130,7 @@
         x + accidental-index * _key-accidental-step(signature-accidentals.kind),
         staff-y(positions.at(accidental-index), bottom-y: bottom-y),
         unit: unit,
+        paint: paint,
       )
     }
   }
@@ -170,7 +171,7 @@
   cancellation-width + between + signature-width
 }
 
-#let _draw-key-change(clef, previous-key, key, x, bottom-y: 0, unit: 8pt) = {
+#let _draw-key-change(clef, previous-key, key, x, bottom-y: 0, unit: 8pt, paint: black) = {
   let cancellation-indices = _key-cancellation-indices(previous-key, key)
   let cursor = x
   if cancellation-indices.len() > 0 {
@@ -186,6 +187,7 @@
         cursor + j * _key-accidental-step("Natural"),
         staff-y(positions.at(i), bottom-y: bottom-y),
         unit: unit,
+        paint: paint,
       )
     }
     cursor += cancellation-indices.len() * _key-accidental-step("Natural")
@@ -193,7 +195,7 @@
       cursor += _key-cancellation-gap
     }
   }
-  _draw-key-signature(clef, key, cursor, bottom-y: bottom-y, unit: unit)
+  _draw-key-signature(clef, key, cursor, bottom-y: bottom-y, unit: unit, paint: paint)
 }
 
 // ---------------------------------------------------------------------------
@@ -211,13 +213,13 @@
   x + _content-lead-in
 }
 
-#let _draw-prologue(clef, key, time, previous-key: none, bottom-y: 0, unit: 8pt, staff-x: 0, clef-x: 0.35) = {
-  draw-clef(clef, clef-x, _clef-origin-y(clef, bottom-y: bottom-y), unit: unit)
+#let _draw-prologue(clef, key, time, previous-key: none, bottom-y: 0, unit: 8pt, staff-x: 0, clef-x: 0.35, paint: black) = {
+  draw-clef(clef, clef-x, _clef-origin-y(clef, bottom-y: bottom-y), unit: unit, paint: paint)
   let x = clef-x + _clef-advance
-  _draw-key-change(clef, previous-key, key, x, bottom-y: bottom-y, unit: unit)
+  _draw-key-change(clef, previous-key, key, x, bottom-y: bottom-y, unit: unit, paint: paint)
   let key-width = _key-change-width(previous-key, key)
   if key-width > 0 { x += key-width + _prologue-gap }
-  draw-time-signature(time, x, bottom-y: bottom-y, unit: unit)
+  draw-time-signature(time, x, bottom-y: bottom-y, unit: unit, paint: paint)
 }
 
 // Mid-score key/time changes shown at the start of a measure.
@@ -268,6 +270,7 @@
   show-time: false,
   show-clef: false,
   reserve-clef: false,
+  paint: black,
 ) = {
   let x = measure-start + 0.8
   if show-clef {
@@ -277,16 +280,17 @@
       _clef-origin-y(clef, bottom-y: bottom-y),
       unit: unit,
       scale: _change-clef-scale,
+      paint: paint,
     )
   }
   if show-clef or reserve-clef { x += _change-clef-advance + _prologue-gap }
   if show-key {
-    _draw-key-change(clef, previous-key, key, x, bottom-y: bottom-y, unit: unit)
+    _draw-key-change(clef, previous-key, key, x, bottom-y: bottom-y, unit: unit, paint: paint)
     let key-width = _key-change-width(previous-key, key)
     if key-width > 0 { x += key-width + _prologue-gap }
   }
   if show-time {
-    draw-time-signature(time, x, bottom-y: bottom-y, unit: unit)
+    draw-time-signature(time, x, bottom-y: bottom-y, unit: unit, paint: paint)
   }
 }
 

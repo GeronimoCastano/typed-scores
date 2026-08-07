@@ -62,9 +62,9 @@
   (text: tempo-text, beat: beat, bpm: bpm)
 }
 
-#let _draw-tempo(tempo, x, y, unit) = {
+#let _draw-tempo(tempo, x, y, unit, paint: black) = {
   import cetz.draw: *
-  let style = (size: unit * 1.25, style: "italic")
+  let style = (size: unit * 1.25, style: "italic", fill: paint)
   if type(tempo) != dictionary {
     content((x, y), text(..style, tempo), anchor: "west", padding: 0pt)
     return
@@ -82,7 +82,7 @@
     content((open-x, y), open, anchor: "west", padding: 0pt)
     note-x = open-x + measure(open).width / unit + 0.28 + glyph-half-width
   }
-  _draw-bravura-glyph(glyph, note-x, y, unit: unit, glyph-scale: glyph-scale)
+  _draw-bravura-glyph(glyph, note-x, y, unit: unit, glyph-scale: glyph-scale, paint: paint)
   let after-note = note-x + glyph-half-width + 0.18
   let suffix = "= " + str(tempo.bpm) + if prefix == none { "" } else { ")" }
   content((after-note, y), text(..style, suffix), anchor: "west", padding: 0pt)
@@ -318,22 +318,23 @@
   baseline
 }
 
-#let _draw-placed-annotations(placed, bottom-y: 0, unit: 8pt, beams: false, slur-layouts: (), dynamics-baseline: none) = {
+#let _draw-placed-annotations(placed, bottom-y: 0, unit: 8pt, beams: false, slur-layouts: (), dynamics-baseline: none, paint: black) = {
   import cetz.draw: *
   for item in placed {
     let dynamic = _annotation-with-prefix(item.layout, "dyn=")
     if dynamic != none {
       let y = if dynamics-baseline == none { bottom-y - 2.0 } else { dynamics-baseline }
-      draw-dynamic(dynamic, item.x, y, unit: unit)
+      draw-dynamic(dynamic, item.x, y, unit: unit, paint: paint)
     }
     if _has-annotation(item.layout, "fermata") {
-      draw-fermata(item.x, _event-top(item, bottom-y: bottom-y) + 1.15, unit: unit)
+      draw-fermata(item.x, _event-top(item, bottom-y: bottom-y) + 1.15, unit: unit, paint: paint)
     }
     if _has-annotation(item.layout, "breath") {
       draw-breath-mark(
         item.x + _head-half-width(item.layout) + 0.72,
         _event-top(item, bottom-y: bottom-y) + 0.78,
         unit: unit,
+        paint: paint,
       )
     }
     if item.layout.rest { continue }
@@ -350,7 +351,7 @@
       let sign = if articulation-placement == "above" { 1 } else { -1 }
       let placements = _articulation-stack(articulations, y-values, sign, bottom-y)
       for placement in placements {
-        draw-articulation(placement.mark, item.x, placement.y, placement: articulation-placement, unit: unit)
+        draw-articulation(placement.mark, item.x, placement.y, placement: articulation-placement, unit: unit, paint: paint)
       }
       let last = placements.last()
       articulation-cursor = last.y + sign * (_articulation-height(last.mark) / 2 + 0.18)
@@ -372,18 +373,18 @@
         let lift = if _has-annotation(item.layout, "chromatic-turn") { 1.7 } else { 0.8 }
         turn-y = calc.max(turn-y, slur-y + lift)
       }
-      draw-ornament-turn(item.x, turn-y, unit: unit, scale: 0.82)
+      draw-ornament-turn(item.x, turn-y, unit: unit, scale: 0.82, paint: paint)
       turn-top = turn-y + 0.42
       if _has-annotation(item.layout, "chromatic-turn") {
-        draw-accidental("Flat", item.x - 0.72, turn-y + 0.58, unit: unit, scale: 0.38)
-        draw-accidental("Natural", item.x + 0.34, turn-y - 0.74, unit: unit, scale: 0.38)
+        draw-accidental("Flat", item.x - 0.72, turn-y + 0.58, unit: unit, scale: 0.38, paint: paint)
+        draw-accidental("Natural", item.x + 0.34, turn-y - 0.74, unit: unit, scale: 0.38, paint: paint)
         turn-top = turn-y + 0.95
       }
       let turn-fingering = _annotation-with-prefix(item.layout, "turn-f=")
       if turn-fingering != none {
         content(
           (item.x, turn-y + 1.08),
-          text(size: unit * 0.62, weight: "bold", turn-fingering),
+          text(size: unit * 0.62, weight: "bold", fill: paint, turn-fingering),
           anchor: "south",
           padding: 0pt,
         )
@@ -408,7 +409,7 @@
       }
       content(
         (item.x, fingering-y),
-        text(size: unit * 0.82, weight: "bold", fingering),
+        text(size: unit * 0.82, weight: "bold", fill: paint, fingering),
         anchor: "south",
         padding: 0pt,
       )
@@ -417,7 +418,7 @@
     if marking != none {
       content(
         (item.x, bottom-y - 1.35),
-        text(size: unit * 0.9, style: "italic", marking.replace("_", " ")),
+        text(size: unit * 0.9, style: "italic", fill: paint, marking.replace("_", " ")),
         anchor: "north-west",
         padding: 0pt,
       )
@@ -426,7 +427,7 @@
     if below-marking != none {
       content(
         (item.x, bottom-y - 6.8),
-        text(size: unit * 0.9, style: "italic", below-marking.replace("_", " ")),
+        text(size: unit * 0.9, style: "italic", fill: paint, below-marking.replace("_", " ")),
         anchor: "north-west",
         padding: 0pt,
       )
@@ -456,11 +457,11 @@
   pedal-spans
 }
 
-#let _draw-pedal-spans(spans, y, unit: 8pt) = {
+#let _draw-pedal-spans(spans, y, unit: 8pt, paint: black) = {
   import cetz.draw: *
-  let stroke-style = 0.08 * unit + black
+  let stroke-style = 0.08 * unit + paint
   for span in spans {
-    draw-pedal-mark(span.start, y, unit: unit)
+    draw-pedal-mark(span.start, y, unit: unit, paint: paint)
     let line-start = span.start + 1.72
     let line-end = span.end + 0.55
     if line-end > line-start {
@@ -507,9 +508,9 @@
   hairpin-spans
 }
 
-#let _draw-hairpins(spans, y, unit: 8pt) = {
+#let _draw-hairpins(spans, y, unit: 8pt, paint: black) = {
   for span in spans {
-    draw-hairpin((span.start, y), (span.end, y), kind: span.kind, unit: unit)
+    draw-hairpin((span.start, y), (span.end, y), kind: span.kind, unit: unit, paint: paint)
   }
 }
 

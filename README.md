@@ -44,6 +44,12 @@ Use `score` for every complete score. A single staff needs no invented name:
 
 Omitting `key` uses C major (`key: "C"`).
 
+Notation uses `theme: "auto"` by default, following the surrounding solid
+Typst text color. Set `theme: "light"` for black ink or `theme: "dark"` for
+white ink; the setting recolors staff geometry and bundled Bravura glyphs
+together. Because `auto` is resolved while Typst compiles, HTML integrations
+that apply a dark theme only through later CSS should pass `theme: "dark"`.
+
 For multiple staves, declare stable staff IDs once. Each bar then supplies one
 event string (or an array of simultaneous voice strings) for every ID. Add
 `label` for a first-system staff name and

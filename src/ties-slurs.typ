@@ -146,7 +146,7 @@
   ties
 }
 
-#let _draw-ties(ties, unit: 8pt) = {
+#let _draw-ties(ties, unit: 8pt, paint: black) = {
   for tie in ties {
     draw-bow(
       tie.start,
@@ -156,6 +156,7 @@
       maximum-control-height: 1.0,
       initial-rise-ratio: 0.333,
       unit: unit,
+      paint: paint,
     )
   }
 }
@@ -720,7 +721,7 @@
   layouts
 }
 
-#let _draw-slur-bows(layouts, unit: 8pt) = {
+#let _draw-slur-bows(layouts, unit: 8pt, paint: black) = {
   for layout in layouts {
     draw-bow(
       layout.start,
@@ -729,6 +730,7 @@
       height: layout.height,
       maximum-control-height: 2.0,
       unit: unit,
+      paint: paint,
     )
   }
 }

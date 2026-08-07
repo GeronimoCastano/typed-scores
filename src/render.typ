@@ -128,8 +128,6 @@
   glyph-bounds.at(glyph-name)
 }
 
-#let _bravura-file(glyph-name) = "assets/glyphs/" + glyph-name + ".svg"
-
 #let _bravura-width(glyph-name) = {
   let glyph-bounds = _bravura-bounding-box(glyph-name)
   glyph-bounds.ne.at(0) - glyph-bounds.sw.at(0)
@@ -142,13 +140,22 @@
 
 // Draw a Bravura glyph. With `origin: true`, (x, y) is the glyph's SMuFL
 // origin; otherwise (x, y) is the center of its bounding box.
-#let _draw-bravura-glyph(glyph-name, x, y, unit: 8pt, origin: false, glyph-scale: 1.0) = {
+#let _bravura-image(file, paint, width: auto, height: auto) = {
+  let svg = read("assets/glyphs/" + file).replace("#000", paint.to-hex())
+  image(bytes(svg), width: width, height: height)
+}
+
+#let _draw-bravura-glyph(glyph-name, x, y, unit: 8pt, origin: false, glyph-scale: 1.0, paint: black) = {
   let glyph-bounds = _bravura-bounding-box(glyph-name)
   let center-x = if origin { x + (glyph-bounds.sw.at(0) + glyph-bounds.ne.at(0)) * glyph-scale / 2 } else { x }
   let center-y = if origin { y + (glyph-bounds.sw.at(1) + glyph-bounds.ne.at(1)) * glyph-scale / 2 } else { y }
   cetz.draw.content(
     (center-x, center-y),
-    image(_bravura-file(glyph-name), width: _bravura-width(glyph-name) * unit * glyph-scale),
+    _bravura-image(
+      glyph-name + ".svg",
+      paint,
+      width: _bravura-width(glyph-name) * unit * glyph-scale,
+    ),
     anchor: "center",
     padding: 0pt,
   )
@@ -160,28 +167,29 @@
   bottom-y: 0,
   line-gap: 1.0,
   unit: 8pt,
+  paint: black,
 ) = {
   import cetz.draw: *
   for staff-line-index in range(5) {
     let staff-line-y = bottom-y + staff-line-index * line-gap
-    line((x, staff-line-y), (x + width, staff-line-y), stroke: staff-line-thickness * unit + black)
+    line((x, staff-line-y), (x + width, staff-line-y), stroke: staff-line-thickness * unit + paint)
   }
 }
 
-#let draw-filled-notehead(x, y, unit: 8pt, scale: 1.0) = {
-  _draw-bravura-glyph("notehead-black", x, y, unit: unit, glyph-scale: scale)
+#let draw-filled-notehead(x, y, unit: 8pt, scale: 1.0, paint: black) = {
+  _draw-bravura-glyph("notehead-black", x, y, unit: unit, glyph-scale: scale, paint: paint)
 }
 
-#let draw-open-notehead(x, y, unit: 8pt, scale: 1.0) = {
-  _draw-bravura-glyph("notehead-half", x, y, unit: unit, glyph-scale: scale)
+#let draw-open-notehead(x, y, unit: 8pt, scale: 1.0, paint: black) = {
+  _draw-bravura-glyph("notehead-half", x, y, unit: unit, glyph-scale: scale, paint: paint)
 }
 
-#let draw-whole-notehead(x, y, unit: 8pt, scale: 1.0) = {
-  _draw-bravura-glyph("notehead-whole", x, y, unit: unit, glyph-scale: scale)
+#let draw-whole-notehead(x, y, unit: 8pt, scale: 1.0, paint: black) = {
+  _draw-bravura-glyph("notehead-whole", x, y, unit: unit, glyph-scale: scale, paint: paint)
 }
 
-#let draw-augmentation-dot(x, y, unit: 8pt, scale: 1.0) = {
-  _draw-bravura-glyph("augmentation-dot", x, y, unit: unit, glyph-scale: scale)
+#let draw-augmentation-dot(x, y, unit: 8pt, scale: 1.0, paint: black) = {
+  _draw-bravura-glyph("augmentation-dot", x, y, unit: unit, glyph-scale: scale, paint: paint)
 }
 
 // The page-space point where a stem of the given length ends.
@@ -195,7 +203,7 @@
   }
 }
 
-#let draw-stem(x, y, direction: "up", length: 3.5, unit: 8pt, glyph-scale: 1.0) = {
+#let draw-stem(x, y, direction: "up", length: 3.5, unit: 8pt, glyph-scale: 1.0, paint: black) = {
   import cetz.draw: *
   let stem-tip-point = stem-tip(x, y, direction: direction, length: length, glyph-scale: glyph-scale)
   let attachment-y = if direction == "up" { y + stem-anchor-dy * glyph-scale } else { y - stem-anchor-dy * glyph-scale }
@@ -204,7 +212,7 @@
     stem-tip-point,
     // LilyPond reduces grace heads and flags but retains the normal stem
     // thickness; glyph-scale therefore affects placement, not stem weight.
-    stroke: stem-thickness * unit + black,
+    stroke: stem-thickness * unit + paint,
   )
 }
 
@@ -217,11 +225,12 @@
   left-extension: ledger-extension,
   right-extension: ledger-extension,
   unit: 8pt,
+  paint: black,
 ) = {
   import cetz.draw: *
   let left = x - head-half-width - left-extension
   let right = x + head-half-width + right-extension
-  let stroke-style = ledger-thickness * unit + black
+  let stroke-style = ledger-thickness * unit + paint
   if position <= 0 {
     for ledger-position in range(0, position - 1, step: -2) {
       let ledger-y = staff-y(ledger-position, bottom-y: bottom-y, line-gap: line-gap)
@@ -238,7 +247,7 @@
 
 // Draw 1-3 flags hanging off a stem tip. (x, y) is the stem tip; the
 // glyph's SMuFL attachment anchor is aligned with the stem's outer edge.
-#let draw-flag(x, y, direction: "up", count: 1, unit: 8pt, scale: 1.0) = {
+#let draw-flag(x, y, direction: "up", count: 1, unit: 8pt, scale: 1.0, paint: black) = {
   let (flag-glyph, attachment-anchor-y) = if direction == "up" {
     // stemUpNW anchors of flag8thUp / flag16thUp / flag32ndUp.
     if count == 1 { ("flag-eighth-up", -0.04) }
@@ -251,7 +260,7 @@
     else { ("flag-thirty-second-down", -0.448) }
   }
   let stem-left = x - stem-thickness / 2
-  _draw-bravura-glyph(flag-glyph, stem-left, y - attachment-anchor-y * scale, unit: unit, origin: true, glyph-scale: scale)
+  _draw-bravura-glyph(flag-glyph, stem-left, y - attachment-anchor-y * scale, unit: unit, origin: true, glyph-scale: scale, paint: paint)
 }
 
 // A single beam segment between two stem-tip points; start/end give the
@@ -271,15 +280,15 @@
 // LilyPond's StemTremolo is a filled sloping strip with vertical end edges,
 // not a rotated line. Its default 1.42-space width, 0.375 rise, 0.4 fill,
 // and 0.08 outline produce the documented 0.48-space beam weight.
-#let draw-stem-tremolo(x, y, unit: 8pt) = {
+#let draw-stem-tremolo(x, y, unit: 8pt, paint: black) = {
   import cetz.draw: *
   let half-width = 0.71
   let half-fill = 0.20
   let rise = 0.375
   merge-path(
     close: true,
-    fill: black,
-    stroke: 0.08 * unit + black,
+    fill: paint,
+    stroke: 0.08 * unit + paint,
     {
       line((x - half-width, y - half-fill), (x + half-width, y + rise - half-fill))
       line((x + half-width, y + rise - half-fill), (x + half-width, y + rise + half-fill))
@@ -304,35 +313,35 @@
 // Bravura supplies progressively flatter brace designs for taller groups.
 // Each selected outline is scaled proportionally, never squeezed into a
 // fixed-width box, so the full silhouette remains visible.
-#let draw-grand-brace(right-x, bottom-y, top-y, unit: 8pt) = {
+#let draw-grand-brace(right-x, bottom-y, top-y, unit: 8pt, paint: black) = {
   import cetz.draw: *
   let span = top-y - bottom-y
   let asset = _brace-asset(span)
   content(
     (right-x, (bottom-y + top-y) / 2),
-    image("assets/glyphs/" + asset.file, height: span * unit),
+    _bravura-image(asset.file, paint, height: span * unit),
     anchor: "east",
     padding: 0pt,
   )
 }
 
-#let draw-staff-bracket(x, bottom-y, top-y, unit: 8pt) = {
+#let draw-staff-bracket(x, bottom-y, top-y, unit: 8pt, paint: black) = {
   import cetz.draw: *
   let terminal-scale = 0.72
   let stem-width = 0.5 * terminal-scale
-  merge-path(close: true, fill: black, stroke: none, {
+  merge-path(close: true, fill: paint, stroke: none, {
     line((x, bottom-y), (x + stem-width, bottom-y))
     line((x + stem-width, bottom-y), (x + stem-width, top-y))
     line((x + stem-width, top-y), (x, top-y))
   })
-  _draw-bravura-glyph("bracket-top", x, top-y, unit: unit, origin: true, glyph-scale: terminal-scale)
-  _draw-bravura-glyph("bracket-bottom", x, bottom-y, unit: unit, origin: true, glyph-scale: terminal-scale)
+  _draw-bravura-glyph("bracket-top", x, top-y, unit: unit, origin: true, glyph-scale: terminal-scale, paint: paint)
+  _draw-bravura-glyph("bracket-bottom", x, bottom-y, unit: unit, origin: true, glyph-scale: terminal-scale, paint: paint)
 }
 
-#let draw-staff-group-line(x, bottom-y, top-y, unit: 8pt) = {
+#let draw-staff-group-line(x, bottom-y, top-y, unit: 8pt, paint: black) = {
   import cetz.draw: *
   let width = 0.42
-  merge-path(close: true, fill: black, stroke: none, {
+  merge-path(close: true, fill: paint, stroke: none, {
     line((x, bottom-y), (x + width, bottom-y))
     line((x + width, bottom-y), (x + width, top-y))
     line((x + width, top-y), (x, top-y))
@@ -463,6 +472,7 @@
   thickness: bow-midpoint-thickness - bow-endpoint-thickness,
   pen: bow-endpoint-thickness,
   unit: 8pt,
+  paint: black,
 ) = {
   import cetz.draw: *
   let (start-x, start-y) = start
@@ -491,8 +501,8 @@
   )
   merge-path(
     close: true,
-    fill: black,
-    stroke: (paint: black, thickness: pen * unit, join: "round"),
+    fill: paint,
+    stroke: (paint: paint, thickness: pen * unit, join: "round"),
     {
       bezier(
         outer-control-points.at(0),
@@ -510,21 +520,21 @@
   )
 }
 
-#let draw-staccato(x, y, placement: "above", unit: 8pt) = {
-  _draw-bravura-glyph("staccato-" + placement, x, y, unit: unit)
+#let draw-staccato(x, y, placement: "above", unit: 8pt, paint: black) = {
+  _draw-bravura-glyph("staccato-" + placement, x, y, unit: unit, paint: paint)
 }
 
-#let draw-articulation(kind, x, y, placement: "above", unit: 8pt) = {
-  _draw-bravura-glyph(kind + "-" + placement, x, y, unit: unit)
+#let draw-articulation(kind, x, y, placement: "above", unit: 8pt, paint: black) = {
+  _draw-bravura-glyph(kind + "-" + placement, x, y, unit: unit, paint: paint)
 }
 
-#let draw-ornament-turn(x, y, unit: 8pt, scale: 1.0) = {
-  _draw-bravura-glyph("ornament-turn", x, y, unit: unit, glyph-scale: scale)
+#let draw-ornament-turn(x, y, unit: 8pt, scale: 1.0, paint: black) = {
+  _draw-bravura-glyph("ornament-turn", x, y, unit: unit, glyph-scale: scale, paint: paint)
 }
 
-#let draw-pedal-mark(x, y, unit: 8pt, release: false, scale: 0.62) = {
+#let draw-pedal-mark(x, y, unit: 8pt, release: false, scale: 0.62, paint: black) = {
   let pedal-glyph = if release { "pedal-up" } else { "pedal-ped" }
-  _draw-bravura-glyph(pedal-glyph, x, y, unit: unit, glyph-scale: scale)
+  _draw-bravura-glyph(pedal-glyph, x, y, unit: unit, glyph-scale: scale, paint: paint)
 }
 
 #let _dynamic-glyph(letter) = {
@@ -560,7 +570,7 @@
   (right-edge - left-edge) * scale
 }
 
-#let draw-dynamic(dynamic-text, x, y, unit: 8pt, scale: 0.78) = {
+#let draw-dynamic(dynamic-text, x, y, unit: 8pt, scale: 0.78, paint: black) = {
   let glyphs = ()
   let cursor = 0
   let left-edge = none
@@ -584,24 +594,25 @@
       unit: unit,
       origin: true,
       glyph-scale: scale,
+      paint: paint,
     )
   }
 }
 
-#let draw-fermata(x, y, unit: 8pt, scale: 0.72) = {
-  _draw-bravura-glyph("fermata-above", x, y, unit: unit, glyph-scale: scale)
+#let draw-fermata(x, y, unit: 8pt, scale: 0.72, paint: black) = {
+  _draw-bravura-glyph("fermata-above", x, y, unit: unit, glyph-scale: scale, paint: paint)
 }
 
-#let draw-breath-mark(x, y, unit: 8pt, scale: 0.82) = {
-  _draw-bravura-glyph("breath-mark-comma", x, y, unit: unit, glyph-scale: scale)
+#let draw-breath-mark(x, y, unit: 8pt, scale: 0.82, paint: black) = {
+  _draw-bravura-glyph("breath-mark-comma", x, y, unit: unit, glyph-scale: scale, paint: paint)
 }
 
-#let draw-navigation-symbol(kind, x, y, unit: 8pt, scale: 0.82) = {
+#let draw-navigation-symbol(kind, x, y, unit: 8pt, scale: 0.82, paint: black) = {
   if kind not in ("segno", "coda") { panic("unknown navigation symbol " + kind) }
-  _draw-bravura-glyph(kind, x, y, unit: unit, glyph-scale: scale)
+  _draw-bravura-glyph(kind, x, y, unit: unit, glyph-scale: scale, paint: paint)
 }
 
-#let draw-arpeggio(x, low-y, high-y, direction: "normal", unit: 8pt) = {
+#let draw-arpeggio(x, low-y, high-y, direction: "normal", unit: 8pt, paint: black) = {
   import cetz.draw: *
   let arpeggio-bottom-y = calc.min(low-y, high-y) - 0.42
   let arpeggio-top-y = calc.max(low-y, high-y) + 0.42
@@ -617,7 +628,10 @@
     )
     content(
       (x, wiggle-y),
-      _rotate-content(90deg, image(_bravura-file("arpeggio-wiggle"), width: 1.30 * unit)),
+      _rotate-content(
+        90deg,
+        _bravura-image("arpeggio-wiggle.svg", paint, width: 1.30 * unit),
+      ),
       anchor: "center",
       padding: 0pt,
     )
@@ -628,7 +642,7 @@
       (x - 0.52, arpeggio-top-y + 0.10),
       (x + 0.52, arpeggio-top-y + 0.10),
       close: true,
-      fill: black,
+      fill: paint,
       stroke: none,
     )
   } else if direction == "down" {
@@ -637,18 +651,18 @@
       (x - 0.52, arpeggio-bottom-y - 0.10),
       (x + 0.52, arpeggio-bottom-y - 0.10),
       close: true,
-      fill: black,
+      fill: paint,
       stroke: none,
     )
   }
 }
 
 // Crescendo opens to the right; diminuendo opens to the left.
-#let draw-hairpin(start, end, kind: "crescendo", spread: 0.65, unit: 8pt) = {
+#let draw-hairpin(start, end, kind: "crescendo", spread: 0.65, unit: 8pt, paint: black) = {
   import cetz.draw: *
   let (sx, sy) = start
   let (ex, ey) = end
-  let stroke-style = hairpin-thickness * unit + black
+  let stroke-style = hairpin-thickness * unit + paint
   if kind == "crescendo" {
     line((sx, sy), (ex, ey + spread / 2), stroke: stroke-style)
     line((sx, sy), (ex, ey - spread / 2), stroke: stroke-style)
@@ -658,13 +672,13 @@
   }
 }
 
-#let draw-clef(clef, x, y, unit: 8pt, scale: 1.0) = {
-  _draw-bravura-glyph(clef + "-clef", x, y, unit: unit, origin: true, glyph-scale: scale)
+#let draw-clef(clef, x, y, unit: 8pt, scale: 1.0, paint: black) = {
+  _draw-bravura-glyph(clef + "-clef", x, y, unit: unit, origin: true, glyph-scale: scale, paint: paint)
 }
 
 // (x, y) is the glyph origin: x at the accidental's left edge, y level
 // with the notehead it modifies.
-#let draw-accidental(accidental, x, y, unit: 8pt, scale: 1.0) = {
+#let draw-accidental(accidental, x, y, unit: 8pt, scale: 1.0, paint: black) = {
   let name = if accidental == "Natural" { "natural" }
     else if accidental == "Sharp" { "sharp" }
     else if accidental == "Flat" { "flat" }
@@ -672,7 +686,7 @@
     else if accidental == "DoubleFlat" { "double-flat" }
     else { none }
   if name != none {
-    _draw-bravura-glyph(name, x, y, unit: unit, origin: true, glyph-scale: scale)
+    _draw-bravura-glyph(name, x, y, unit: unit, origin: true, glyph-scale: scale, paint: paint)
   }
 }
 
@@ -687,14 +701,14 @@
 
 // Rests attach to staff lines: the whole rest hangs from the 4th line,
 // the half rest sits on the middle line, the rest glyphs center there.
-#let draw-rest(duration-base, x, bottom-y: 0, line-gap: 1.0, unit: 8pt) = {
+#let draw-rest(duration-base, x, bottom-y: 0, line-gap: 1.0, unit: 8pt, paint: black) = {
   let (name, origin-y) = if duration-base == "Whole" { ("rest-whole", 3) }
     else if duration-base == "Half" { ("rest-half", 2) }
     else if duration-base == "Quarter" { ("rest-quarter", 2) }
     else if duration-base == "Eighth" { ("rest-eighth", 2) }
     else if duration-base == "Sixteenth" { ("rest-sixteenth", 2) }
     else { ("rest-thirty-second", 2) }
-  _draw-bravura-glyph(name, x, bottom-y + origin-y * line-gap, unit: unit, origin: true)
+  _draw-bravura-glyph(name, x, bottom-y + origin-y * line-gap, unit: unit, origin: true, paint: paint)
 }
 
 #let rest-width(duration-base) = {
@@ -717,13 +731,20 @@
   row-width
 }
 
-#let _draw-time-sig-row(digits, row-center-x, y, unit) = {
+#let _draw-time-sig-row(digits, row-center-x, y, unit, paint) = {
   let row-width = _time-sig-row-width(digits)
   let digit-x = row-center-x - row-width / 2
   for digit in digits.codepoints() {
     let glyph-name = "time-sig-" + digit
     let glyph-bounds = _bravura-bounding-box(glyph-name)
-    _draw-bravura-glyph(glyph-name, digit-x - glyph-bounds.sw.at(0), y, unit: unit, origin: true)
+    _draw-bravura-glyph(
+      glyph-name,
+      digit-x - glyph-bounds.sw.at(0),
+      y,
+      unit: unit,
+      origin: true,
+      paint: paint,
+    )
     digit-x += _bravura-width(glyph-name) + _time-sig-digit-gap
   }
 }
@@ -744,13 +765,13 @@
 
 // Numerator centered on the 4th line, denominator on the 2nd; `x` is the
 // left edge of the signature.
-#let draw-time-signature(time, x, bottom-y: 0, unit: 8pt) = {
+#let draw-time-signature(time, x, bottom-y: 0, unit: 8pt, paint: black) = {
   if time != none {
     let signature-parts = time.split("/")
     let signature-center-x = x + time-signature-width(time) / 2
-    _draw-time-sig-row(signature-parts.at(0), signature-center-x, bottom-y + 3, unit)
+    _draw-time-sig-row(signature-parts.at(0), signature-center-x, bottom-y + 3, unit, paint)
     if signature-parts.len() > 1 {
-      _draw-time-sig-row(signature-parts.at(1), signature-center-x, bottom-y + 1, unit)
+      _draw-time-sig-row(signature-parts.at(1), signature-center-x, bottom-y + 1, unit, paint)
     }
   }
 }
