@@ -1389,4 +1389,14 @@ recolors both CeTZ geometry and embedded Bravura glyphs.
   #bar("c4:q d e f", time: "4/4", theme: "dark")
   #v(1em)
   #bar("g4:q a b c5", time: "4/4", theme: "auto")
+  #v(1em)
+  #score(
+    time: "2/4",
+    theme: "dark",
+    wrap: false,
+    bars: (
+      (notes: "c4:q d"),
+      (notes: "e:q f", barline: (right: "final")),
+    ),
+  )
 ]
