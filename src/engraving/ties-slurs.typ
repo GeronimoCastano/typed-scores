@@ -1,8 +1,8 @@
-#import "render.typ": bow-control-points, bow-height, bow-indent, bow-max-height, bow-samples, draw-bow, notehead-half-width, sampled-y-at-x, staff-y
-#import "diagnostics.typ": _score-error
+#import "primitives.typ": bow-control-points, bow-height, bow-indent, bow-max-height, bow-samples, draw-bow, notehead-half-width, sampled-y-at-x, staff-y
+#import "../foundation/diagnostics.typ": _score-error
 #import "event-geometry.typ": _dot-gap-from-head, _dot-step, _head-half-width, _stem-direction
 #import "spacing.typ": _cluster-offsets
-#import "event-engraving.typ": _event-stem-geometry
+#import "events.typ": _event-stem-geometry
 #import "markings.typ": _annotation-stem-direction, _annotation-with-prefix, _articulation-height, _articulation-stack, _event-articulations, _has-annotation
 
 // ---------------------------------------------------------------------------

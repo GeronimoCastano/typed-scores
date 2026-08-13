@@ -1,10 +1,10 @@
-#import "diagnostics.typ": _required-nonempty-string, _score-error, _validate-marking
-#import "parser.typ": _layout-sequence
-#import "signatures.typ": _validate-clef, _validate-key
-#import "meter.typ": _layout-harmony, _parse-time-rational, _rational-lte, _validate-measure-duration
-#import "spacing.typ": _measure-positions
-#import "markings.typ": _normalize-tempo
-#import "lyrics.typ": _layout-measure-lyrics, _normalize-measure-lyrics, _validate-lyric-continuations
+#import "foundation/diagnostics.typ": _required-nonempty-string, _score-error, _validate-marking
+#import "foundation/parser.typ": _layout-sequence
+#import "engraving/signatures.typ": _validate-clef, _validate-key
+#import "foundation/meter.typ": _layout-harmony, _parse-time-rational, _rational-lte, _validate-measure-duration
+#import "engraving/spacing.typ": _measure-positions
+#import "engraving/markings.typ": _normalize-tempo
+#import "engraving/lyrics.typ": _layout-measure-lyrics, _normalize-measure-lyrics, _validate-lyric-continuations
 
 // Public score-shape normalization and eager musical preparation.
 

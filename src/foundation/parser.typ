@@ -2,7 +2,7 @@
 
 // WASM parser communication and response-contract validation.
 
-#let _score-plugin = plugin("plugin.wasm")
+#let _score-plugin = plugin("../plugin.wasm")
 
 #let _validate-plugin-response(response, location, sequence-str) = {
   if type(response) != dictionary {

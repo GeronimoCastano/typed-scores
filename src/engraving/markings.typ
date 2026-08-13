@@ -1,8 +1,8 @@
 #import "@preview/cetz:0.5.2"
-#import "render.typ": _bravura-width, _draw-bravura-glyph, draw-accidental, draw-articulation, draw-breath-mark, draw-dynamic, draw-fermata, draw-hairpin, draw-ornament-turn, draw-pedal-mark, dynamic-width, sampled-y-at-x, staff-y
-#import "diagnostics.typ": _score-error, _validate-marking
+#import "primitives.typ": _bravura-width, _draw-bravura-glyph, draw-accidental, draw-articulation, draw-breath-mark, draw-dynamic, draw-fermata, draw-hairpin, draw-ornament-turn, draw-pedal-mark, dynamic-width, sampled-y-at-x, staff-y
+#import "../foundation/diagnostics.typ": _score-error, _validate-marking
 #import "event-geometry.typ": _head-half-width, _stem-direction
-#import "event-engraving.typ": _beam-group-visible, _event-stem-geometry
+#import "events.typ": _beam-group-visible, _event-stem-geometry
 
 // Tempo, event markings, and direction spanners.
 

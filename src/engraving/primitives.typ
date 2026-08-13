@@ -141,7 +141,7 @@
 // Draw a Bravura glyph. With `origin: true`, (x, y) is the glyph's SMuFL
 // origin; otherwise (x, y) is the center of its bounding box.
 #let _bravura-image(file, paint, width: auto, height: auto) = {
-  let svg = read("assets/glyphs/" + file).replace("#000", paint.to-hex())
+  let svg = read("../assets/glyphs/" + file).replace("#000", paint.to-hex())
   image(bytes(svg), width: width, height: height)
 }
 

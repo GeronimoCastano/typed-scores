@@ -1,4 +1,4 @@
-#import "render.typ": draw-augmentation-dot, notehead-half-width, staff-y, stem-anchor-dy
+#import "primitives.typ": draw-augmentation-dot, notehead-half-width, staff-y, stem-anchor-dy
 
 // Shared note-event geometry and duration-derived engraving decisions.
 

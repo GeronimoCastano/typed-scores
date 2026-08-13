@@ -1,5 +1,5 @@
 #import "@preview/cetz:0.5.2"
-#import "render.typ": beam-spacing, beam-thickness, draw-accidental, draw-arpeggio, draw-augmentation-dot, draw-beam, draw-bow, draw-filled-notehead, draw-flag, draw-ledger-lines, draw-open-notehead, draw-rest, draw-stem, draw-stem-tremolo, draw-whole-notehead, ledger-extension, rest-width, staff-y, stem-anchor-dy, stem-center-offset, stem-tip
+#import "primitives.typ": beam-spacing, beam-thickness, draw-accidental, draw-arpeggio, draw-augmentation-dot, draw-beam, draw-bow, draw-filled-notehead, draw-flag, draw-ledger-lines, draw-open-notehead, draw-rest, draw-stem, draw-stem-tremolo, draw-whole-notehead, ledger-extension, rest-width, staff-y, stem-anchor-dy, stem-center-offset, stem-tip
 #import "event-geometry.typ": _accidental-gap, _alternating-tremolo-strokes, _default-stem-length, _dot-gap-from-head, _dot-step, _dot-y, _draw-dots, _duration-base, _grace-beam-center-step, _grace-beam-thickness, _grace-notation-scale, _grace-stem-length, _grace-stem-length-fraction, _head-half-width, _layout-stem-direction, _single-tremolo-strokes, _stem-direction
 #import "signatures.typ": _key-default-accidental
 #import "spacing.typ": _accidental-plan, _cluster-offsets

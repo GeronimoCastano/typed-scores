@@ -17,19 +17,21 @@ package_name="typed-scores"
 runtime_typst_files="
 lib.typ
 score.typ
-diagnostics.typ
-parser.typ
 score-input.typ
-meter.typ
-signatures.typ
-event-geometry.typ
-spacing.typ
-lyrics.typ
-event-engraving.typ
-markings.typ
-ties-slurs.typ
-systems.typ
-render.typ
+foundation/diagnostics.typ
+foundation/parser.typ
+foundation/meter.typ
+engraving/primitives.typ
+engraving/signatures.typ
+engraving/event-geometry.typ
+engraving/spacing.typ
+engraving/lyrics.typ
+engraving/events.typ
+engraving/markings.typ
+engraving/ties-slurs.typ
+layout/staff-stacking.typ
+layout/system-breaking.typ
+layout/system-rendering.typ
 "
 
 validate_package_exclusions() {
@@ -117,6 +119,7 @@ cp "$repo_root/typst.toml" "$package_target/typst.toml"
 cp "$repo_root/README.md" "$package_target/README.md"
 cp "$repo_root/LICENSE" "$package_target/LICENSE"
 for runtime_typst_file in $runtime_typst_files; do
+  mkdir -p "$package_target/src/$(dirname "$runtime_typst_file")"
   cp "$repo_root/src/$runtime_typst_file" "$package_target/src/$runtime_typst_file"
 done
 cp "$repo_root/src/plugin.wasm" "$package_target/src/plugin.wasm"

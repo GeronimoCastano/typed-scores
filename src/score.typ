@@ -1,10 +1,12 @@
-#import "diagnostics.typ": _nonnegative-number, _positive-number, _score-error, _validate-marking, _validate-system-gap
-#import "signatures.typ": _validate-clef, _validate-key
-#import "meter.typ": _parse-time-rational
-#import "markings.typ": _normalize-tempo, _validate-staff-direction-spans
-#import "ties-slurs.typ": _validate-staff-slurs, _validate-staff-ties
+#import "foundation/diagnostics.typ": _nonnegative-number, _positive-number, _score-error, _validate-marking, _validate-system-gap
+#import "engraving/signatures.typ": _validate-clef, _validate-key
+#import "foundation/meter.typ": _parse-time-rational
+#import "engraving/markings.typ": _normalize-tempo, _validate-staff-direction-spans
+#import "engraving/ties-slurs.typ": _validate-staff-slurs, _validate-staff-ties
 #import "score-input.typ": _prepare-score-measures
-#import "systems.typ": _collect-ending-spans, _finalize-systems, _left-bar-x-for-group, _measure-width-in-system, _pack-score-systems, _render-score-system, _staff-label-reserve, _system-clef-after-barline-gap
+#import "layout/staff-stacking.typ": _left-bar-x-for-group, _staff-label-reserve, _system-clef-after-barline-gap
+#import "layout/system-breaking.typ": _finalize-systems, _measure-width-in-system, _pack-score-systems
+#import "layout/system-rendering.typ": _collect-ending-spans, _render-score-system
 
 // ---------------------------------------------------------------------------
 // Public API

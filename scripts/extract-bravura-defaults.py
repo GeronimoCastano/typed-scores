@@ -3,7 +3,7 @@
 
 Reads bravura_metadata.json (pass a path, or the script downloads the
 current copy from the Bravura repository) and prints the engravingDefaults
-subset plus the glyph anchors that src/render.typ hard-codes, so the
+subset plus the glyph anchors that src/engraving/primitives.typ hard-codes, so the
 constants can be checked or refreshed when the font is updated.
 
 Bravura and its metadata are published by Steinberg under the SIL Open

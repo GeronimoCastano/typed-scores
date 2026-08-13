@@ -1,5 +1,5 @@
-#import "render.typ": accidental-width, draw-accidental, draw-clef, draw-time-signature, notehead-half-width, staff-y, time-signature-width
-#import "diagnostics.typ": _score-error
+#import "primitives.typ": accidental-width, draw-accidental, draw-clef, draw-time-signature, notehead-half-width, staff-y, time-signature-width
+#import "../foundation/diagnostics.typ": _score-error
 #import "event-geometry.typ": _clef-origin-y
 
 // Clefs, key signatures, time signatures, and measure-prologue geometry.
