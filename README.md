@@ -9,7 +9,7 @@ strings are parsed by a Rust/WASM plugin; Typst and CeTZ lay out the resulting
 score with bundled Bravura glyphs.
 
 ```typst
-#import "@preview/typed-scores:0.4.0": *
+#import "@preview/typed-scores:0.5.0": *
 ```
 
 ## Quick start
@@ -309,8 +309,9 @@ with an arrow at the requested end for a directional form.
 
 Annotations follow an event in square brackets: fingering (`f=4`),
 articulations (`stacc`, `tenuto`, `accent`, `marcato`), dynamics (`dyn=pp`,
-`dyn=mf`, `dyn=sfz`), fermatas, breath marks, text directions, turns, named
-slurs, pedal spans, and hairpins. Ties must join adjacent events with the same
+`dyn=mf`, `dyn=sfz`), fermatas, breath marks, text directions, ornaments
+(`turn`, `inverted-turn`, `chromatic-turn`, `trill`, `mordent`,
+`inverted-mordent`), named slurs, pedal spans, and hairpins. Ties must join adjacent events with the same
 written pitch or chord and continue across wrapped systems.
 
 For independent rhythms on one staff, make the staff content an array of two

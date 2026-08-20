@@ -1376,6 +1376,52 @@ hairpin, articulations, and low ledger lines.
 
 #pagebreak()
 
+= Ornament comparison
+
+Every implemented ornament shares one script slot above the note and follows
+LilyPond's outside-staff stacking: the glyph clears the note ink by a fixed gap,
+and any fingering rides on top of it. The turn family (turn, inverted turn, and
+the chromatic turn with its flat and natural) uses the short glyph; the trill
+and the two mordents are taller and keep the same lower edge over the note.
+
+#score(
+  time: "4/4",
+  wrap: false,
+  bars: (
+    (notes: "G4:q[turn] G4:q[inverted-turn] G4:q[chromatic-turn] G4:q[chromatic-turn turn-f=2]"),
+    (notes: "G4:q[trill] G4:q[mordent] G4:q[inverted-mordent] G4:q[fermata]", barline: (right: "final")),
+  ),
+)
+
+#table(
+  columns: 8,
+  align: center,
+  stroke: 0.4pt + luma(160),
+  inset: 5pt,
+  [1], [2], [3], [4], [5], [6], [7], [8],
+  [`turn`],
+  [`inverted-turn`],
+  [`chromatic-turn`],
+  [`chromatic-turn` + `turn-f=2`],
+  [`trill`],
+  [`mordent`],
+  [`inverted-mordent`],
+  [`fermata`],
+)
+
+Ornaments stack over articulations and under fingerings, and slur bows arch
+clear above the whole stack just as they do over a turn:
+
+#score(
+  time: "4/4",
+  wrap: false,
+  bars: (
+    (notes: "E5:q[trill f=3 s1(] G5:q[mordent accent] A5:q[inverted-mordent stacc] C6:q[trill s1)]", barline: (right: "final")),
+  ),
+)
+
+#pagebreak()
+
 = Light and dark notation themes
 
 The light theme uses black notation ink. The dark theme uses white ink, and

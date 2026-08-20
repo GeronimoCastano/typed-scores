@@ -95,6 +95,10 @@
     "accent-above": (sw: (0.0, 0.004), ne: (1.356, 0.98)),
     "accent-below": (sw: (0.0, -0.976), ne: (1.356, 0.0)),
     "ornament-turn": (sw: (0.0, 0.0), ne: (1.84, 0.872)),
+    "ornament-turn-inverted": (sw: (-0.012, 0.0), ne: (1.828, 0.872)),
+    "ornament-trill": (sw: (0.0, -0.04), ne: (2.084, 1.56)),
+    "ornament-mordent": (sw: (0.004, -0.292), ne: (2.916, 1.276)),
+    "ornament-mordent-inverted": (sw: (0.0, 0.0), ne: (2.9, 0.98)),
     "pedal-ped": (sw: (0.0, -0.032), ne: (4.076, 2.22)),
     "pedal-up": (sw: (0.0, 0.0), ne: (1.8, 1.8)),
     "dynamic-p": (sw: (-0.356, -0.568), ne: (1.464, 1.096)),
@@ -528,8 +532,18 @@
   _draw-bravura-glyph(kind + "-" + placement, x, y, unit: unit, paint: paint)
 }
 
-#let draw-ornament-turn(x, y, unit: 8pt, scale: 1.0, paint: black) = {
-  _draw-bravura-glyph("ornament-turn", x, y, unit: unit, glyph-scale: scale, paint: paint)
+#let draw-ornament-turn(x, y, unit: 8pt, inverted: false, scale: 1.0, paint: black) = {
+  let glyph = if inverted { "ornament-turn-inverted" } else { "ornament-turn" }
+  _draw-bravura-glyph(glyph, x, y, unit: unit, glyph-scale: scale, paint: paint)
+}
+
+#let draw-ornament-trill(x, y, unit: 8pt, scale: 1.0, paint: black) = {
+  _draw-bravura-glyph("ornament-trill", x, y, unit: unit, glyph-scale: scale, paint: paint)
+}
+
+#let draw-ornament-mordent(x, y, unit: 8pt, inverted: false, scale: 1.0, paint: black) = {
+  let glyph = if inverted { "ornament-mordent-inverted" } else { "ornament-mordent" }
+  _draw-bravura-glyph(glyph, x, y, unit: unit, glyph-scale: scale, paint: paint)
 }
 
 #let draw-pedal-mark(x, y, unit: 8pt, release: false, scale: 0.62, paint: black) = {

@@ -3,7 +3,7 @@
 #import "event-geometry.typ": _dot-gap-from-head, _dot-step, _head-half-width, _stem-direction
 #import "spacing.typ": _cluster-offsets
 #import "events.typ": _event-stem-geometry
-#import "markings.typ": _annotation-stem-direction, _annotation-with-prefix, _articulation-height, _articulation-stack, _event-articulations, _has-annotation
+#import "markings.typ": _annotation-stem-direction, _annotation-with-prefix, _articulation-height, _articulation-stack, _event-articulations, _has-annotation, _has-turn-ornament, _ornament-scale, _simple-ornament
 
 // ---------------------------------------------------------------------------
 // Ties
@@ -202,7 +202,7 @@
     } else {
       calc.max(..y-values)
     }
-    let has-turn = _has-annotation(item.layout, "turn") or _has-annotation(item.layout, "chromatic-turn")
+    let has-turn = _has-turn-ornament(item.layout)
     if dir == 1 and has-turn {
       y = calc.max(y, top + 1.9)
       if _has-annotation(item.layout, "chromatic-turn") {
@@ -212,6 +212,11 @@
         y = calc.max(y, top + 3.2)
       }
     }
+    let simple-ornament = _simple-ornament(item.layout)
+    if dir == 1 and simple-ornament != none {
+      let ornament-height = (simple-ornament.half-below + simple-ornament.half-above) * _ornament-scale
+      y = calc.max(y, top + 1.0 + ornament-height + 0.3)
+    }
     if dir == 1 and _annotation-with-prefix(item.layout, "f=") != none {
       let ink-top = calc.max(..y-values) + 0.5
       let articulations = _event-articulations(item.layout)
@@ -219,9 +224,13 @@
         let last = _articulation-stack(articulations, y-values, 1, bottom-y).last()
         ink-top = calc.max(ink-top, last.y + _articulation-height(last.mark) / 2)
       }
-      // The digit rides on top of a turn stacked over the same note.
+      // The digit rides on top of any ornament stacked over the same note.
       if has-turn {
         ink-top = calc.max(ink-top, top + 1.64)
+      }
+      if simple-ornament != none {
+        let ornament-height = (simple-ornament.half-below + simple-ornament.half-above) * _ornament-scale
+        ink-top = calc.max(ink-top, top + 0.863 + ornament-height)
       }
       y = calc.max(y, calc.max(bottom-y + 4.56, ink-top + 0.55) + 1.2)
     }

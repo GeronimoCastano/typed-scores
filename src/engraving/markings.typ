@@ -1,5 +1,5 @@
 #import "@preview/cetz:0.5.2"
-#import "primitives.typ": _bravura-width, _draw-bravura-glyph, draw-accidental, draw-articulation, draw-breath-mark, draw-dynamic, draw-fermata, draw-hairpin, draw-ornament-turn, draw-pedal-mark, dynamic-width, sampled-y-at-x, staff-y
+#import "primitives.typ": _bravura-width, _draw-bravura-glyph, draw-accidental, draw-articulation, draw-breath-mark, draw-dynamic, draw-fermata, draw-hairpin, draw-ornament-mordent, draw-ornament-trill, draw-ornament-turn, draw-pedal-mark, dynamic-width, sampled-y-at-x, staff-y
 #import "../foundation/diagnostics.typ": _score-error, _validate-marking
 #import "event-geometry.typ": _head-half-width, _stem-direction
 #import "events.typ": _beam-group-visible, _event-stem-geometry
@@ -105,6 +105,37 @@
 
 #let _has-annotation(layout, expected) = {
   layout.annotations.any(annotation => str(annotation) == expected)
+}
+
+// Every ornament is drawn at 82% of the reference glyph size, matching the
+// existing turn so the whole family shares one visual weight.
+#let _ornament-scale = 0.82
+
+// The turn, its inverted twin, and the chromatic turn share one script slot,
+// glyph height, and optional fingered digit, so they are placed together.
+#let _has-turn-ornament(layout) = {
+  (
+    _has-annotation(layout, "turn")
+      or _has-annotation(layout, "chromatic-turn")
+      or _has-annotation(layout, "inverted-turn")
+  )
+}
+
+// Trill and both mordents are single glyphs that occupy the same script slot
+// above the note as the turn. Each is centered on its own bounding box, so the
+// placement records how far the glyph reaches below and above that center; the
+// values keep every ornament's lower edge at the same gap over the note the
+// way LilyPond aligns outside-staff scripts by their outer edge.
+#let _simple-ornament(layout) = {
+  if _has-annotation(layout, "trill") {
+    (kind: "trill", inverted: false, half-below: 0.8, half-above: 0.8)
+  } else if _has-annotation(layout, "mordent") {
+    (kind: "mordent", inverted: false, half-below: 0.784, half-above: 0.784)
+  } else if _has-annotation(layout, "inverted-mordent") {
+    (kind: "mordent", inverted: true, half-below: 0.49, half-above: 0.49)
+  } else {
+    none
+  }
 }
 
 #let _event-top(item, bottom-y: 0, line-gap: 1.0) = {
@@ -230,22 +261,32 @@
       top = calc.max(top, articulation-top)
     }
   }
-  let has-turn = _has-annotation(item.layout, "turn") or _has-annotation(item.layout, "chromatic-turn")
-  let turn-top = none
-  if has-turn {
+  let ornament-top = none
+  if _has-turn-ornament(item.layout) {
     let stack-base = calc.max(..y-values) + 0.5
     if articulation-top != none {
       stack-base = calc.max(stack-base, articulation-top - 0.18)
     }
     let turn-y = calc.max(_event-top(item, bottom-y: bottom-y) + 1.22, stack-base + 0.75)
-    turn-top = turn-y + 0.42
+    ornament-top = turn-y + 0.42
     if _has-annotation(item.layout, "chromatic-turn") {
-      turn-top = turn-y + 0.95
+      ornament-top = turn-y + 0.95
     }
     if _annotation-with-prefix(item.layout, "turn-f=") != none {
-      turn-top = turn-y + 1.85
+      ornament-top = turn-y + 1.85
     }
-    top = calc.max(top, turn-top)
+    top = calc.max(top, ornament-top)
+  }
+  let simple-ornament = _simple-ornament(item.layout)
+  if simple-ornament != none {
+    let stack-base = calc.max(..y-values) + 0.5
+    if articulation-top != none {
+      stack-base = calc.max(stack-base, articulation-top - 0.18)
+    }
+    let lower-edge = calc.max(_event-top(item, bottom-y: bottom-y) + 0.863, stack-base + 0.393)
+    let ornament-y = lower-edge + simple-ornament.half-below * _ornament-scale
+    ornament-top = ornament-y + simple-ornament.half-above * _ornament-scale
+    top = calc.max(top, ornament-top)
   }
   if _annotation-with-prefix(item.layout, "f=") != none {
     let ink-top = calc.max(..y-values) + 0.5
@@ -253,8 +294,8 @@
       ink-top = calc.max(ink-top, articulation-top - 0.18)
     }
     let fingering-y = calc.max(bottom-y + 4.56, ink-top + 0.55)
-    if turn-top != none {
-      fingering-y = calc.max(fingering-y, turn-top + 0.3)
+    if ornament-top != none {
+      fingering-y = calc.max(fingering-y, ornament-top + 0.3)
     }
     top = calc.max(top, fingering-y + 0.95)
   }
@@ -357,14 +398,13 @@
       articulation-cursor = last.y + sign * (_articulation-height(last.mark) / 2 + 0.18)
     }
     // The stack above the note grows outward in LilyPond's script order:
-    // articulations first, then the turn ornament, then the fingering digit
-    // on top.
+    // articulations first, then the ornament, then the fingering digit on top.
     let ink-top = calc.max(..y-values) + 0.5
     if articulations.len() > 0 and articulation-placement == "above" {
       ink-top = calc.max(ink-top, articulation-cursor - 0.18)
     }
-    let turn-top = none
-    if _has-annotation(item.layout, "turn") or _has-annotation(item.layout, "chromatic-turn") {
+    let ornament-top = none
+    if _has-turn-ornament(item.layout) {
       let turn-y = calc.max(top + 1.22, ink-top + 0.75)
       let slur-y = _slur-clearance-at(slur-layouts, item.x)
       if slur-y != none {
@@ -373,12 +413,12 @@
         let lift = if _has-annotation(item.layout, "chromatic-turn") { 1.7 } else { 0.8 }
         turn-y = calc.max(turn-y, slur-y + lift)
       }
-      draw-ornament-turn(item.x, turn-y, unit: unit, scale: 0.82, paint: paint)
-      turn-top = turn-y + 0.42
+      draw-ornament-turn(item.x, turn-y, inverted: _has-annotation(item.layout, "inverted-turn"), unit: unit, scale: _ornament-scale, paint: paint)
+      ornament-top = turn-y + 0.42
       if _has-annotation(item.layout, "chromatic-turn") {
         draw-accidental("Flat", item.x - 0.72, turn-y + 0.58, unit: unit, scale: 0.38, paint: paint)
         draw-accidental("Natural", item.x + 0.34, turn-y - 0.74, unit: unit, scale: 0.38, paint: paint)
-        turn-top = turn-y + 0.95
+        ornament-top = turn-y + 0.95
       }
       let turn-fingering = _annotation-with-prefix(item.layout, "turn-f=")
       if turn-fingering != none {
@@ -388,18 +428,33 @@
           anchor: "south",
           padding: 0pt,
         )
-        turn-top = turn-y + 1.85
+        ornament-top = turn-y + 1.85
       }
+    }
+    let simple-ornament = _simple-ornament(item.layout)
+    if simple-ornament != none {
+      let lower-edge = calc.max(top + 0.863, ink-top + 0.393)
+      let ornament-y = lower-edge + simple-ornament.half-below * _ornament-scale
+      let slur-y = _slur-clearance-at(slur-layouts, item.x)
+      if slur-y != none {
+        ornament-y = calc.max(ornament-y, slur-y + 0.443 + simple-ornament.half-below * _ornament-scale)
+      }
+      if simple-ornament.kind == "trill" {
+        draw-ornament-trill(item.x, ornament-y, unit: unit, scale: _ornament-scale, paint: paint)
+      } else {
+        draw-ornament-mordent(item.x, ornament-y, inverted: simple-ornament.inverted, unit: unit, scale: _ornament-scale, paint: paint)
+      }
+      ornament-top = ornament-y + simple-ornament.half-above * _ornament-scale
     }
     let fingering = _annotation-with-prefix(item.layout, "f=")
     if fingering != none {
       // LilyPond's default fingering direction is up with half a space of
       // staff padding, so digits float in a common band just above the staff
       // and rise only when the notehead (never the stem), an articulation,
-      // or a turn stacked above reaches higher.
+      // or an ornament stacked above reaches higher.
       let fingering-y = calc.max(bottom-y + 4.56, ink-top + 0.55)
-      if turn-top != none {
-        fingering-y = calc.max(fingering-y, turn-top + 0.3)
+      if ornament-top != none {
+        fingering-y = calc.max(fingering-y, ornament-top + 0.3)
       }
       // A digit inside a slur moves above the bow; endpoint digits stay
       // under the raised slur tip.

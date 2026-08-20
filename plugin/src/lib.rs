@@ -992,6 +992,14 @@ fn is_valid_span_id(annotation: &str, prefix: char, suffix: char) -> bool {
             .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
 }
 
+fn is_turn_ornament(annotation: &str) -> bool {
+    matches!(annotation, "turn" | "chromatic-turn" | "inverted-turn")
+}
+
+fn is_ornament(annotation: &str) -> bool {
+    is_turn_ornament(annotation) || matches!(annotation, "trill" | "mordent" | "inverted-mordent")
+}
+
 fn validate_annotation(annotation: &str) -> Result<(), String> {
     const MARKS: &[&str] = &[
         "stacc",
@@ -1003,6 +1011,10 @@ fn validate_annotation(annotation: &str) -> Result<(), String> {
         "strong",
         "turn",
         "chromatic-turn",
+        "inverted-turn",
+        "trill",
+        "mordent",
+        "inverted-mordent",
         "fermata",
         "breath",
         "arpeggio",
@@ -2252,6 +2264,10 @@ fn layout_event(
                     | "strong"
                     | "turn"
                     | "chromatic-turn"
+                    | "inverted-turn"
+                    | "trill"
+                    | "mordent"
+                    | "inverted-mordent"
                     | "arpeggio"
             ) || mark.starts_with("f=")
                 || mark.starts_with("turn-f=")
@@ -2266,20 +2282,16 @@ fn layout_event(
         }
     }
     if annotations.iter().any(|mark| mark.starts_with("turn-f="))
-        && !annotations
-            .iter()
-            .any(|mark| matches!(mark.as_str(), "turn" | "chromatic-turn"))
+        && !annotations.iter().any(|mark| is_turn_ornament(mark))
     {
         return Err(
-            "turn-f=... requires turn or chromatic-turn on the same event; add the ornament or remove its fingering"
+            "turn-f=... requires turn, chromatic-turn, or inverted-turn on the same event; add the ornament or remove its fingering"
                 .to_string(),
         );
     }
-    if annotations.iter().any(|mark| mark == "turn")
-        && annotations.iter().any(|mark| mark == "chromatic-turn")
-    {
+    if annotations.iter().filter(|mark| is_ornament(mark)).count() > 1 {
         return Err(
-            "turn and chromatic-turn cannot both annotate one event; choose one ornament"
+            "an event may carry only one ornament (turn, inverted-turn, chromatic-turn, trill, mordent, or inverted-mordent); choose one"
                 .to_string(),
         );
     }
@@ -3164,6 +3176,11 @@ mod tests {
         assert!(parse_note("C4:q[dyn=pp]").is_ok());
         assert!(parse_note("C4:q[dyn=sfz]").is_ok());
         assert!(parse_note("C4:q[fermata breath]").is_ok());
+        assert!(parse_note("C4:q[trill]").is_ok());
+        assert!(parse_note("C4:q[mordent]").is_ok());
+        assert!(parse_note("C4:q[inverted-mordent]").is_ok());
+        assert!(parse_note("C4:q[inverted-turn]").is_ok());
+        assert!(parse_note("C4:q[inverted-turn turn-f=2]").is_ok());
         assert!(parse_note("C4:q[text=dolce p1( h2<]").is_ok());
         assert!(parse_note("C4:q[unknown]").is_err());
         assert!(parse_note("C4:q[dyn=quiet]").is_err());
@@ -3190,8 +3207,21 @@ mod tests {
         assert!(
             layout_sequence_native("C4:q[turn chromatic-turn]", Clef::Treble)
                 .unwrap_err()
-                .contains("choose one ornament")
+                .contains("only one ornament")
         );
+        assert!(
+            layout_sequence_native("C4:q[trill mordent]", Clef::Treble)
+                .unwrap_err()
+                .contains("only one ornament")
+        );
+        assert!(
+            layout_sequence_native("C4:q[trill turn]", Clef::Treble)
+                .unwrap_err()
+                .contains("only one ornament")
+        );
+        assert!(layout_sequence_native("r:q[trill]", Clef::Treble)
+            .unwrap_err()
+            .contains("cannot be attached to a rest"));
     }
 
     #[test]

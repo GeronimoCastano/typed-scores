@@ -805,9 +805,15 @@ an arrow at the appropriate end.
 
 Annotations follow an event in square brackets. Supported annotations include
 fingering (`f=4`), staccato, staccatissimo, tenuto, accent, marcato, text
-directions, turns, fermatas (`fermata`), breath marks (`breath`), named slurs,
-pedal spans, hairpins, and dynamics (`dyn=p`, `dyn=pp`, `dyn=mf`, `dyn=sfz`,
-and the other standard SMuFL combinations).
+directions, ornaments (turns, trills, and mordents), fermatas (`fermata`),
+breath marks (`breath`), named slurs, pedal spans, hairpins, and dynamics
+(`dyn=p`, `dyn=pp`, `dyn=mf`, `dyn=sfz`, and the other standard SMuFL
+combinations).
+
+Every ornament occupies one script slot above the note, so an event may carry
+at most one of them. The turn family — `turn`, its reverse `inverted-turn`, and
+the accidental-bearing `chromatic-turn` — accepts a fingered digit through
+`turn-f=`.
 
 Dynamics, hairpins, slurs, articulations, and fingerings avoid collisions with
 each other automatically: a hairpin shortens around an adjacent dynamic such
@@ -823,7 +829,9 @@ stems downward.
   [#c("f=4")], [Fingering.],
   [#c("stacc") / #c("staccatissimo")], [Staccato dot / wedge.],
   [#c("tenuto") / #c("accent") / #c("marcato")], [Articulation marks.],
-  [#c("turn") / #c("chromatic-turn")], [Turn ornament.],
+  [#c("turn") / #c("inverted-turn") / #c("chromatic-turn")], [Turn ornaments.],
+  [#c("trill")], [Trill (#emph[tr]).],
+  [#c("mordent") / #c("inverted-mordent")], [Lower / upper mordent.],
   [#c("dyn=pp") / #c("dyn=sfz")], [Dynamic marking.],
   [#c("fermata") / #c("breath")], [Fermata / comma breath mark.],
   [#c("s1(") … #c("s1)")], [Named slur.],
@@ -839,6 +847,21 @@ stems downward.
   beams: true,
   bars: (
     (notes: "c5:q[f=1 s1( dyn=p] d5:q[h1<] e5:q[turn breath] f5:q[s1) h1! dyn=ff fermata]"),
+  ),
+)
+```, side: false)
+]
+
+Ornaments share the turn's placement above the note, so trills and mordents
+stack over articulations and under fingerings just as a turn does.
+
+#demo[
+  #example(```typ
+#score(
+  clef: "treble",
+  time: "4/4",
+  bars: (
+    (notes: "g4:q[trill] a4:q[mordent] b4:q[inverted-mordent] c5:q[inverted-turn]"),
   ),
 )
 ```, side: false)
