@@ -1453,3 +1453,51 @@ notes, articulations, and text in explicit dark mode.
   wrap: true,
   theme: "dark",
 )
+
+#pagebreak()
+#set page(fill: white)
+#set text(fill: black)
+
+= Key signature placement in every clef
+
+Signature accidentals follow the conventional staff positions for each clef.
+Flats descend from the middle of the staff, and only the seventh bass flat
+(F flat) sits below the bottom line. Sharps stay inside the staff except for
+the third treble sharp (G sharp), which sits in the space above the top line.
+Tenor clef is the exception that cannot copy treble: its first sharp drops to
+the low F line so the whole signature fits within the staff.
+
+#for clef in ("treble", "bass", "alto", "tenor") {
+  block(breakable: false)[
+    #text(size: 9pt)[*#clef*]
+    #v(0.2em)
+    #score(
+      clef: clef,
+      time: "4/4",
+      wrap: false,
+      scale: 0.66,
+      bars: (
+        (key: "Cb", notes: "r:w"),
+        (key: "Gb", notes: "r:w"),
+        (key: "C", notes: "r:w"),
+        (key: "F#", notes: "r:w"),
+        (key: "C#", notes: "r:w"),
+      ),
+    )
+    #v(0.9em)
+  ]
+}
+
+Cancellation naturals reuse the same positions as the signature they replace,
+so a flat key cancelled in bass clef keeps its F flat below the staff.
+
+#score(
+  clef: "bass",
+  time: "4/4",
+  wrap: false,
+  scale: 0.66,
+  bars: (
+    (key: "Cb", notes: "r:w"),
+    (key: "C", notes: "r:w"),
+  ),
+)

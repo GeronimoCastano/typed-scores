@@ -12,17 +12,20 @@
 #let _barline-clearance = 1.2
 #let _repeat-side-clearance = 0.3
 
+// Staff positions of the seven key-signature accidentals, in signature order.
+// Tenor clef places its first sharp on the low F line so the whole signature
+// stays inside the staff, which is why it cannot reuse the treble layout.
 #let _flat-order-positions = (
-  treble: (8, 11, 7, 10, 6, 9, 5),
-  bass: (6, 9, 5, 8, 4, 7, 3),
-  alto: (7, 10, 6, 9, 5, 8, 4),
-  tenor: (8, 11, 7, 10, 6, 9, 5),
+  treble: (6, 9, 5, 8, 4, 7, 3),
+  bass: (4, 7, 3, 6, 2, 5, 1),
+  alto: (5, 8, 4, 7, 3, 6, 2),
+  tenor: (7, 10, 6, 9, 5, 8, 4),
 )
 #let _sharp-order-positions = (
   treble: (10, 7, 11, 8, 5, 9, 6),
   bass: (8, 5, 9, 6, 3, 7, 4),
   alto: (9, 6, 10, 7, 4, 8, 5),
-  tenor: (10, 7, 11, 8, 5, 9, 6),
+  tenor: (4, 8, 5, 9, 6, 10, 7),
 )
 
 // ---------------------------------------------------------------------------
