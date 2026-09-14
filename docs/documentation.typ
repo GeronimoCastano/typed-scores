@@ -656,6 +656,8 @@ Set #c("ragged-last: true") for a natural-width final line.
   [#c("/")], [Break the automatic beam before the next event.],
   [#c("-")], [Join adjacent flagged events into one beam group.],
   [#c("tuplet 3:2 { c:e d e }")], [Inline time-scaled music group.],
+  [#c("tuplet 3:2[number=never] { c:e d e }")], [Tuplet without its numeral.],
+  [#c("cue { c:e d }")], [Cue-sized notes that keep their rhythmic value.],
   [#c("acciaccatura { d:e } f:q")], [Slashed single grace note before F.],
   [#c("tremolo 16 { c:h g:h }")], [Two-note alternating sixteenth tremolo.],
 )
@@ -733,7 +735,10 @@ By default the numerator is centered on the group, and a bracket is omitted
 when one visible beam spans every event in the tuplet; otherwise a bracket is
 drawn. Written rests keep the bracket. Use optional group controls when the
 engraving needs an explicit choice: `bracket=always`, `bracket=never`,
-`side=above`, or `side=below`.
+`side=above`, or `side=below`. `number=never` hides the numeral independently
+of the bracket, and `number=always` restores the default; combine
+`number=never` with `bracket=never` to hide the tuplet entirely. Each option
+may appear once, and unknown values are reported.
 
 #demo[
   #example(```typ
@@ -774,6 +779,75 @@ durations control flags and beams but do not contribute to the measure total.
 A grace group must contain notes or chords and must precede a principal event.
 Rests, automatic rests, tuplets, alternating tremolos, and nested grace groups
 are rejected inside it so timing remains unambiguous.
+
+== Cue-sized notes
+
+`cue { ... }` draws notes, chords, and written rests at the reduced grace-note
+size while keeping their full rhythmic value. Unlike grace notes, they count
+toward the measure total and align with other staves like normal events. Use a
+cue group for a small but measured figure, such as a tuplet upbeat. Cue groups
+may contain tuplets, and tuplets may contain cue groups. A tuplet whose events
+are all cue-sized also draws a smaller numeral and bracket.
+
+Cue-sized and normal-sized notes never share a beam: an automatic beam breaks
+at the group boundary, and a `-` join across it is an error. Fingerings,
+articulations, dynamics, and other annotations keep their normal size.
+
+#demo[
+  #example(```typ
+#score(
+  staves: (
+    upper: (clef: "treble"),
+    lower: (clef: "bass"),
+  ),
+  key: "Cm",
+  time: "2/4",
+  beams: true,
+  bars: (
+    (
+      partial: "1/16",
+      upper: "cue { tuplet 3:2[number=never] { g4:t d5 d } }",
+      lower: "r:s",
+    ),
+    (
+      upper: "eb5:s f#4 c5 eb d f4 b d",
+      lower: "(g2 c3 g3):e r (g2 c3 g3):e r",
+    ),
+  ),
+)
+```, side: false)
+]
+
+Combined with independent voices, a cue group can share a measured upbeat with
+a normal-sized note. Here the normal G stems upward in voice 1, while the
+cue-sized triplet stems downward in voice 2 and merges with the coincident G
+notehead. `side=above` keeps the numeral on the notehead side, clear of the
+beams.
+
+#demo[
+  #example(```typ
+#score(
+  staves: (
+    upper: (clef: "treble"),
+    lower: (clef: "bass"),
+  ),
+  key: "Cm",
+  time: "2/4",
+  beams: true,
+  bars: (
+    (
+      partial: "1/16",
+      upper: ("g4:s", "cue { tuplet 3:2[side=above] { g4:t d5 d } }"),
+      lower: "r:s",
+    ),
+  ),
+)
+```, side: false)
+]
+
+A cue group must contain at least one note, chord, or written rest. Nested cue
+groups, grace groups, alternating tremolos, and automatic rests are rejected
+inside it, as is a beam marker before the group or at its end.
 
 == Tremolos and arpeggios
 
@@ -958,6 +1032,8 @@ instrument whose written pitch has been prepared by the author:
   [#c("~")], [Tie the preceding event.],
   [#c("/") / #c("-")], [Break / force a local beam connection.],
   [#c("tuplet 3:2 { c:e d e }")], [Three written eighths in the time of two.],
+  [#c("tuplet 3:2[number=never] { c:e d e }")], [Tuplet with its numeral hidden.],
+  [#c("cue { c:e d }")], [Small notes that still occupy bar time.],
   [#c("acciaccatura { d:e } f:q")], [Slashed single grace note resolving to F.],
   [#c("tremolo 16 { c:h g:h }")], [Two-note alternating tremolo.],
   [#c("(c e g):h[arpeggio=up]")], [Upward arpeggio over a chord.],

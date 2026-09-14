@@ -568,8 +568,10 @@ enum Token {
     Tuplet {
         numerator: u32,
         denominator: u32,
-        bracket: String,
-        side: String,
+        options: TupletOptions,
+        contents: Vec<Token>,
+    },
+    Cue {
         contents: Vec<Token>,
     },
     Tie,
@@ -608,14 +610,21 @@ struct SequencedEvent {
     beam_directive: BeamDirective,
     duration_scale: Rational,
     grace: Option<GraceMeta>,
+    is_cue: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct TupletOptions {
+    bracket: String,
+    side: String,
+    number: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ParsedTuplet {
     numerator: u32,
     denominator: u32,
-    bracket: String,
-    side: String,
+    options: TupletOptions,
     start: usize,
     end: usize,
 }
@@ -1125,8 +1134,7 @@ fn set_pending_beam_directive(
 fn parse_tuplet_tokens(
     numerator: u32,
     denominator: u32,
-    bracket: String,
-    side: String,
+    options: TupletOptions,
     tokens: &[Token],
     clef: Clef,
     pitch_anchor: &mut Option<Pitch>,
@@ -1155,14 +1163,14 @@ fn parse_tuplet_tokens(
                     beam_directive: pending_beam,
                     duration_scale: scale,
                     grace: None,
+                    is_cue: false,
                 });
                 pending_beam = BeamDirective::Auto;
             }
             Token::Tuplet {
                 numerator,
                 denominator,
-                bracket,
-                side,
+                options,
                 contents,
             } => {
                 if pending_beam != BeamDirective::Auto {
@@ -1171,8 +1179,23 @@ fn parse_tuplet_tokens(
                 parse_tuplet_tokens(
                     *numerator,
                     *denominator,
-                    bracket.clone(),
-                    side.clone(),
+                    options.clone(),
+                    contents,
+                    clef,
+                    pitch_anchor,
+                    duration_anchor,
+                    scale,
+                    events,
+                    tuplets,
+                )?;
+            }
+            Token::Cue { contents } => {
+                if pending_beam != BeamDirective::Auto {
+                    return Err(
+                        "beam marker '/' or '-' cannot appear before a cue group".to_string()
+                    );
+                }
+                parse_cue_tokens(
                     contents,
                     clef,
                     pitch_anchor,
@@ -1215,11 +1238,109 @@ fn parse_tuplet_tokens(
     tuplets.push(ParsedTuplet {
         numerator,
         denominator,
-        bracket,
-        side,
+        options,
         start,
         end: events.len(),
     });
+    Ok(())
+}
+
+/// Cue groups draw their events at the small notation size while keeping
+/// their full rhythmic value.
+fn parse_cue_tokens(
+    tokens: &[Token],
+    clef: Clef,
+    pitch_anchor: &mut Option<Pitch>,
+    duration_anchor: &mut Option<Duration>,
+    scale: Rational,
+    events: &mut Vec<SequencedEvent>,
+    tuplets: &mut Vec<ParsedTuplet>,
+) -> Result<(), String> {
+    let start = events.len();
+    let mut pending_beam = BeamDirective::Auto;
+
+    for token in tokens {
+        match token {
+            Token::Event(event_text) => {
+                events.push(SequencedEvent {
+                    event: parse_sequence_event_relative(
+                        event_text,
+                        pitch_anchor,
+                        duration_anchor,
+                        clef,
+                    )?,
+                    beam_directive: pending_beam,
+                    duration_scale: scale,
+                    grace: None,
+                    is_cue: false,
+                });
+                pending_beam = BeamDirective::Auto;
+            }
+            Token::Tuplet {
+                numerator,
+                denominator,
+                options,
+                contents,
+            } => {
+                if pending_beam != BeamDirective::Auto {
+                    return Err("beam marker '/' or '-' cannot appear before a tuplet".to_string());
+                }
+                parse_tuplet_tokens(
+                    *numerator,
+                    *denominator,
+                    options.clone(),
+                    contents,
+                    clef,
+                    pitch_anchor,
+                    duration_anchor,
+                    scale,
+                    events,
+                    tuplets,
+                )?;
+            }
+            Token::Cue { .. } => {
+                return Err("cue groups cannot nest; remove the inner cue { ... }".to_string())
+            }
+            Token::Grace { .. } => {
+                return Err(
+                    "grace groups are not supported inside cue groups; place the grace group before the cue group"
+                        .to_string(),
+                )
+            }
+            Token::Tremolo { .. } => {
+                return Err("alternating tremolos are not supported inside cue groups".to_string())
+            }
+            Token::AutoRest => {
+                return Err(
+                    "automatic rest placeholder '_' is not allowed inside a cue group; write the rest explicitly"
+                        .to_string(),
+                )
+            }
+            Token::BeamBreak => {
+                set_pending_beam_directive(&mut pending_beam, BeamDirective::Break)?
+            }
+            Token::BeamJoin => set_pending_beam_directive(&mut pending_beam, BeamDirective::Join)?,
+            Token::Tie => {
+                let Some(previous) = events.last_mut() else {
+                    return Err("tie marker '~' cannot appear before a note or chord".to_string());
+                };
+                previous.event.set_tie_to_next()?;
+            }
+        }
+    }
+
+    if pending_beam != BeamDirective::Auto {
+        return Err("beam marker '/' or '-' cannot end a cue group".to_string());
+    }
+    if events.len() == start {
+        return Err("cue group must contain at least one note, chord, or written rest".to_string());
+    }
+    if events[start..].iter().any(|item| item.is_cue) {
+        return Err("cue groups cannot nest; remove the inner cue { ... }".to_string());
+    }
+    for cue_event in &mut events[start..] {
+        cue_event.is_cue = true;
+    }
     Ok(())
 }
 
@@ -1246,6 +1367,7 @@ fn parse_grace_tokens(
                     beam_directive: pending_beam,
                     duration_scale: Rational::new(0, 1),
                     grace: None,
+                    is_cue: false,
                 });
                 pending_beam = BeamDirective::Auto;
             }
@@ -1266,6 +1388,9 @@ fn parse_grace_tokens(
                 return Err("alternating tremolos are not supported inside grace groups".to_string())
             }
             Token::Grace { .. } => return Err("grace groups cannot nest".to_string()),
+            Token::Cue { .. } => {
+                return Err("cue groups are not supported inside grace groups".to_string())
+            }
             Token::AutoRest => {
                 return Err(
                     "automatic rest placeholder '_' is not allowed inside grace groups".to_string(),
@@ -1326,6 +1451,7 @@ fn parse_tremolo_tokens(
                     beam_directive: pending_beam,
                     duration_scale: Rational::new(1, 1),
                     grace: None,
+                    is_cue: false,
                 });
                 pending_beam = BeamDirective::Auto;
             }
@@ -1335,7 +1461,10 @@ fn parse_tremolo_tokens(
             Token::Tie => {
                 return Err("ties are not supported inside alternating tremolos".to_string())
             }
-            Token::Tuplet { .. } | Token::Grace { .. } | Token::Tremolo { .. } => {
+            Token::Tuplet { .. }
+            | Token::Grace { .. }
+            | Token::Tremolo { .. }
+            | Token::Cue { .. } => {
                 return Err("alternating tremolo groups cannot contain nested groups".to_string())
             }
             Token::AutoRest => {
@@ -1394,6 +1523,7 @@ fn parse_sequence_marked(
                     beam_directive: pending_beam,
                     duration_scale: Rational::new(1, 1),
                     grace: None,
+                    is_cue: false,
                 });
                 pending_beam = BeamDirective::Auto;
             }
@@ -1440,8 +1570,7 @@ fn parse_sequence_marked(
             Token::Tuplet {
                 numerator,
                 denominator,
-                bracket,
-                side,
+                options,
                 contents,
             } => {
                 if pending_beam != BeamDirective::Auto {
@@ -1450,8 +1579,23 @@ fn parse_sequence_marked(
                 parse_tuplet_tokens(
                     numerator,
                     denominator,
-                    bracket,
-                    side,
+                    options,
+                    &contents,
+                    clef,
+                    &mut pitch_anchor,
+                    &mut duration_anchor,
+                    Rational::new(1, 1),
+                    &mut events,
+                    &mut tuplets,
+                )?;
+            }
+            Token::Cue { contents } => {
+                if pending_beam != BeamDirective::Auto {
+                    return Err(
+                        "beam marker '/' or '-' cannot appear before a cue group".to_string()
+                    );
+                }
+                parse_cue_tokens(
                     &contents,
                     clef,
                     &mut pitch_anchor,
@@ -1548,13 +1692,19 @@ fn tokenize_sequence_with_depth(input: &str, nesting_depth: usize) -> Result<Vec
                 cursor = consume_event_suffix(&chars, cursor)?;
                 tokens.push(Token::Event(chars[event_start..cursor].iter().collect()));
             }
-            '{' | '}' => return Err("tuplet braces must follow 'tuplet N:M'".to_string()),
+            '{' | '}' => {
+                return Err(
+                    "braces must follow a group header such as 'tuplet 3:2', 'grace', or 'cue'"
+                        .to_string(),
+                )
+            }
             _ => {
-                if chars[cursor..].starts_with(&['t', 'r', 'e', 'm', 'o', 'l', 'o'])
-                    && cursor + 7 < chars.len()
-                    && chars[cursor + 7].is_whitespace()
-                {
+                if starts_group_keyword(&chars, cursor, "tremolo") {
                     tokens.push(parse_tremolo_token(&chars, &mut cursor, nesting_depth)?);
+                    continue;
+                }
+                if starts_group_keyword(&chars, cursor, "cue") {
+                    tokens.push(parse_cue_token(&chars, &mut cursor, nesting_depth)?);
                     continue;
                 }
                 let mut parsed_grace = false;
@@ -1563,11 +1713,7 @@ fn tokenize_sequence_with_depth(input: &str, nesting_depth: usize) -> Result<Vec
                     ("appoggiatura", "appoggiatura"),
                     ("grace", "grace"),
                 ] {
-                    let keyword_chars: Vec<char> = keyword.chars().collect();
-                    if chars[cursor..].starts_with(&keyword_chars)
-                        && cursor + keyword_chars.len() < chars.len()
-                        && chars[cursor + keyword_chars.len()].is_whitespace()
-                    {
+                    if starts_group_keyword(&chars, cursor, keyword) {
                         tokens.push(parse_grace_token(
                             &chars,
                             &mut cursor,
@@ -1582,10 +1728,7 @@ fn tokenize_sequence_with_depth(input: &str, nesting_depth: usize) -> Result<Vec
                 if parsed_grace {
                     continue;
                 }
-                if chars[cursor..].starts_with(&['t', 'u', 'p', 'l', 'e', 't'])
-                    && cursor + 6 < chars.len()
-                    && chars[cursor + 6].is_whitespace()
-                {
+                if starts_group_keyword(&chars, cursor, "tuplet") {
                     tokens.push(parse_tuplet_token(&chars, &mut cursor, nesting_depth)?);
                     continue;
                 }
@@ -1666,6 +1809,14 @@ fn parse_tremolo_token(
     })
 }
 
+fn starts_group_keyword(chars: &[char], cursor: usize, keyword: &str) -> bool {
+    let keyword_chars: Vec<char> = keyword.chars().collect();
+    let after_keyword = cursor + keyword_chars.len();
+    chars[cursor..].starts_with(&keyword_chars)
+        && after_keyword < chars.len()
+        && chars[after_keyword].is_whitespace()
+}
+
 fn parse_grace_token(
     chars: &[char],
     cursor: &mut usize,
@@ -1673,6 +1824,29 @@ fn parse_grace_token(
     style: &str,
     nesting_depth: usize,
 ) -> Result<Token, String> {
+    let contents = read_braced_group_contents(chars, cursor, keyword)?;
+    Ok(Token::Grace {
+        style: style.to_string(),
+        contents: tokenize_sequence_with_depth(&contents, nesting_depth + 1)?,
+    })
+}
+
+fn parse_cue_token(
+    chars: &[char],
+    cursor: &mut usize,
+    nesting_depth: usize,
+) -> Result<Token, String> {
+    let contents = read_braced_group_contents(chars, cursor, "cue")?;
+    Ok(Token::Cue {
+        contents: tokenize_sequence_with_depth(&contents, nesting_depth + 1)?,
+    })
+}
+
+fn read_braced_group_contents(
+    chars: &[char],
+    cursor: &mut usize,
+    keyword: &str,
+) -> Result<String, String> {
     *cursor += keyword.chars().count();
     while *cursor < chars.len() && chars[*cursor].is_whitespace() {
         *cursor += 1;
@@ -1694,11 +1868,7 @@ fn parse_grace_token(
     if depth != 0 {
         return Err(format!("unterminated {keyword} group"));
     }
-    let contents: String = chars[contents_start..*cursor - 1].iter().collect();
-    Ok(Token::Grace {
-        style: style.to_string(),
-        contents: tokenize_sequence_with_depth(&contents, nesting_depth + 1)?,
-    })
+    Ok(chars[contents_start..*cursor - 1].iter().collect())
 }
 
 fn parse_tuplet_token(
@@ -1738,8 +1908,10 @@ fn parse_tuplet_token(
     }
     let mut bracket = "auto".to_string();
     let mut side = "auto".to_string();
+    let mut number = "always".to_string();
     let mut has_bracket_option = false;
     let mut has_side_option = false;
+    let mut has_number_option = false;
     if *cursor < chars.len() && chars[*cursor] == '[' {
         *cursor += 1;
         let options_start = *cursor;
@@ -1774,6 +1946,17 @@ fn parse_tuplet_token(
                 }
                 has_side_option = true;
                 side = value.to_string();
+            } else if let Some(value) = option.strip_prefix("number=") {
+                if has_number_option {
+                    return Err(
+                        "tuplet number option is repeated; specify number only once".to_string()
+                    );
+                }
+                if !matches!(value, "always" | "never") {
+                    return Err("tuplet number must be always or never".to_string());
+                }
+                has_number_option = true;
+                number = value.to_string();
             } else {
                 return Err(format!("unknown tuplet option {option:?}"));
             }
@@ -1803,8 +1986,11 @@ fn parse_tuplet_token(
     Ok(Token::Tuplet {
         numerator,
         denominator,
-        bracket,
-        side,
+        options: TupletOptions {
+            bracket,
+            side,
+            number,
+        },
         contents: tokenize_sequence_with_depth(&contents, nesting_depth + 1)?,
     })
 }
@@ -1829,6 +2015,27 @@ fn parse_sequence_with_auto_rests(
             .map(|item| (item.event, item.beam_directive))
             .collect(),
     )
+}
+
+fn append_measured_group_events(
+    slots: &mut Vec<Option<SequencedEvent>>,
+    known_total: &mut Rational,
+    group_events: Vec<SequencedEvent>,
+    group_tuplets: &mut [ParsedTuplet],
+) -> Result<(), String> {
+    // Every slot, including an automatic rest placeholder, becomes one event.
+    let start = slots.len();
+    for tuplet in group_tuplets {
+        tuplet.start += start;
+        tuplet.end += start;
+    }
+    for item in group_events {
+        let scaled_duration =
+            duration_to_rational(item.event.duration()).checked_mul(item.duration_scale)?;
+        *known_total = known_total.checked_add(scaled_duration)?;
+        slots.push(Some(item));
+    }
+    Ok(())
 }
 
 fn parse_sequence_with_auto_rests_relative(
@@ -1865,6 +2072,7 @@ fn parse_sequence_with_auto_rests_relative(
                     beam_directive: pending_beam,
                     duration_scale: Rational::new(1, 1),
                     grace: None,
+                    is_cue: false,
                 }));
                 pending_beam = BeamDirective::Auto;
             }
@@ -1901,7 +2109,7 @@ fn parse_sequence_with_auto_rests_relative(
                             .to_string(),
                     );
                 }
-                let start = slots.iter().filter(|slot| slot.is_some()).count();
+                let start = slots.len();
                 let mut group_events = Vec::new();
                 let mut group_tremolos = Vec::new();
                 parse_tremolo_tokens(
@@ -1927,21 +2135,18 @@ fn parse_sequence_with_auto_rests_relative(
             Token::Tuplet {
                 numerator,
                 denominator,
-                bracket,
-                side,
+                options,
                 contents,
             } => {
                 if pending_beam != BeamDirective::Auto {
                     return Err("beam marker '/' or '-' cannot appear before a tuplet".to_string());
                 }
-                let start = slots.iter().filter(|slot| slot.is_some()).count();
                 let tuplet_start = tuplets.len();
                 let mut group_events = Vec::new();
                 parse_tuplet_tokens(
                     numerator,
                     denominator,
-                    bracket,
-                    side,
+                    options,
                     &contents,
                     clef,
                     &mut pitch_anchor,
@@ -1950,16 +2155,36 @@ fn parse_sequence_with_auto_rests_relative(
                     &mut group_events,
                     &mut tuplets,
                 )?;
-                for item in group_events {
-                    let scaled_duration = duration_to_rational(item.event.duration())
-                        .checked_mul(item.duration_scale)?;
-                    known_total = known_total.checked_add(scaled_duration)?;
-                    slots.push(Some(item));
+                append_measured_group_events(
+                    &mut slots,
+                    &mut known_total,
+                    group_events,
+                    &mut tuplets[tuplet_start..],
+                )?;
+            }
+            Token::Cue { contents } => {
+                if pending_beam != BeamDirective::Auto {
+                    return Err(
+                        "beam marker '/' or '-' cannot appear before a cue group".to_string()
+                    );
                 }
-                for tuplet in tuplets.iter_mut().skip(tuplet_start) {
-                    tuplet.start += start;
-                    tuplet.end += start;
-                }
+                let tuplet_start = tuplets.len();
+                let mut group_events = Vec::new();
+                parse_cue_tokens(
+                    &contents,
+                    clef,
+                    &mut pitch_anchor,
+                    &mut duration_anchor,
+                    Rational::new(1, 1),
+                    &mut group_events,
+                    &mut tuplets,
+                )?;
+                append_measured_group_events(
+                    &mut slots,
+                    &mut known_total,
+                    group_events,
+                    &mut tuplets[tuplet_start..],
+                )?;
             }
             Token::AutoRest => {
                 if pending_beam != BeamDirective::Auto {
@@ -2047,6 +2272,7 @@ fn parse_sequence_with_auto_rests_relative(
                     beam_directive: BeamDirective::Auto,
                     duration_scale: Rational::new(1, 1),
                     grace: None,
+                    is_cue: false,
                 });
             }
         }
@@ -2157,6 +2383,8 @@ pub struct NoteLayout {
     pub grace_count: usize,
     /// Number of grace events immediately preceding this main event.
     pub grace_before: usize,
+    /// Cue events keep their rhythmic value but draw at the small notation size.
+    pub cue: bool,
     /// Tuplets that start at this event and end at the given event index.
     pub tuplet_starts: Vec<TupletLayout>,
     /// Alternating tremolos that start at this event.
@@ -2170,6 +2398,7 @@ pub struct TupletLayout {
     pub denominator: u32,
     pub bracket: String,
     pub side: String,
+    pub number: String,
     pub end_index: usize,
     pub depth: usize,
 }
@@ -2194,6 +2423,7 @@ fn layout_event(
     onset: Rational,
     duration_scale: Rational,
     grace: Option<GraceMeta>,
+    is_cue: bool,
 ) -> Result<NoteLayout, String> {
     let duration = event.duration();
     let duration_value = duration_to_rational(duration).checked_mul(duration_scale)?;
@@ -2329,6 +2559,7 @@ fn layout_event(
         grace_index,
         grace_count,
         grace_before: 0,
+        cue: is_cue,
         tuplet_starts: Vec::new(),
         tremolo_starts: Vec::new(),
         alternating_tremolo: false,
@@ -2348,6 +2579,7 @@ fn layout_events(events: Vec<SequencedEvent>, clef: Clef) -> Result<Vec<NoteLayo
             onset,
             sequenced_event.duration_scale,
             sequenced_event.grace,
+            sequenced_event.is_cue,
         )?);
         onset = onset.checked_add(duration_value)?;
     }
@@ -2379,8 +2611,9 @@ fn attach_tuplets(layouts: &mut [NoteLayout], tuplets: Vec<ParsedTuplet>) -> Res
         layouts[tuplet.start].tuplet_starts.push(TupletLayout {
             numerator: tuplet.numerator,
             denominator: tuplet.denominator,
-            bracket: tuplet.bracket.clone(),
-            side: tuplet.side.clone(),
+            bracket: tuplet.options.bracket.clone(),
+            side: tuplet.options.side.clone(),
+            number: tuplet.options.number.clone(),
             end_index: tuplet.end - 1,
             depth,
         });
@@ -2410,6 +2643,7 @@ fn attach_tremolos(layouts: &mut [NoteLayout], tremolos: Vec<ParsedTremolo>) -> 
 fn assign_beam_groups(layouts: &mut [NoteLayout], beat: Option<Rational>) -> Result<(), String> {
     let mut next_group = 0_usize;
     let mut current_beam_group: Option<(usize, u64)> = None;
+    let mut current_beam_is_cue = false;
     let mut grace_group: Option<(usize, usize)> = None;
     let mut previous_was_grace = false;
     for (index, layout) in layouts.iter_mut().enumerate() {
@@ -2449,6 +2683,16 @@ fn assign_beam_groups(layouts: &mut [NoteLayout], beat: Option<Rational>) -> Res
                     / (u64::from(layout.onset.denominator) * u64::from(beat.numerator))
             })
             .unwrap_or(0);
+        if current_beam_group.is_some() && layout.cue != current_beam_is_cue {
+            if layout.beam_join_before {
+                return Err(format!(
+                    "beam join marker '-' before event {} cannot join cue-sized and normal-sized notes; remove the '-'",
+                    index + 1
+                ));
+            }
+            current_beam_group = None;
+        }
+        current_beam_is_cue = layout.cue;
         if layout.beam_join_before && current_beam_group.is_none() {
             return Err(format!(
                 "beam join marker '-' before event {} requires an adjacent flagged note or chord before it",
@@ -2479,6 +2723,7 @@ pub fn layout_note_native(input: &str, clef: Clef) -> Result<NoteLayout, String>
         Rational::new(0, 1),
         Rational::new(1, 1),
         None,
+        false,
     )
 }
 
@@ -3427,6 +3672,7 @@ mod tests {
         assert_eq!(event_layouts.len(), 7);
         assert_eq!(event_layouts[0].tuplet_starts[0].bracket, "always");
         assert_eq!(event_layouts[0].tuplet_starts[0].side, "above");
+        assert_eq!(event_layouts[0].tuplet_starts[0].number, "always");
         assert_eq!(event_layouts[2].tuplet_starts[0].numerator, 3);
         assert_eq!(event_layouts[0].tuplet_starts[0].depth, 1);
         assert_eq!(event_layouts[2].tuplet_starts[0].depth, 0);
@@ -3489,6 +3735,95 @@ mod tests {
         let nested_error =
             layout_sequence_native("grace { grace { C5:e } } D5:q", Clef::Treble).unwrap_err();
         assert!(nested_error.contains("cannot nest"), "{nested_error}");
+    }
+
+    #[test]
+    fn tuplet_number_option_hides_the_number_and_rejects_invalid_values() {
+        let event_layouts =
+            layout_sequence_native("tuplet 3:2[number=never] { C4:e D E }", Clef::Treble).unwrap();
+        assert_eq!(event_layouts[0].tuplet_starts[0].number, "never");
+
+        let unknown_error =
+            layout_sequence_native("tuplet 3:2[number=hidden] { C4:e D E }", Clef::Treble)
+                .unwrap_err();
+        assert!(
+            unknown_error.contains("number must be always or never"),
+            "{unknown_error}"
+        );
+        let repeated_error = layout_sequence_native(
+            "tuplet 3:2[number=never number=always] { C4:e D E }",
+            Clef::Treble,
+        )
+        .unwrap_err();
+        assert!(
+            repeated_error.contains("number option is repeated"),
+            "{repeated_error}"
+        );
+    }
+
+    #[test]
+    fn cue_groups_keep_bar_time_and_beam_apart_from_normal_notes() {
+        let event_layouts = layout_sequence_with_time_native(
+            "C5:e cue { tuplet 3:2[number=never] { D5:s E F } } G5:q",
+            Clef::Treble,
+            "2/4",
+        )
+        .unwrap();
+
+        assert_eq!(event_layouts.len(), 5);
+        let cue_flags: Vec<bool> = event_layouts.iter().map(|layout| layout.cue).collect();
+        assert_eq!(cue_flags, vec![false, true, true, true, false]);
+        assert_eq!(event_layouts[1].onset, Rational::new(1, 8));
+        assert_eq!(event_layouts[1].duration_value, Rational::new(1, 24));
+        assert_eq!(event_layouts[4].onset, Rational::new(1, 4));
+        assert_eq!(event_layouts[1].tuplet_starts[0].end_index, 3);
+        assert_eq!(event_layouts[1].tuplet_starts[0].number, "never");
+        assert!(event_layouts[1].beam_group.is_some());
+        assert_ne!(event_layouts[0].beam_group, event_layouts[1].beam_group);
+        assert_eq!(event_layouts[1].beam_group, event_layouts[3].beam_group);
+
+        let rest_layouts = layout_sequence_native("cue { r:e C5 } D5:q", Clef::Treble).unwrap();
+        let rest_cue_flags: Vec<bool> = rest_layouts.iter().map(|layout| layout.cue).collect();
+        assert_eq!(rest_cue_flags, vec![true, true, false]);
+    }
+
+    #[test]
+    fn cue_groups_report_invalid_contents_and_boundaries() {
+        let cases = [
+            ("cue { }", "cue group must contain"),
+            ("cue C5:q", "cue must be followed"),
+            ("cue { C5:q", "unterminated cue group"),
+            ("cue{ C5:q }", "braces must follow a group header"),
+            ("cue { cue { C5:q } }", "cue groups cannot nest"),
+            ("cue { tuplet 3:2 { cue { C5:e D E } } }", "cue groups cannot nest"),
+            ("cue { grace { D5:e } C5:q }", "grace groups are not supported inside cue groups"),
+            ("grace { cue { D5:e } } C5:q", "cue groups are not supported inside grace groups"),
+            ("cue { tremolo 16 { C5:h G5:h } }", "alternating tremolos are not supported inside cue groups"),
+            ("cue { C5:e / }", "cannot end a cue group"),
+            ("C5:e / cue { D5:e }", "cannot appear before a cue group"),
+            ("cue { C5:e } - D5:e", "cannot join cue-sized and normal-sized notes"),
+        ];
+        for (input, expected_error) in cases {
+            let error = layout_sequence_native(input, Clef::Treble).unwrap_err();
+            assert!(error.contains(expected_error), "{input}: {error}");
+        }
+        let auto_rest_error =
+            layout_sequence_with_time_native("cue { _ } C5:h", Clef::Treble, "4/4").unwrap_err();
+        assert!(
+            auto_rest_error.contains("not allowed inside a cue group"),
+            "{auto_rest_error}"
+        );
+    }
+
+    #[test]
+    fn measured_groups_after_automatic_rests_keep_their_event_ranges() {
+        let event_layouts =
+            layout_sequence_with_time_native("_ tuplet 3:2 { C5:e D E }", Clef::Treble, "2/4")
+                .unwrap();
+        assert_eq!(event_layouts.len(), 4);
+        assert!(event_layouts[0].rest);
+        assert!(event_layouts[0].tuplet_starts.is_empty());
+        assert_eq!(event_layouts[1].tuplet_starts[0].end_index, 3);
     }
 
     #[test]

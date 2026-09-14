@@ -1501,3 +1501,74 @@ so a flat key cancelled in bass clef keeps its F flat below the staff.
     (key: "C", notes: "r:w"),
   ),
 )
+
+#pagebreak()
+
+= Cue-sized measured notes
+
+Cue groups draw notes, chords, and rests at the grace-note size while keeping
+their rhythmic value. The first bar compares a normal tuplet, a cue-sized
+tuplet with its numeral, a cue-sized tuplet with `number=never`, and a cue rest
+and chord. The second bar shows a bracketed cue tuplet containing a rest, a
+dotted cue note, and a normal-sized tuplet whose numeral is hidden while its
+bracket remains. Automatic beams break where cue-sized and normal-sized notes
+meet.
+
+#score(
+  time: "4/4",
+  beams: true,
+  wrap: false,
+  scale: 0.8,
+  bars: (
+    (notes: "tuplet 3:2 { c5:e d e } cue { tuplet 3:2 { f5:e g a } } cue { tuplet 3:2[number=never] { b5:e a g } } cue { r:e (c5 e):e }"),
+    (notes: "cue { tuplet 3:2[bracket=always] { c5:e r d } } cue { g4:q. } a4:e tuplet 3:2[number=never bracket=always] { b4:e c5 d }"),
+  ),
+)
+
+A cue group in a second voice shares a sixteenth upbeat with a normal-sized
+note: the normal G in voice 1 stems upward with its flag, while the cue-sized
+thirty-second triplet in voice 2 stems downward, merges with the coincident G
+notehead, and places its numeral above the noteheads without touching them.
+
+#score(
+  staves: (
+    upper: (clef: "treble"),
+    lower: (clef: "bass"),
+  ),
+  key: "Cm",
+  time: "2/4",
+  beams: true,
+  scale: 1.2,
+  bars: (
+    (
+      partial: "1/16",
+      upper: ("g4:s", "cue { tuplet 3:2[side=above] { g4:t d5 d } }"),
+      lower: "r:s",
+    ),
+  ),
+)
+
+A single-voice cue-sized tuplet upbeat also fills a sixteenth pickup against a
+written rest in the lower staff.
+
+#score(
+  staves: (
+    upper: (clef: "treble"),
+    lower: (clef: "bass"),
+  ),
+  key: "Cm",
+  time: "2/4",
+  beams: true,
+  scale: 0.8,
+  bars: (
+    (
+      partial: "1/16",
+      upper: "cue { tuplet 3:2[number=never] { g4:t d5 d } }",
+      lower: "r:s",
+    ),
+    (
+      upper: "eb5:s f#4 c5 eb d f4 b d",
+      lower: "(g2 c3 g3):e r (g2 c3 g3):e r",
+    ),
+  ),
+)
