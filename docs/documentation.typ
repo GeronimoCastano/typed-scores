@@ -9,6 +9,7 @@
 #import "../examples/chopin-opening.typ": chopin-opening
 #import "../examples/mozart-eine-kleine-nachtmusik.typ": mozart-k525-opening
 #import "../examples/beethoven-ode-to-joy-alto-sax.typ": ode-to-joy-alto-sax
+#import "../examples/beethoven-moonlight-coda.typ": moonlight-coda
 
 #let version = "0.5.1"
 #let accent = rgb("#7A2141")
@@ -651,7 +652,10 @@ Set #c("ragged-last: true") for a natural-width final line.
   [#c("c##5:q") / #c("dbb5:q")], [Double-sharp / double-flat quarter note.],
   [#c("(a4 c e):h (f a c)")], [Relative chord pitches and inherited duration.],
   [#c("r:q")], [Quarter rest.],
+  [#c("s:q")], [Invisible quarter spacer: takes time, draws nothing.],
   [#c("_")], [Automatic rest placeholder.],
+  [#c("c2:e g2 @upper e4 g4")], [Draw the following events on staff #c("upper").],
+  [#c("(c3 g3 @upper e4 c5):h")], [Split chord: one stem across two staves.],
   [#c("~")], [Tie the previous event to the next event.],
   [#c("/")], [Break the automatic beam before the next event.],
   [#c("-")], [Join adjacent flagged events into one beam group.],
@@ -941,6 +945,133 @@ stack over articulations and under fingerings just as a turn does.
 ```, side: false)
 ]
 
+== Cross-staff notation
+
+Piano music often splits one gesture between the staves: an arpeggio climbs
+from the bass into the treble, a run crosses the hands, or a chord's lower
+notes sit on the bass staff while its upper notes sit on the treble. In
+typed-scores a voice always belongs to its home staff, the staff whose field
+holds its text, and that is where its rhythm, beams, slurs, dynamics, pedals,
+and lyrics live. Individual events can be drawn on another staff without
+leaving the voice.
+
+=== Staff switches
+
+`@staff` draws every following event of the voice on the named staff, using
+that staff's clef. The switch holds until the next `@staff` and resets to the
+home staff at every bar, so each bar's text reads on its own. Write the switch
+as its own word, separated by spaces. Switches may appear inside tuplets and
+cue groups. They may also come just before a grace group, but not inside one
+or inside an alternating tremolo.
+
+Relative octaves ignore the switch: `@lower g` after `c4` still resolves to
+the G nearest C4. A note drawn away from its home staff points its stem back
+toward that staff, so the hand playing it stays visible. Use the spacer `s`
+where a staff has no notes of its own. It takes time like a rest but draws
+nothing, and it accepts the same durations, including inherited ones.
+
+#demo[
+  #example(```typ
+#score(
+  staves: (
+    upper: (clef: "treble"),
+    lower: (clef: "bass"),
+  ),
+  time: "4/4",
+  beams: true,
+  bars: (
+    (
+      upper: "s:h e5:q[fermata] s",
+      lower: "c2:s g2 c3 e3 @upper g3 c4 e4 g4 c5:q @lower c3",
+    ),
+  ),
+)
+```, side: false)
+]
+
+=== Kneed beams
+
+When one automatic beam group holds notes from two neighboring staves, the
+beam is kneed: it runs between the staves, stems from the upper staff point
+down to it, and stems from the lower staff point up. The gap between the staves
+grows until each stem keeps a comfortable length. Secondary beams stack toward
+the notes where the group begins. Articulations follow the notehead side of
+each stem. A voice with forced stem directions keeps them and draws an
+ordinary beam beside its notes.
+
+#demo[
+  #example(```typ
+#score(
+  staves: (
+    upper: (clef: "treble"),
+    lower: (clef: "bass"),
+  ),
+  time: "2/4",
+  beams: true,
+  bars: (
+    (
+      upper: "s:h",
+      lower: "c2:s[stacc] g2 @upper e4[stacc] g4 c5[accent] g4 @lower e3 c3",
+    ),
+    (
+      upper: "tuplet 3:2 { c5:e g4 @lower e3 } tuplet 3:2 { c3 @upper e4 g }",
+      lower: "c2:h",
+    ),
+  ),
+)
+```, side: false)
+]
+
+=== Split chords
+
+Inside a chord, `@staff` moves the remaining pitches to a neighboring staff,
+and one stem joins both parts across the gap. The upper staff must hold the
+chord's upper register. An `arpeggio` sign on a split chord spans both staves.
+
+#demo[
+  #example(```typ
+#score(
+  staves: (
+    upper: (clef: "treble"),
+    lower: (clef: "bass"),
+  ),
+  time: "4/4",
+  bars: (
+    (
+      upper: "s:w",
+      lower: "(c3 g3 @upper e4 c5):h (a2 e3 @upper c4 a4):h[arpeggio]",
+    ),
+  ),
+)
+```, side: false)
+]
+
+=== Slurs, ties, and accidentals
+
+Slurs follow the phrase across the staves. A slur whose notes lie on two
+staves arches above them. A tie needs both notes on the same staff; because
+switches reset at every bar, a note tied over the barline repeats its `@staff`
+switch in the next bar. An accidental holds until the end of the bar on the
+staff that draws it, for every voice drawn on that staff. A note moved to
+another staff follows that staff's accidentals.
+
+#demo[
+  #example(```typ
+#score(
+  staves: (
+    upper: (clef: "treble"),
+    lower: (clef: "bass"),
+  ),
+  time: "2/4",
+  beams: true,
+  bars: (
+    (upper: "c5:e[s1(] g4 @lower e3 c[s1)]", lower: "c2:h"),
+    (upper: "@lower g3:q ~ g3", lower: "c2:h"),
+  ),
+)
+```, side: false)
+]
+
 = Validation and layout
 
 The package validates every full bar against its active `time` signature and
@@ -964,7 +1095,19 @@ positions, and bars remain atomic when systems wrap.
   [Unknown or missing staff ID], [The one-based bar and offending field.],
   [Invalid span lifecycle], [The slur, pedal, hairpin, or ending that cannot be paired.],
   [Invalid tie or beam join], [The adjacent events that cannot legally connect.],
+  [Unknown, redundant, or dangling #c("@staff") switch], [The switch and the staves the score declares.],
+  [Split chord out of register or across distant staves], [The pitches or staves that one stem cannot join.],
+  [Tie across staves or beam across distant staves], [The event that must stay on one staff or break its beam.],
+  [#c("staff-gap") too small for a kneed beam], [The minimum gap the beam needs.],
 )
+
+== Worked example: Beethoven
+
+The coda of the "Moonlight" Sonata's Presto agitato sends the right hand's
+arpeggios onto the bass staff and back, with cross-staff slurs and kneed
+sextuplet beams:
+
+#align(center)[#moonlight-coda(scale: 0.4, note-spacing: 2.9)]
 
 == Worked example: Chopin
 
@@ -980,18 +1123,20 @@ accidentals:
 
 = Release showcase
 
-The repository's `examples/` directory contains five reusable, source-checked
+The repository's `examples/` directory contains six reusable, source-checked
 fixtures and a compiled `showcase.pdf`:
 
 - Chopin, Nocturne Op. 9 No. 2 — piano, pickup and measures 1–4;
 - Mozart, Eine kleine Nachtmusik K. 525/I — four-staff strings, measures 1–4;
 - Bach, Cello Suite No. 1 BWV 1007/I — solo cello, measures 1–4;
 - Beethoven, the four-bar Ode to Joy theme — E-flat alto saxophone at written
-  pitch; and
-- Beethoven, Für Elise WoO 59 — piano, pickup and measures 1–4.
+  pitch;
+- Beethoven, Für Elise WoO 59 — piano, pickup and measures 1–4; and
+- Beethoven, Piano Sonata Op. 27 No. 2/III — piano, cross-staff coda,
+  measures 178–185.
 
 The saxophone fixture is an explicit transposition: its B-major notation sounds
-in Beethoven's D major. The other four retain their reference score's written
+in Beethoven's D major. The others retain their reference score's written
 pitches. This compact quartet excerpt demonstrates a bracketed ensemble:
 
 #align(center)[#mozart-k525-opening(
@@ -1011,10 +1156,11 @@ instrument whose written pitch has been prepared by the author:
 
 - One to four independent rhythmic voices per staff are supported; the count
   for a staff is fixed across its bars.
-- Cross-staff notation is not yet in the public DSL.
+- Cross-staff beams and split chords join two neighboring staves; stems
+  cannot be flipped by hand, and ties cannot cross staves.
 - Grace groups currently exclude rests, tuplets, and nested ornamental groups.
-- Arpeggio signs span one chord on one staff; cross-staff piano arpeggios are
-  not yet supported.
+- Arpeggio signs span one chord; a cross-staff arpeggio is written on a split
+  chord.
 - Pedals and hairpins are event-anchored and do not split automatically at a
   system break.
 - Dense editorial markings or lyric verses may require `staff-gap`,
@@ -1029,6 +1175,9 @@ instrument whose written pitch has been prepared by the author:
   [#c("c4:q d e f")], [Relative pitches inheriting the quarter duration.],
   [#c("(a4 c e):h")], [Relative chord.],
   [#c("r:q") / #c("_")], [Written rest / computed remainder rest.],
+  [#c("s:q")], [Invisible spacer that fills time.],
+  [#c("@lower")], [Draw the following events on another staff until the bar ends.],
+  [#c("(c3 @upper e4):h")], [Split chord across two neighboring staves.],
   [#c("~")], [Tie the preceding event.],
   [#c("/") / #c("-")], [Break / force a local beam connection.],
   [#c("tuplet 3:2 { c:e d e }")], [Three written eighths in the time of two.],

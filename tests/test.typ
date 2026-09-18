@@ -4,6 +4,7 @@
 #import "../examples/bach-cello-suite-prelude.typ": bach-bwv1007-opening
 #import "../examples/beethoven-ode-to-joy-alto-sax.typ": ode-to-joy-alto-sax
 #import "../examples/beethoven-fur-elise.typ": fur-elise-opening
+#import "../examples/beethoven-moonlight-coda.typ": moonlight-coda
 
 #set page(margin: 1.8cm)
 #set text(font: "New Computer Modern", size: 11pt)
@@ -1572,3 +1573,145 @@ written rest in the lower staff.
     ),
   ),
 )
+
+#pagebreak()
+
+= Cross-staff notation
+
+== Staff switches and spacers
+
+A lower-staff voice climbs onto the treble staff with `@upper` and returns with
+`@lower`. The switched notes take the treble clef, point their stems back
+toward the bass staff, and keep the voice's beat grouping. Spacers (`s`) keep
+the upper staff silent without printing rests.
+
+#score(
+  staves: (upper: (clef: "treble"), lower: (clef: "bass")),
+  time: "4/4",
+  beams: true,
+  bars: (
+    (upper: "s:w", lower: "C2:s G2 C3 E3 @upper G3 C4 E4 G4 C5:q @lower C3:q"),
+    (upper: "s:h E5:q[fermata] s", lower: "C2:e @upper G3 C4 E4 @lower C3:h"),
+  ),
+)
+
+== Kneed beams
+
+Beam groups that join both staves are kneed: the beam lies between the staves,
+upper-staff stems point down to it, and lower-staff stems point up. Secondary
+beams stack toward the notes where the group begins; articulations follow the
+notehead side of each stem, and the staves open wide enough for the beam.
+
+#score(
+  staves: (upper: (clef: "treble"), lower: (clef: "bass")),
+  time: "2/4",
+  beams: true,
+  bars: (
+    (upper: "s:h", lower: "C2:e G2 @upper E4 G4"),
+    (upper: "s:h", lower: "C2:s[stacc] G2 @upper E4[stacc] G4 C5:s[accent] G4 @lower E3 C3"),
+    (upper: "C5:e @lower G3 @upper E5 @lower C3", lower: "C2:h"),
+    (upper: "tuplet 3:2 { C5:e G4 @lower E3 } tuplet 3:2 { C3 @upper E4 G4 }", lower: "C2:h"),
+  ),
+)
+
+== Split chords
+
+One chord spans both staves with a single stem: pitches before `@lower` or
+`@upper` stay on the event's staff and the rest move. An arpeggio sign
+follows the chord across the gap.
+
+#score(
+  staves: (upper: (clef: "treble"), lower: (clef: "bass")),
+  time: "4/4",
+  bars: (
+    (upper: "s:w", lower: "(C3 G3 @upper E4 C5):h (A2 E3 @upper C4 A4):h[arpeggio]"),
+    (upper: "(E5 G5 @lower C3 G3):h s:h", lower: "s:h (F2 C3):h"),
+  ),
+)
+
+== Cross-staff slurs and ties
+
+Slurs follow a phrase from one staff to the other, including across a system
+break, and arch above when their notes lie on two staves. Ties are allowed while both notes are drawn on the same staff; the
+switch resets at every bar, so the tied target names its staff again.
+
+#score(
+  staves: (upper: (clef: "treble"), lower: (clef: "bass")),
+  time: "2/4",
+  beams: true,
+  width: 28,
+  bars: (
+    (upper: "C5:e[s1(] G4 @lower E3 C3[s1)]", lower: "C2:h"),
+    (upper: "@lower G3:q[s2(] ~ G3:q", lower: "C2:h"),
+    (upper: "@lower E3:q @upper C5:q", lower: "C2:h"),
+    (upper: "D5:q F5:q[s2)]", lower: "C2:h"),
+  ),
+)
+
+== Accidentals shared by every voice on a staff
+
+An accidental holds for the rest of the bar on the staff that draws it, across
+all voices. The second voice's F therefore needs a natural after the first
+voice's F sharp. The bass-staff voice sharpens F4 on its own staff, so its F4
+moved onto the treble staff follows the treble staff's accidentals and needs
+no sign.
+
+#score(
+  staves: (upper: (clef: "treble"), lower: (clef: "bass")),
+  time: "2/4",
+  bars: (
+    (upper: ("F#5:q G5", "D5:q F5"), lower: "F#4:q @upper F4"),
+  ),
+)
+
+== Three staves
+
+Beamed staff switches work between any neighboring staves.
+
+#score(
+  staves: (a: (clef: "treble"), b: (clef: "treble"), c: (clef: "bass")),
+  time: "2/4",
+  beams: true,
+  bars: (
+    (a: "C5:q D5", b: "E4:e G4 @c E3 C3", c: "C2:h"),
+  ),
+)
+
+#pagebreak()
+
+== Beethoven: Moonlight Sonata, measures 178–185
+
+The Presto agitato coda sends the right hand's arpeggios down onto the bass
+staff and back up, with triplets, cross-staff slurs, and kneed sextuplet
+beams, all written directly in the notation language.
+
+#moonlight-coda()
+
+#pagebreak()
+
+= LilyPond A/B: cross-staff beams
+
+A lower-staff voice crosses to the treble staff inside two beat groups, then an
+upper-staff voice alternates between the staves note by note. Both engravers
+knee the beam between the staves for the first group and for the alternating
+eighths. LilyPond keeps the second sixteenth group's stems upward under one
+steep beam, while `typed-scores` knees every beam group that spans two staves
+and limits the slant to one staff space.
+
+#lilypond-ab(
+  "lilypond-ab/reference/cross-staff-beams.svg",
+  46.3555,
+  score(
+    staves: (upper: (clef: "treble"), lower: (clef: "bass")),
+    time: "2/4",
+    beams: true,
+    scale: 1.0,
+    width: 46,
+    ragged-right: false,
+    bars: (
+      (upper: "s:h", lower: "C2:s G2 @upper E4 G4 C5 G4 @lower E3 C3"),
+      (upper: "C5:e @lower G3 @upper E5 @lower C3", lower: "C2:h", barline: (right: "final")),
+    ),
+  ),
+)
+

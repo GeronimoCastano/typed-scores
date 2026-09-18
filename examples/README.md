@@ -18,11 +18,17 @@ within the package's current one-rhythmic-voice-per-staff model.
 
 The shorter Beethoven Ode to Joy and Für Elise examples remain available as
 standalone source files, but are intentionally omitted from the full-page
-showcase.
+showcase. `beethoven-moonlight-coda.typ` sets measures 178–185 of the Presto
+agitato from Op. 27 No. 2, where the right hand's arpeggios cross onto the bass
+staff; it is translated from the
+[Mutopia edition](https://www.mutopiaproject.org/ftp/BeethovenLv/O27/moonlight/)
+and exercised by the visual regression suite and the user guide.
 
 Mutopia marks the Mozart and Bach typesets as public domain. The Chopin
 transcription is distributed by Mutopia under CC BY-SA 3.0; the fixture records
-Mutopia and its 1881 Schirmer source accordingly.
+Mutopia and its 1881 Schirmer source accordingly. The Moonlight Sonata edition
+by Chris Sawer and Stewart Holmes is distributed by Mutopia under CC BY-SA 2.5,
+after Berners (1908); its fixture records that source.
 
 ## LilyPond engraving references
 

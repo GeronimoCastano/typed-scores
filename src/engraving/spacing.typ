@@ -1,5 +1,5 @@
 #import "primitives.typ": accidental-width, notehead-half-width, rest-width, stem-thickness
-#import "event-geometry.typ": _accidental-gap, _dot-gap-from-head, _dot-step, _duration-base, _grace-main-gap, _grace-note-step, _head-half-width, _min-onset-step, _stem-direction
+#import "event-geometry.typ": _accidental-gap, _dot-gap-from-head, _dot-step, _duration-base, _grace-main-gap, _grace-note-step, _head-half-width, _min-onset-step, _pitch-vertical-rank, _stem-direction
 #import "signatures.typ": _barline-clearance, _key-alters-natural, _key-suppresses-accidental
 #import "lyrics.typ": _add-lyric-spacing-demands
 
@@ -18,7 +18,7 @@
   if layout.pitches.len() < 2 { return offsets }
   let order = ()
   for (pitch-index, positioned-pitch) in layout.pitches.enumerate() {
-    order.push((index: pitch-index, pos: positioned-pitch.staff_position))
+    order.push((index: pitch-index, pos: _pitch-vertical-rank(positioned-pitch)))
   }
   let order = order.sorted(key: e => e.pos)
   let shift = 2 * (_head-half-width(layout) - stem-thickness / 2)
@@ -73,7 +73,7 @@
       entries.push((
         index: pitch-index,
         kind: kind,
-        y: positioned-pitch.staff_position / 2,
+        y: _pitch-vertical-rank(positioned-pitch) / 2,
       ))
     }
   }
@@ -149,7 +149,9 @@
   if layout.flags > 0 and not beamed {
     x += 1.1
   }
-  if layout.rest { x += rest-width(_duration-base(layout)) }
+  if layout.rest and not layout.at("spacer", default: false) {
+    x += rest-width(_duration-base(layout))
+  }
   x
 }
 
@@ -344,8 +346,8 @@
 // Place one voice's layouts at the shared onset positions.
 #let _polyphony-clash(left-layout, right-layout) = {
   if left-layout.rest or right-layout.rest { return false }
-  let left-positions = left-layout.pitches.map(pitch => pitch.staff_position)
-  let right-positions = right-layout.pitches.map(pitch => pitch.staff_position)
+  let left-positions = left-layout.pitches.map(_pitch-vertical-rank)
+  let right-positions = right-layout.pitches.map(_pitch-vertical-rank)
   let exact-unison = (
     left-layout.notehead == right-layout.notehead
       and left-positions.sorted() == right-positions.sorted()

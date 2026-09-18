@@ -15,6 +15,7 @@ features are deliberately excluded.
 | `nested-tuplets` | [Nested tuplets](https://lilypond.org/doc/v2.26/Documentation/notation/writing-rhythms) |
 | `arpeggio-directions` | [Arpeggio directions](https://lilypond.org/doc/v2.26/Documentation/notation/expressive-marks-as-lines) |
 | `single-tremolos` | [Single-note tremolo values](https://lilypond.org/doc/v2.26/Documentation/notation/short-repeats) |
+| `cross-staff-beams` | [Changing staff manually](https://lilypond.org/doc/v2.26/Documentation/notation/common-notation-for-keyboards), with automatic beams across the staves |
 
 Regenerate and verify the references with an installed LilyPond 2.26.0:
 

@@ -1,6 +1,6 @@
 #import "primitives.typ": bow-control-points, bow-height, bow-indent, bow-max-height, bow-samples, draw-bow, notehead-half-width, sampled-y-at-x, staff-y
 #import "../foundation/diagnostics.typ": _score-error
-#import "event-geometry.typ": _dot-gap-from-head, _dot-step, _head-half-width, _stem-direction
+#import "event-geometry.typ": _dot-gap-from-head, _dot-step, _event-bottom-y, _event-pitch-ys, _head-half-width, _pitch-bottom-y, _pitch-staff-index, _pitch-vertical-rank, _stem-direction
 #import "spacing.typ": _cluster-offsets
 #import "events.typ": _event-stem-geometry
 #import "markings.typ": _annotation-stem-direction, _annotation-with-prefix, _articulation-height, _articulation-stack, _event-articulations, _has-annotation, _has-turn-ornament, _ornament-scale, _simple-ornament
@@ -67,11 +67,13 @@
   let ties = ()
   if incoming and placed.len() > 0 and continuation-left-x != none {
     let item = placed.first()
+    let event-bottom-y = _event-bottom-y(item.layout, bottom-y)
     let positions = item.layout.pitches.map(p => p.staff_position)
     let direction = _stem-direction(positions)
     let sign = if direction == "up" { -1 } else { 1 }
     for pitch in item.layout.pitches {
-      let head-y = staff-y(pitch.staff_position, bottom-y: bottom-y, line-gap: line-gap)
+      let pitch-bottom-y = _pitch-bottom-y(pitch, event-bottom-y)
+      let head-y = staff-y(pitch.staff_position, bottom-y: pitch-bottom-y, line-gap: line-gap)
       let end-x = item.x - _head-half-width(item.layout) - 0.2
       if end-x - continuation-left-x < 0.8 {
         // Short post-signature fragments may enter the notehead slightly so
@@ -80,7 +82,7 @@
       }
       if end-x > continuation-left-x + 0.2 {
         let height = bow-height(end-x - continuation-left-x, 1.0, 0.333)
-        let tip-y = _tie-tip-y(head-y, sign, 0.75 * height, bottom-y)
+        let tip-y = _tie-tip-y(head-y, sign, 0.75 * height, pitch-bottom-y)
         ties.push((
           start: (continuation-left-x, tip-y),
           end: (end-x, tip-y),
@@ -93,6 +95,7 @@
   for event-index in range(placed.len()) {
     let item = placed.at(event-index)
     if item.layout.rest or not item.layout.tie_to_next { continue }
+    let event-bottom-y = _event-bottom-y(item.layout, bottom-y)
     let positions = item.layout.pitches.map(p => p.staff_position)
     let direction = _stem-direction(positions)
     let sign = if direction == "up" { -1 } else { 1 }
@@ -104,12 +107,14 @@
     // In chords the outermost ties curve away from the chord; inner ties
     // follow the stem rule.
     let chord = item.layout.pitches.len() >= 2
-    let top-pos = calc.max(..item.layout.pitches.map(p => p.staff_position))
-    let bottom-pos = calc.min(..item.layout.pitches.map(p => p.staff_position))
+    let top-rank = calc.max(..item.layout.pitches.map(_pitch-vertical-rank))
+    let bottom-rank = calc.min(..item.layout.pitches.map(_pitch-vertical-rank))
     let right-spread = calc.max(.._cluster-offsets(item.layout, direction), 0)
     for pitch in item.layout.pitches {
-      let tie-dir = if chord and pitch.staff_position == top-pos { 1 } else if chord and pitch.staff_position == bottom-pos { -1 } else { sign }
-      let head-y = staff-y(pitch.staff_position, bottom-y: bottom-y, line-gap: line-gap)
+      let rank = _pitch-vertical-rank(pitch)
+      let tie-dir = if chord and rank == top-rank { 1 } else if chord and rank == bottom-rank { -1 } else { sign }
+      let pitch-bottom-y = _pitch-bottom-y(pitch, event-bottom-y)
+      let head-y = staff-y(pitch.staff_position, bottom-y: pitch-bottom-y, line-gap: line-gap)
       let start-x = item.x + right-spread + _head-half-width(item.layout) + _tie-start-gap(item.layout)
       let end-x = if next != none {
         let next-direction = _stem-direction(next.layout.pitches.map(p => p.staff_position))
@@ -132,7 +137,7 @@
         let tip-y = if snug {
           head-y + tie-dir * 0.55
         } else {
-          _tie-tip-y(head-y, tie-dir, 0.75 * height, bottom-y)
+          _tie-tip-y(head-y, tie-dir, 0.75 * height, pitch-bottom-y)
         }
         ties.push((
           start: (start-x, tip-y),
@@ -170,6 +175,7 @@
 // outside the notehead. The stem direction follows the visible beam group,
 // not the lone note, so the attachment matches the notation that is drawn.
 #let _slur-anchor(item, placed: (), beams: false, dir: 1, bottom-y: 0, line-gap: 1.0) = {
+  let bottom-y = _event-bottom-y(item.layout, bottom-y)
   if item.layout.rest or item.layout.pitches.len() == 0 {
     none
   } else {
@@ -181,7 +187,7 @@
       line-gap: line-gap,
       direction-override: direction,
     )
-    let y-values = item.layout.pitches.map(p => staff-y(p.staff_position, bottom-y: bottom-y, line-gap: line-gap))
+    let y-values = _event-pitch-ys(item.layout, bottom-y: bottom-y, line-gap: line-gap)
     let head-edge = if dir == 1 { calc.max(..y-values) } else { calc.min(..y-values) }
     let same-side-stem = stem-geometry != none and (
       (dir == 1 and direction == "up") or (dir == -1 and direction == "down")
@@ -263,8 +269,9 @@
 #let _slur-clearance-obstacles(item, placed, bottom-y: 0, beams: false) = {
   let anchor = _slur-anchor(item, placed: placed, beams: beams, dir: 1, bottom-y: bottom-y)
   if anchor == none { return () }
+  let bottom-y = _event-bottom-y(item.layout, bottom-y)
   let points = ()
-  let y-values = item.layout.pitches.map(p => staff-y(p.staff_position, bottom-y: bottom-y))
+  let y-values = _event-pitch-ys(item.layout, bottom-y: bottom-y)
   let articulations = _event-articulations(item.layout)
 
   if articulations.len() > 0 {
@@ -349,6 +356,10 @@
   }
 }
 
+#let _layout-pitch-staves(layout) = {
+  layout.pitches.map(item => (_pitch-label(item.pitch), _pitch-staff-index(item))).sorted()
+}
+
 // A tie joins immediately adjacent events of the same written pitch set.
 // Enharmonic respellings remain available as slurs, where re-articulation is
 // semantically correct and an accidental may be shown normally.
@@ -382,14 +393,32 @@
           fix: "correct the target pitch or replace the tie with a slur",
         )
       }
+      if _layout-pitch-staves(source.layout) != _layout-pitch-staves(target.layout) {
+        _score-error(
+          staff-name + " bar " + str(source.bar),
+          "tie after " + source-pitches + " moves to another staff",
+          value: source-pitches,
+          expected: "tied notes drawn on the same staff",
+          fix: "switch the tied target to the same staff (staff switches reset at each bar) or replace the tie with a slur",
+        )
+      }
     }
   }
 }
 
 
 // LilyPond places a neutral slur below only when every encompassed non-rest
-// note column has an upward stem. One downward stem sends the slur above.
+// note column has an upward stem. One downward stem sends the slur above. A
+// slur whose notes lie on two staves arches above them, as editors do, so
+// the bow never threads the gap and the lower staff's noteheads.
 #let _automatic-slur-direction(entries, beams: false, bottom-y: 0) = {
+  let slurred-staves = ()
+  for entry in entries {
+    for positioned-pitch in entry.item.layout.pitches {
+      slurred-staves.push(_pitch-staff-index(positioned-pitch))
+    }
+  }
+  if slurred-staves.dedup().len() > 1 { return 1 }
   for entry in entries {
     let item = entry.item
     if item.layout.rest or item.layout.pitches.len() == 0 { continue }
@@ -473,6 +502,8 @@
               id: span-id,
               start: start,
               end: end,
+              start-bottom-y: if start-entry != none { _event-bottom-y(start-entry.item.layout, bottom-y) } else { bottom-y },
+              end-bottom-y: _event-bottom-y(item.layout, bottom-y),
               span: end.at(0) - start.at(0),
               dir: direction-sign,
               edge-beamed: beams and (
@@ -505,6 +536,8 @@
         id: span-id,
         start: start,
         end: (continuation-right-x, start.at(1)),
+        start-bottom-y: _event-bottom-y(opened.entry.item.layout, bottom-y),
+        end-bottom-y: _event-bottom-y(opened.entry.item.layout, bottom-y),
         span: continuation-right-x - start.at(0),
         dir: direction-sign,
         edge-beamed: beams and opened.entry.item.layout.at("beam_group", default: none) != none,
@@ -670,8 +703,8 @@
     let (sx, base-sy) = slur.start
     let (ex, base-ey) = slur.end
     if ex - sx < 0.3 { continue }
-    let base-sy = _off-staff-line(base-sy, bottom-y, dir)
-    let base-ey = _off-staff-line(base-ey, bottom-y, dir)
+    let base-sy = _off-staff-line(base-sy, slur.at("start-bottom-y", default: bottom-y), dir)
+    let base-ey = _off-staff-line(base-ey, slur.at("end-bottom-y", default: bottom-y), dir)
     let interior = obstacles.filter(o => o.x > sx + 0.3 and o.x < ex - 0.3).map(o => (
       x: o.x,
       head: if dir == 1 { o.head-top } else { o.head-bottom },

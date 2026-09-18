@@ -90,6 +90,46 @@
   if layout.notehead == "whole" { 0.844 } else { notehead-half-width }
 }
 
+// ---------------------------------------------------------------------------
+// Display staves
+// ---------------------------------------------------------------------------
+
+// A voice belongs to its home staff while each event is drawn on its display
+// staff. Once a system is stacked, placed events carry the absolute bottom
+// line of that staff; before stacking, geometry is measured against the
+// staff passed in by the caller.
+#let _event-bottom-y(layout, voice-bottom-y) = {
+  layout.at("display-bottom-y", default: voice-bottom-y)
+}
+
+// Split chords draw some pitches on the neighboring staff.
+#let _pitch-bottom-y(positioned-pitch, event-bottom-y) = {
+  positioned-pitch.at("display-bottom-y", default: event-bottom-y)
+}
+
+#let _event-pitch-ys(layout, bottom-y: 0, line-gap: 1.0) = {
+  let event-bottom-y = _event-bottom-y(layout, bottom-y)
+  layout.pitches.map(positioned-pitch => staff-y(
+    positioned-pitch.staff_position,
+    bottom-y: _pitch-bottom-y(positioned-pitch, event-bottom-y),
+    line-gap: line-gap,
+  ))
+}
+
+#let _pitch-staff-index(positioned-pitch) = positioned-pitch.at("staff_index", default: 0)
+
+#let _event-staff-index(layout) = layout.at("staff_index", default: 0)
+
+#let _is-split-chord(layout) = {
+  layout.pitches.map(_pitch-staff-index).dedup().len() > 1
+}
+
+// Orders pitches bottom to top across staves: every pitch of a higher staff
+// (smaller index) ranks above every pitch of the staff below it.
+#let _pitch-vertical-rank(positioned-pitch) = {
+  positioned-pitch.staff_position - _pitch-staff-index(positioned-pitch) * 1000
+}
+
 // Dots sit in the space above line notes.
 #let _dot-y(position, y, line-gap) = {
   if calc.rem(position, 2) == 0 { y + line-gap / 2 } else { y }

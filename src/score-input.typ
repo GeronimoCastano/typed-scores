@@ -5,6 +5,8 @@
 #import "engraving/spacing.typ": _measure-positions
 #import "engraving/markings.typ": _normalize-tempo
 #import "engraving/lyrics.typ": _layout-measure-lyrics, _normalize-measure-lyrics, _validate-lyric-continuations
+#import "engraving/event-geometry.typ": _event-staff-index, _is-split-chord
+#import "engraving/events.typ": _classify-cross-staff-beams
 
 // Public score-shape normalization and eager musical preparation.
 
@@ -158,6 +160,15 @@
         value: staff-id,
         expected: "an ID not used by notes, key, time, clef, partial, tempo, harmony, barline, ending, rehearsal, or navigation",
         fix: "rename the staff and update its field in every bar",
+      )
+    }
+    if staff-id.contains(regex("\\p{Cc}")) {
+      _score-error(
+        "staff id " + repr(staff-id),
+        "staff ID contains a control character",
+        value: staff-id,
+        expected: "printable text such as upper or lower",
+        fix: "rename the staff without tabs, line breaks, or other control characters",
       )
     }
     let staff-config = staves.at(staff-id)
@@ -433,10 +444,25 @@
         measure-index + 1,
       ),
       staff-count: staff-specs.len(),
+      staff-clefs: staff-specs.map(staff => (staff.id, current-clefs.at(staff.id))),
       voices: measure-voices,
     ))
   }
   normalized-measures
+}
+
+// A voice's forced direction always wins. Otherwise a split chord's single
+// stem rises from its lower staff through the gap, and a note drawn on
+// another staff points its stem back toward its home staff so the hand that
+// plays it stays visible.
+#let _default-stem-direction(layout, home-staff-index, forced-direction) = {
+  if forced-direction != none { return forced-direction }
+  if layout.pitches.len() == 0 { return none }
+  if _is-split-chord(layout) { return "up" }
+  let display-staff-index = _event-staff-index(layout)
+  if display-staff-index > home-staff-index { "up" }
+  else if display-staff-index < home-staff-index { "down" }
+  else { none }
 }
 
 // Parse, validate, and pre-compute shared positions for every measure.
@@ -475,7 +501,8 @@
       )
       let layout-response = _layout-sequence(
         voice.notes,
-        clef: voice.clef,
+        home-staff-id: voice.staff-id,
+        staff-clefs: normalized-measure.staff-clefs,
         time: validation-time,
         anchor: pitch-anchors.at(voice.id, default: none),
         duration-anchor: duration-anchors.at(voice.id, default: none),
@@ -497,9 +524,11 @@
         else if calc.rem(voice.layer-index, 2) == 0 { 1.0 + calc.floor(voice.layer-index / 2) }
         else { -1.0 - calc.floor(voice.layer-index / 2) }
       let event-layouts = event-layouts.map(layout => layout + (
-        stem-direction: forced-direction,
+        stem-direction: _default-stem-direction(layout, voice.staff-index, forced-direction),
+        voice-stem-direction: forced-direction,
         rest-offset: rest-offset,
       ))
+      let event-layouts = _classify-cross-staff-beams(event-layouts, beams, voice-location)
       prepared-voices.push((
         id: voice.id,
         staff-id: voice.staff-id,

@@ -243,7 +243,10 @@ before the next bar. Set `bar-numbers` to
 | `c##5:q` / `dbb5:q` | Double-sharp / double-flat quarter note |
 | `(a4 c e):h (f a c)` | Relative chord pitches and inherited duration |
 | `r:q` | Quarter rest |
+| `s:q` | Invisible spacer: takes a quarter's time, draws nothing |
 | `_` | Rest filling the remaining measure duration |
+| `c2:e g2 @upper e4 g4` | Draw the following events on staff `upper` |
+| `(c3 g3 @upper e4 c5):h` | Split chord: one stem across two staves |
 | `~` | Tie the preceding event to the next event |
 | `/` | Break the automatic beam before the next event |
 | `-` | Join the adjacent flagged events into one beam group |
@@ -326,6 +329,36 @@ to four strings. Voice 1 stems upward, voice 2 downward, and later voices
 alternate. Coincident identical noteheads merge; colliding seconds and unisons
 shift horizontally. Keep the same voice count for that staff in every bar.
 
+### Cross-staff notation
+
+A voice belongs to the staff whose field holds its text, but `@staff` draws
+the voice's following events on another staff, with that staff's clef, until
+the next switch or the end of the bar. Switches reset at every bar, so each
+bar reads on its own. A note drawn away from home points its stem back toward
+its home staff, and the voice keeps its rhythm, beams, slurs, and dynamics. A
+beam group that joins two staves becomes a kneed beam between them, and the
+staves open far enough for it. Inside a chord, `@staff` sends the remaining
+pitches to the neighboring staff under one shared stem, and an `arpeggio` on
+such a split chord spans both staves. Use the spacer `s` to fill time on a
+staff with no notes of its own.
+
+```typ
+#score(
+  staves: (upper: (clef: "treble"), lower: (clef: "bass")),
+  time: "2/4",
+  beams: true,
+  bars: (
+    (upper: "s:h", lower: "c2:s g2 @upper e4 g4 c5 g4 @lower e3 c3"),
+  ),
+)
+```
+
+Slurs follow a phrase across the staves, and one whose notes lie on two staves
+arches above them. Ties need both notes on the same staff. Accidentals hold
+per staff for every voice drawn there.
+`examples/beethoven-moonlight-coda.typ` sets the cross-staff coda of the
+"Moonlight" Sonata's finale.
+
 For multiple staves, `group: "brace"`, `"bracket"`, `"line"`, or `"none"`
 controls the system grouping symbol. The default `auto` chooses the customary
 style from the number of staves. Key changes automatically print cancellation
@@ -335,10 +368,9 @@ naturals before the new signature when required.
 
 - One to four rhythmic voices per staff are supported; each staff's voice count
   is fixed across its bars.
-- Cross-staff notation is not yet in the public DSL.
+- Cross-staff beams and split chords join two neighboring staves; stems cannot
+  be flipped by hand, and ties cannot cross staves.
 - Grace groups exclude rests, tuplets, and nested ornamental groups.
-- Arpeggio signs currently span a chord on one staff, not a cross-staff piano
-  arpeggio.
 - Pedals and hairpins do not split automatically at system breaks.
 - Dense markings or lyric verses may need `staff-gap`, `note-spacing`,
   `lyric-gap`, `verse-gap`, or `scale` adjustment.

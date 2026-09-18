@@ -1,13 +1,14 @@
 #import "@preview/cetz:0.5.2"
 #import "../foundation/diagnostics.typ": _score-error
-#import "../engraving/primitives.typ": barline-separation, draw-augmentation-dot, draw-grand-brace, draw-navigation-symbol, draw-staff-bracket, draw-staff-group-line, draw-staff-lines, music-canvas, repeat-barline-dot-separation, repeat-ending-line-thickness, staff-y, thick-barline-thickness, thin-barline-thickness
+#import "../engraving/primitives.typ": barline-separation, draw-augmentation-dot, draw-grand-brace, draw-navigation-symbol, draw-staff-bracket, draw-staff-group-line, draw-staff-lines, music-canvas, repeat-barline-dot-separation, repeat-ending-line-thickness, thick-barline-thickness, thin-barline-thickness
 #import "../engraving/signatures.typ": _draw-inline-signature, _draw-prologue, _inline-signature-note-start, _prologue-start-x
 #import "../engraving/spacing.typ": _onset-key, _place-voice-at-onsets
-#import "../engraving/events.typ": _draw-placed-sequence, _draw-tuplets, _event-stem-geometry
+#import "../engraving/event-geometry.typ": _event-pitch-ys, _event-staff-index, _pitch-staff-index
+#import "../engraving/events.typ": _beamed-stem-tips, _draw-placed-sequence, _draw-tuplets, _event-stem-geometry, _resolve-cross-staff-beams, _resolve-staff-accidentals
 #import "../engraving/markings.typ": _annotation-stem-direction, _collect-hairpins, _collect-pedal-spans, _draw-hairpins, _draw-pedal-spans, _draw-placed-annotations, _draw-tempo, _dynamics-baseline, _event-decoration-top
 #import "../engraving/ties-slurs.typ": _collect-system-slurs, _collect-ties, _draw-slur-bows, _draw-ties, _layout-slurs, _slur-clearance-obstacles
 #import "../engraving/lyrics.typ": _draw-system-lyrics, _lyric-verse-counts, _placed-lyric-items
-#import "staff-stacking.typ": _group-symbol-to-bar-gap, _staff-layouts-for-measures, _staff-stack, _system-clef-after-barline-gap, _system-repeat-start-gap
+#import "staff-stacking.typ": _group-symbol-to-bar-gap, _kneed-beam-gaps, _staff-layouts-for-measures, _staff-stack, _system-clef-after-barline-gap, _system-repeat-start-gap
 #import "system-breaking.typ": _allocate-measure-widths, _measure-prefix-in-system, _minimum-justification-scale
 
 #let _collect-ending-spans(measures) = {
@@ -199,6 +200,26 @@
   }
 }
 
+// Once the staves of a system are stacked, every event learns the absolute
+// bottom line of the staff that draws it (and of each pitch of a split chord).
+#let _attach-display-staff-baselines(placed, bottom-map) = {
+  placed.map(item => {
+    let pitches = item.layout.pitches.map(positioned-pitch => positioned-pitch + (
+      display-bottom-y: bottom-map.at(str(_pitch-staff-index(positioned-pitch))),
+    ))
+    item + (layout: item.layout + (
+      display-bottom-y: bottom-map.at(str(_event-staff-index(item.layout))),
+      pitches: pitches,
+    ))
+  })
+}
+
+#let _voice-tied-from-previous-measure(measures, measure-index, voice-index) = {
+  if measure-index == 0 { return false }
+  let previous-layouts = measures.at(measure-index - 1).voices.at(voice-index).layouts
+  previous-layouts.len() > 0 and previous-layouts.last().at("tie_to_next", default: false)
+}
+
 #let _render-score-system(
   measures,
   system,
@@ -226,6 +247,7 @@
   let stack = _staff-stack(
     staff-layouts,
     staff-gap: staff-gap,
+    required-gaps: _kneed-beam-gaps(system-measures),
     lyric-verse-counts: _lyric-verse-counts(measures, staff-count),
     lyric-size: lyric-size,
     lyric-gap: lyric-gap,
@@ -321,18 +343,33 @@
       )
     }
     measure-note-starts.push(note-start)
+    let measure-placed-voices = ()
     for voice-index in range(lane-count) {
       let voice = measure.voices.at(voice-index)
-      placed-by-voice.at(voice-index).push(
-        _place-voice-at-onsets(
-          voice.layouts,
-          measure.positions,
-          note-start,
-          scale: measure-justifications.at(measure-index),
-          voice: voice,
-          all-voices: measure.voices,
-        )
+      let placed = _place-voice-at-onsets(
+        voice.layouts,
+        measure.positions,
+        note-start,
+        scale: measure-justifications.at(measure-index),
+        voice: voice,
+        all-voices: measure.voices,
       )
+      measure-placed-voices.push(
+        _resolve-cross-staff-beams(_attach-display-staff-baselines(placed, bottom-map))
+      )
+    }
+    let global-measure-index = system.start + measure-index
+    measure-placed-voices = _resolve-staff-accidentals(
+      measure-placed-voices,
+      measure.key,
+      range(lane-count).map(voice-index => _voice-tied-from-previous-measure(
+        measures,
+        global-measure-index,
+        voice-index,
+      )),
+    )
+    for voice-index in range(lane-count) {
+      placed-by-voice.at(voice-index).push(measure-placed-voices.at(voice-index))
     }
   }
   let placed-lyrics = _placed-lyric-items(
@@ -375,9 +412,10 @@
     }
     let obstacles = ()
     for placed in placed-by-voice.at(voice-index) {
-      for item in placed {
+      let beamed-stem-tips = _beamed-stem-tips(placed, beams, bottom-y: bottom-y)
+      for (event-index, item) in placed.enumerate() {
         if item.layout.rest or item.layout.pitches.len() == 0 { continue }
-        let y-values = item.layout.pitches.map(p => staff-y(p.staff_position, bottom-y: bottom-y))
+        let y-values = _event-pitch-ys(item.layout, bottom-y: bottom-y)
         // A notehead is one staff space tall, so its ink reaches half a
         // space beyond the outermost pitch centers.
         let head-top = calc.max(..y-values) + 0.5
@@ -394,12 +432,17 @@
           bottom-y: bottom-y,
           direction-override: direction,
         )
-        let outer-top = if stem-geometry != none and stem-geometry.direction == "up" {
+        let beamed-tip = beamed-stem-tips.at(str(event-index), default: none)
+        let outer-top = if beamed-tip != none and beamed-tip.direction == "up" {
+          calc.max(beamed-tip.tip-y, head-top)
+        } else if stem-geometry != none and stem-geometry.direction == "up" {
           calc.max(stem-geometry.point.at(1), head-top)
         } else {
           head-top
         }
-        let outer-bottom = if stem-geometry != none and stem-geometry.direction == "down" {
+        let outer-bottom = if beamed-tip != none and beamed-tip.direction == "down" {
+          calc.min(beamed-tip.tip-y, head-bottom)
+        } else if stem-geometry != none and stem-geometry.direction == "down" {
           calc.min(stem-geometry.point.at(1), head-bottom)
         } else {
           head-bottom
@@ -640,18 +683,12 @@
             paint: paint,
           )
         }
-        let global-measure-index = system.start + measure-index
-        let tied-from-previous = global-measure-index > 0 and {
-          let previous-layouts = measures.at(global-measure-index - 1).voices.at(voice-index).layouts
-          previous-layouts.len() > 0 and previous-layouts.last().at("tie_to_next", default: false)
-        }
         _draw-placed-sequence(
           placed-by-voice.at(voice-index).at(measure-index),
           bottom-y: bottom-y,
           unit: unit,
           beams: beams,
           key: measure.key,
-          tied-from-previous: tied-from-previous,
           paint: paint,
         )
         _draw-tuplets(

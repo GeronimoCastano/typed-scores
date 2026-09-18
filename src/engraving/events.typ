@@ -1,6 +1,7 @@
 #import "@preview/cetz:0.5.2"
 #import "primitives.typ": beam-spacing, beam-thickness, draw-accidental, draw-arpeggio, draw-augmentation-dot, draw-beam, draw-bow, draw-filled-notehead, draw-flag, draw-ledger-lines, draw-open-notehead, draw-rest, draw-stem, draw-stem-tremolo, draw-whole-notehead, ledger-extension, rest-width, staff-y, stem-anchor-dy, stem-center-offset, stem-tip
-#import "event-geometry.typ": _accidental-gap, _alternating-tremolo-strokes, _default-stem-length, _dot-gap-from-head, _dot-step, _dot-y, _draw-dots, _duration-base, _event-notation-scale, _group-notation-scale, _head-half-width, _layout-stem-direction, _single-tremolo-strokes, _small-beam-center-step, _small-beam-thickness, _small-notation-scale, _small-stem-length, _small-stem-length-fraction, _stem-direction, _uses-small-notation
+#import "../foundation/diagnostics.typ": _score-error
+#import "event-geometry.typ": _accidental-gap, _alternating-tremolo-strokes, _default-stem-length, _dot-gap-from-head, _dot-step, _dot-y, _draw-dots, _duration-base, _event-bottom-y, _event-notation-scale, _event-pitch-ys, _event-staff-index, _group-notation-scale, _head-half-width, _is-split-chord, _layout-stem-direction, _pitch-bottom-y, _pitch-staff-index, _single-tremolo-strokes, _small-beam-center-step, _small-beam-thickness, _small-notation-scale, _small-stem-length, _small-stem-length-fraction, _stem-direction, _uses-small-notation
 #import "signatures.typ": _key-default-accidental
 #import "spacing.typ": _accidental-plan, _cluster-offsets
 
@@ -21,6 +22,8 @@
   paint: black,
 ) = {
   import cetz.draw: *
+  if layout.at("spacer", default: false) { return }
+  let bottom-y = _event-bottom-y(layout, bottom-y)
   let notation-scale = _event-notation-scale(layout)
   if layout.rest {
     let rest-bottom = bottom-y + layout.at("rest-offset", default: 0)
@@ -28,8 +31,7 @@
     let dot-x = x + (rest-width(_duration-base(layout)) + _dot-gap-from-head) * notation-scale
     _draw-dots(dot-x, rest-bottom + 2.5 * line-gap, layout.duration.dots, unit: unit, scale: notation-scale, paint: paint)
   } else {
-    let positions = layout.pitches.map(p => p.staff_position)
-    let y-values = positions.map(p => staff-y(p, bottom-y: bottom-y, line-gap: line-gap))
+    let y-values = _event-pitch-ys(layout, bottom-y: bottom-y, line-gap: line-gap)
     let direction = if stem-direction-override == none {
       _layout-stem-direction(layout)
     } else {
@@ -56,7 +58,7 @@
       draw-ledger-lines(
         head-x,
         staff-position,
-        bottom-y: bottom-y,
+        bottom-y: _pitch-bottom-y(positioned-pitch, bottom-y),
         line-gap: line-gap,
         head-half-width: head-half-width,
         left-extension: ledger-left-extension,
@@ -173,10 +175,17 @@
 #let _event-stem-geometry(layout, x, bottom-y: 0, line-gap: 1.0, direction-override: none) = {
   if layout.rest or (not layout.stem and not layout.at("alternating_tremolo", default: false)) {
     none
+  } else if layout.at("cross-staff-beam", default: none) != none {
+    let beam = layout.cross-staff-beam
+    (
+      point: (x + beam.stem-x-offset, beam.stem-tip-y),
+      direction: layout.stem-direction,
+      flags: layout.flags,
+    )
   } else {
-    let positions = layout.pitches.map(p => p.staff_position)
+    let bottom-y = _event-bottom-y(layout, bottom-y)
     let direction = if direction-override == none { _layout-stem-direction(layout) } else { direction-override }
-    let y-values = positions.map(p => staff-y(p, bottom-y: bottom-y, line-gap: line-gap))
+    let y-values = _event-pitch-ys(layout, bottom-y: bottom-y, line-gap: line-gap)
     let low-y = calc.min(..y-values)
     let high-y = calc.max(..y-values)
     let stem-start-y = if direction == "up" { low-y } else { high-y }
@@ -215,14 +224,13 @@
   if dy < 0 { -rise } else { rise }
 }
 
-#let _draw-beam-group(group, bottom-y: 0, line-gap: 1.0, unit: 8pt, key: "C", paint: black) = {
-  if group.len() == 0 { return }
-  if group.len() == 1 {
-    let item = group.first()
-    _draw-notated-event(item.layout, x: item.x, bottom-y: bottom-y, unit: unit, key: key, paint: paint)
-    return
-  }
+#let _beam-group-visible(group, beams) = {
+  beams or group.any(item => item.layout.at("grace", default: false)) or group.any(item => item.layout.at("beam_join_before", default: false))
+}
 
+// Beam line and stem geometry for a beam group drawn on one staff.
+#let _plan-beam-group(group, bottom-y: 0, line-gap: 1.0) = {
+  let bottom-y = _event-bottom-y(group.first().layout, bottom-y)
   let all-positions = ()
   for item in group {
     for pitch in item.layout.pitches {
@@ -243,7 +251,7 @@
   let beam-center-step = if is-small-group { _small-beam-center-step } else { beam-thickness + beam-spacing }
 
   let items = group.map(item => {
-    let y-values = item.layout.pitches.map(p => staff-y(p.staff_position, bottom-y: bottom-y, line-gap: line-gap))
+    let y-values = _event-pitch-ys(item.layout, bottom-y: bottom-y, line-gap: line-gap)
     (
       layout: item.layout,
       x: item.x,
@@ -296,6 +304,85 @@
     intercept += bottom-y + quant / 4 - end-y
   }
 
+  (
+    direction: direction,
+    sign: sign,
+    items: items,
+    slope: slope,
+    intercept: intercept,
+    notation-scale: notation-scale,
+    stem-length-scale: stem-length-scale,
+    beam-thickness: local-beam-thickness,
+    beam-center-step: beam-center-step,
+  )
+}
+
+// Where each stem of a visible beam group meets its beam, so slurs can
+// clear the beam instead of the unbeamed stem length.
+#let _beam-group-stem-tips(group, bottom-y: 0) = {
+  let plan = _plan-beam-group(group, bottom-y: bottom-y)
+  plan.items.map(item => (
+    direction: plan.direction,
+    tip-y: plan.slope * item.sx + plan.intercept,
+  ))
+}
+
+// Index ranges of consecutive events sharing a beam group; an unbeamed event
+// forms its own range.
+#let _placed-beam-group-ranges(placed) = {
+  let ranges = ()
+  let event-index = 0
+  while event-index < placed.len() {
+    let group-id = placed.at(event-index).layout.at("beam_group", default: none)
+    let group-end-index = event-index + 1
+    while (
+      group-id != none
+        and group-end-index < placed.len()
+        and placed.at(group-end-index).layout.at("beam_group", default: none) == group-id
+    ) {
+      group-end-index += 1
+    }
+    ranges.push((start: event-index, end: group-end-index))
+    event-index = group-end-index
+  }
+  ranges
+}
+
+// Stem tips of every drawn single-staff beam group in one measure of one
+// voice, keyed by event index.
+#let _beamed-stem-tips(placed, beams, bottom-y: 0) = {
+  let tips = (:)
+  for group-range in _placed-beam-group-ranges(placed) {
+    let group = placed.slice(group-range.start, group-range.end)
+    let is-drawn-single-staff-beam = (
+      group.len() > 1
+        and _beam-group-visible(group, beams)
+        and not group.first().layout.at("beam-crosses-staves", default: false)
+    )
+    if is-drawn-single-staff-beam {
+      for (offset, tip) in _beam-group-stem-tips(group, bottom-y: bottom-y).enumerate() {
+        tips.insert(str(group-range.start + offset), tip)
+      }
+    }
+  }
+  tips
+}
+
+#let _draw-beam-group(group, bottom-y: 0, line-gap: 1.0, unit: 8pt, key: "C", paint: black) = {
+  if group.len() == 0 { return }
+  let bottom-y = _event-bottom-y(group.first().layout, bottom-y)
+  if group.len() == 1 {
+    let item = group.first()
+    _draw-notated-event(item.layout, x: item.x, bottom-y: bottom-y, unit: unit, key: key, paint: paint)
+    return
+  }
+
+  let plan = _plan-beam-group(group, bottom-y: bottom-y, line-gap: line-gap)
+  let (direction, sign, items, slope, intercept, notation-scale, stem-length-scale) = (
+    plan.direction, plan.sign, plan.items, plan.slope, plan.intercept, plan.notation-scale, plan.stem-length-scale,
+  )
+  let local-beam-thickness = plan.beam-thickness
+  let beam-center-step = plan.beam-center-step
   let beam-y(sx) = slope * sx + intercept
 
   for item in items {
@@ -359,34 +446,332 @@
 }
 
 // Draw a placed voice, joining beam groups computed by the plugin.
-#let _resolve-measure-accidentals(placed, key, tied-from-previous: false) = {
-  let state = (:)
-  let resolved-events = ()
-  for item in placed {
-    let visible = ()
-    for pitch in item.layout.pitches {
-      let pitch-key = pitch.pitch.letter + str(pitch.pitch.octave)
-      let current = state.at(
-        pitch-key,
-        default: _key-default-accidental(pitch.pitch.letter, key),
+// ---------------------------------------------------------------------------
+// Cross-staff beam groups
+// ---------------------------------------------------------------------------
+
+// A beam group whose notes sit on two staves. When every stem follows one
+// direction (a voice's forced direction or a split chord) the beam runs
+// beside the notes like any other beam. Otherwise the beam is kneed: it lies
+// between the staves, stems of the upper staff point down to it and stems of
+// the lower staff point up to it.
+#let _beam-group-staves(group) = {
+  let staves = ()
+  for item in group {
+    for positioned-pitch in item.layout.pitches {
+      staves.push(_pitch-staff-index(positioned-pitch))
+    }
+  }
+  staves.dedup().sorted()
+}
+
+#let _kneed-beam-stem-directions(group) = {
+  let upper-staff = _beam-group-staves(group).first()
+  group.map(item => if _event-staff-index(item.layout) == upper-staff { "down" } else { "up" })
+}
+
+#let _cross-staff-beam-stem-directions(group) = {
+  let forced-direction = group.first().layout.at("voice-stem-direction", default: none)
+  if forced-direction != none {
+    group.map(_ => forced-direction)
+  } else if group.any(item => _is-split-chord(item.layout)) {
+    group.map(_ => "up")
+  } else {
+    _kneed-beam-stem-directions(group)
+  }
+}
+
+// Marks every visible beam group that spans staves so vertical spacing and
+// stems can treat it as one gesture before the system is stacked.
+#let _classify-cross-staff-beams(layouts, beams, location) = {
+  let classified = layouts
+  let group-ids = layouts.map(layout => layout.at("beam_group", default: none)).filter(id => id != none).dedup()
+  for group-id in group-ids {
+    let member-indices = range(layouts.len()).filter(index => layouts.at(index).at("beam_group", default: none) == group-id)
+    let group = member-indices.map(index => (layout: layouts.at(index)))
+    if group.len() < 2 or not _beam-group-visible(group, beams) { continue }
+    let staves = _beam-group-staves(group)
+    if staves.len() < 2 { continue }
+    if staves.last() - staves.first() > 1 {
+      _score-error(
+        location,
+        "a beam group joins notes on staves that are not adjacent",
+        value: staves.map(staff => "staff " + str(staff + 1)).join(", "),
+        expected: "beamed notes on one staff or two neighboring staves",
+        fix: "break the beam with / before the distant staff or move the notes to a neighboring staff",
       )
-      let actual = pitch.pitch.accidental
-      if tied-from-previous and resolved-events.len() == 0 {
-        visible.push(none)
-        state.insert(pitch-key, actual)
-      } else if actual == current {
-        visible.push(none)
-      } else {
-        visible.push(actual)
-        state.insert(pitch-key, actual)
+    }
+    let directions = _cross-staff-beam-stem-directions(group)
+    for (member-position, index) in member-indices.enumerate() {
+      classified.at(index) = classified.at(index) + (
+        stem-direction: directions.at(member-position),
+        beam-crosses-staves: true,
+      )
+    }
+  }
+  classified
+}
+
+#let _kneed-beam-min-stem = 2.5
+// Extra room beyond the minimum stems so a kneed beam never looks cramped.
+#let _kneed-beam-air = 1.0
+
+#let _beam-metrics(layout) = {
+  if _uses-small-notation(layout) {
+    (thickness: _small-beam-thickness, center-step: _small-beam-center-step, stem-scale: _small-stem-length-fraction)
+  } else {
+    (thickness: beam-thickness, center-step: beam-thickness + beam-spacing, stem-scale: 1.0)
+  }
+}
+
+// Vertical room a kneed beam needs between the nearest noteheads of its two
+// staves: a minimum stem on each side, measured to the primary beam's outer
+// edges, plus the secondary beams stacked beside it.
+#let _kneed-beam-clearance(metrics, max-flags) = {
+  (
+    2 * _kneed-beam-min-stem * metrics.stem-scale
+      - metrics.thickness
+      + calc.max(max-flags - 1, 0) * metrics.center-step
+      + _kneed-beam-air
+  )
+}
+
+// The distance between the bottom lines of a kneed beam's two staves that
+// lets the beam fit between their nearest noteheads, or none when the group
+// is not kneed. Head heights are measured from each note's own staff.
+#let _kneed-beam-required-gap(group-layouts) = {
+  let group = group-layouts.map(layout => (layout: layout))
+  let staves = _beam-group-staves(group)
+  let directions = group-layouts.map(layout => layout.at("stem-direction", default: none)).dedup()
+  if staves.len() < 2 or directions.len() < 2 { return none }
+  let upper-staff = staves.first()
+  let upper-heads = ()
+  let lower-heads = ()
+  for layout in group-layouts {
+    let head-ys = layout.pitches.map(positioned-pitch => staff-y(positioned-pitch.staff_position))
+    if _event-staff-index(layout) == upper-staff { upper-heads += head-ys } else { lower-heads += head-ys }
+  }
+  let max-flags = calc.max(..group-layouts.map(layout => layout.flags))
+  (
+    upper-staff: upper-staff,
+    gap: (
+      calc.max(..lower-heads) - calc.min(..upper-heads)
+        + _kneed-beam-clearance(_beam-metrics(group-layouts.first()), max-flags)
+    ),
+  )
+}
+
+#let _cross-staff-beam-items(group, directions) = {
+  range(group.len()).map(index => {
+    let item = group.at(index)
+    let direction = directions.at(index)
+    let sign = if direction == "up" { 1 } else { -1 }
+    let y-values = _event-pitch-ys(item.layout)
+    let notation-scale = _event-notation-scale(item.layout)
+    (
+      layout: item.layout,
+      x: item.x,
+      direction: direction,
+      sign: sign,
+      stem-x-offset: sign * stem-center-offset(scale: notation-scale),
+      sx: item.x + sign * stem-center-offset(scale: notation-scale),
+      base-y: if sign > 0 { calc.min(..y-values) } else { calc.max(..y-values) },
+      extreme-y: if sign > 0 { calc.max(..y-values) } else { calc.min(..y-values) },
+      flags: item.layout.flags,
+    )
+  })
+}
+
+// Primary-beam center heights at the first stem for which every stem keeps
+// `stem-length` of free stem between its notehead and the beams, given the
+// beam slope. Returns the lowest and highest admissible intercepts.
+#let _cross-staff-beam-intercept-range(items, slope, stem-length, secondary-side, metrics) = {
+  let lowest = none
+  let highest = none
+  let max-flags = calc.max(..items.map(item => item.flags))
+  for item in items {
+    let secondary-depth = if secondary-side == -item.sign { (max-flags - 1) * metrics.center-step } else { 0 }
+    let reach = stem-length * metrics.stem-scale - metrics.thickness / 2 + secondary-depth
+    let bound = item.extreme-y + item.sign * reach - slope * item.sx
+    if item.sign > 0 {
+      lowest = if lowest == none { bound } else { calc.max(lowest, bound) }
+    } else {
+      highest = if highest == none { bound } else { calc.min(highest, bound) }
+    }
+  }
+  (lowest: lowest, highest: highest)
+}
+
+#let _cross-staff-beam-slope(items) = {
+  let first = items.first()
+  let last = items.last()
+  let dx = last.sx - first.sx
+  if dx == 0 { return 0 }
+  _beam-ideal-rise(last.extreme-y - first.extreme-y) / dx
+}
+
+// Lays out one cross-staff beam group on the stacked system and records the
+// resulting stem tips on each member, so annotations and slurs attach to the
+// stems that are actually drawn.
+#let _plan-cross-staff-beam(group) = {
+  let directions = group.map(item => item.layout.stem-direction)
+  let items = _cross-staff-beam-items(group, directions)
+  let is-kneed = directions.dedup().len() > 1
+  let secondary-side = -items.first().sign
+  let metrics = _beam-metrics(group.first().layout)
+  let slope = _cross-staff-beam-slope(items)
+  let intercept = none
+  if is-kneed {
+    for candidate-slope in (slope, 0) {
+      let admissible = _cross-staff-beam-intercept-range(items, candidate-slope, _kneed-beam-min-stem, secondary-side, metrics)
+      if intercept == none and admissible.lowest <= admissible.highest {
+        slope = candidate-slope
+        intercept = (admissible.lowest + admissible.highest) / 2
       }
     }
-    resolved-events.push((
-      x: item.x,
-      layout: item.layout + (visible-accidentals: visible,),
-    ))
+    if intercept == none {
+      _score-error(
+        "cross-staff beam",
+        "the staves are too close together for a kneed beam between them",
+        fix: "increase staff-gap or remove it so the gap is computed from the notes",
+      )
+    }
+  } else {
+    let admissible = _cross-staff-beam-intercept-range(items, slope, _ideal-beamed-stem, secondary-side, metrics)
+    intercept = if items.first().sign > 0 { admissible.lowest } else { admissible.highest }
   }
-  resolved-events
+  let beam-center-y(sx) = slope * sx + intercept
+  group.zip(items).map(((item, planned)) => {
+    let reaches-secondary-beams = secondary-side == planned.sign
+    let tip-y = (
+      beam-center-y(planned.sx)
+        + planned.sign * metrics.thickness / 2
+        + if reaches-secondary-beams { secondary-side * (planned.flags - 1) * metrics.center-step } else { 0 }
+    )
+    item + (layout: item.layout + (cross-staff-beam: (
+      stem-x-offset: planned.stem-x-offset,
+      stem-tip-y: tip-y,
+      slope: slope,
+      intercept: intercept,
+      secondary-side: secondary-side,
+      thickness: metrics.thickness,
+      center-step: metrics.center-step,
+      stub-length: _beam-stub-length * metrics.stem-scale,
+    )),)
+  })
+}
+
+#let _resolve-cross-staff-beams(placed) = {
+  let resolved = placed
+  for group-range in _placed-beam-group-ranges(placed) {
+    let group = placed.slice(group-range.start, group-range.end)
+    if group.first().layout.at("beam-crosses-staves", default: false) {
+      for (offset, planned-item) in _plan-cross-staff-beam(group).enumerate() {
+        resolved.at(group-range.start + offset) = planned-item
+      }
+    }
+  }
+  resolved
+}
+
+#let _draw-cross-staff-beam-group(group, unit: 8pt, key: "C", paint: black) = {
+  let plan = group.first().layout.cross-staff-beam
+  let beam-center-y(sx) = plan.slope * sx + plan.intercept
+  for item in group {
+    let beam = item.layout.cross-staff-beam
+    let direction = item.layout.stem-direction
+    let sign = if direction == "up" { 1 } else { -1 }
+    let y-values = _event-pitch-ys(item.layout)
+    let base-y = if sign > 0 { calc.min(..y-values) } else { calc.max(..y-values) }
+    _draw-notated-event(
+      item.layout,
+      x: item.x,
+      unit: unit,
+      suppress-flags: true,
+      stem-length-override: sign * (beam.stem-tip-y - base-y) - stem-anchor-dy * _event-notation-scale(item.layout),
+      stem-direction-override: direction,
+      key: key,
+      paint: paint,
+    )
+  }
+  let items = group.map(item => (
+    sx: item.x + item.layout.cross-staff-beam.stem-x-offset,
+    flags: item.layout.flags,
+  ))
+  let level-center-y(sx, level) = beam-center-y(sx) + plan.secondary-side * level * plan.center-step
+  for item-index in range(items.len() - 1) {
+    let left-item = items.at(item-index)
+    let right-item = items.at(item-index + 1)
+    for level in range(calc.min(left-item.flags, right-item.flags)) {
+      draw-beam(
+        (left-item.sx, level-center-y(left-item.sx, level)),
+        (right-item.sx, level-center-y(right-item.sx, level)),
+        thickness: plan.thickness,
+        paint: paint,
+      )
+    }
+  }
+  for item-index in range(items.len()) {
+    let item = items.at(item-index)
+    let left = if item-index > 0 { calc.min(items.at(item-index - 1).flags, item.flags) } else { 0 }
+    let right = if item-index + 1 < items.len() { calc.min(items.at(item-index + 1).flags, item.flags) } else { 0 }
+    let covered = calc.max(left, right)
+    if item.flags > covered {
+      let stub-end-x = if item-index > 0 { item.sx - plan.stub-length } else { item.sx + plan.stub-length }
+      for level in range(covered, item.flags) {
+        draw-beam(
+          (item.sx, level-center-y(item.sx, level)),
+          (stub-end-x, level-center-y(stub-end-x, level)),
+          thickness: plan.thickness,
+          paint: paint,
+        )
+      }
+    }
+  }
+}
+
+// An accidental holds for the rest of the measure on the staff that draws
+// it, for every voice drawn on that staff, independently at each written
+// pitch. Events are read in the order they sound; a voice tied in from the
+// previous measure keeps its opening accidental without repeating it.
+#let _resolve-staff-accidentals(placed-voices, key, voices-tied-from-previous) = {
+  let reading-order = ()
+  for (voice-index, placed) in placed-voices.enumerate() {
+    for (item-index, item) in placed.enumerate() {
+      reading-order.push((x: item.x, voice-index: voice-index, item-index: item-index))
+    }
+  }
+  let reading-order = reading-order.sorted(key: entry => (entry.x, entry.voice-index))
+  let accidental-states = (:)
+  let resolved-voices = placed-voices
+  for entry in reading-order {
+    let item = placed-voices.at(entry.voice-index).at(entry.item-index)
+    let continues-tie = (
+      voices-tied-from-previous.at(entry.voice-index) and entry.item-index == 0
+    )
+    let visible = ()
+    for positioned-pitch in item.layout.pitches {
+      let pitch = positioned-pitch.pitch
+      let state-key = str(_pitch-staff-index(positioned-pitch)) + ":" + pitch.letter + str(pitch.octave)
+      let current = accidental-states.at(
+        state-key,
+        default: _key-default-accidental(pitch.letter, key),
+      )
+      if continues-tie {
+        visible.push(none)
+        accidental-states.insert(state-key, pitch.accidental)
+      } else if pitch.accidental == current {
+        visible.push(none)
+      } else {
+        visible.push(pitch.accidental)
+        accidental-states.insert(state-key, pitch.accidental)
+      }
+    }
+    resolved-voices.at(entry.voice-index).at(entry.item-index) = (
+      item + (layout: item.layout + (visible-accidentals: visible,))
+    )
+  }
+  resolved-voices
 }
 
 #let _layout-ledger-levels(layout) = {
@@ -402,7 +787,8 @@
       ()
     }
     for level in pitch-levels {
-      if level not in levels { levels.push(level) }
+      let staff-level = (_pitch-staff-index(pitch), level)
+      if staff-level not in levels { levels.push(staff-level) }
     }
   }
   levels
@@ -487,8 +873,8 @@
       }
     }
     if main != none and style in ("acciaccatura", "appoggiatura") and not main.layout.rest {
-      let grace-y = calc.min(..first.layout.pitches.map(p => staff-y(p.staff_position, bottom-y: bottom-y)))
-      let main-y = calc.min(..main.layout.pitches.map(p => staff-y(p.staff_position, bottom-y: bottom-y)))
+      let grace-y = calc.min(.._event-pitch-ys(first.layout, bottom-y: bottom-y))
+      let main-y = calc.min(.._event-pitch-ys(main.layout, bottom-y: bottom-y))
       // LilyPond leaves visible white between a grace slur's tapered tips and
       // both notehead outlines. Grace heads scale the regular half-space
       // extent; the remaining clearance is just under half a staff space.
@@ -530,20 +916,14 @@
   }
 }
 
-#let _beam-group-visible(group, beams) = {
-  beams or group.any(item => item.layout.at("grace", default: false)) or group.any(item => item.layout.at("beam_join_before", default: false))
-}
-
 #let _draw-placed-sequence(
   placed,
   bottom-y: 0,
   unit: 8pt,
   beams: false,
   key: "C",
-  tied-from-previous: false,
   paint: black,
 ) = {
-  let placed = _resolve-measure-accidentals(placed, key, tied-from-previous: tied-from-previous)
   let placed = _resolve-ledger-clearance(placed)
   let event-index = 0
   while event-index < placed.len() {
@@ -560,7 +940,9 @@
         group.push(placed.at(group-end-index))
         group-end-index += 1
       }
-      if _beam-group-visible(group, beams) {
+      if group.first().layout.at("cross-staff-beam", default: none) != none {
+        _draw-cross-staff-beam-group(group, unit: unit, key: key, paint: paint)
+      } else if _beam-group-visible(group, beams) {
         _draw-beam-group(group, bottom-y: bottom-y, unit: unit, key: key, paint: paint)
       } else {
         for member in group {
@@ -610,6 +992,11 @@
   if requested == "above" or requested == "below" {
     return requested
   }
+  let pitched = group.filter(item => item.layout.pitches.len() > 0)
+  if _beam-group-staves(pitched).len() > 1 {
+    let directions = pitched.map(item => _layout-stem-direction(item.layout)).dedup()
+    return if directions == ("down",) { "below" } else { "above" }
+  }
   let positions = ()
   for item in group {
     for pitch in item.layout.pitches {
@@ -641,9 +1028,9 @@
       let y = if above {
         let top = calc.max(..group.map(item => {
           if item.layout.rest or item.layout.pitches.len() == 0 {
-            bottom-y + 3
+            _event-bottom-y(item.layout, bottom-y) + 3
           } else {
-            let heads = item.layout.pitches.map(p => staff-y(p.staff_position, bottom-y: bottom-y))
+            let heads = _event-pitch-ys(item.layout, bottom-y: bottom-y)
             // A numeral on the notehead side must clear the head outline, not its center.
             let head-top = calc.max(..heads) + (0.5 + 0.2) * _event-notation-scale(item.layout)
             let stem = _event-stem-geometry(item.layout, item.x, bottom-y: bottom-y)
@@ -658,9 +1045,9 @@
       } else {
         let bottom = calc.min(..group.map(item => {
           if item.layout.rest or item.layout.pitches.len() == 0 {
-            bottom-y
+            _event-bottom-y(item.layout, bottom-y)
           } else {
-            let heads = item.layout.pitches.map(p => staff-y(p.staff_position, bottom-y: bottom-y))
+            let heads = _event-pitch-ys(item.layout, bottom-y: bottom-y)
             let stem = _event-stem-geometry(item.layout, item.x, bottom-y: bottom-y)
             if stem != none and stem.direction == "down" {
               calc.min(calc.min(..heads) - 0.3, stem.point.at(1))

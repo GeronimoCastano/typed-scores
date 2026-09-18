@@ -483,6 +483,10 @@ pub struct Note {
     pub duration: Duration,
     pub tie_to_next: bool,
     pub annotations: Vec<String>,
+    /// Staff that draws this chord note when a split chord places it away
+    /// from the staff of the chord's event.
+    #[serde(skip)]
+    pub split_staff: Option<usize>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -502,6 +506,10 @@ pub enum ParsedEvent {
         tie_to_next: bool,
         annotations: Vec<String>,
     },
+    /// Invisible time that keeps a staff's rhythm complete without ink.
+    Spacer {
+        duration: Duration,
+    },
 }
 
 impl ParsedEvent {
@@ -514,6 +522,7 @@ impl ParsedEvent {
                 note.tie_to_next = true;
             }
             Self::Rest(_) => return Err("tie marker '~' cannot follow a rest".to_string()),
+            Self::Spacer { .. } => return Err("tie marker '~' cannot follow a spacer".to_string()),
             Self::Chord {
                 notes, tie_to_next, ..
             } => {
@@ -534,13 +543,14 @@ impl ParsedEvent {
             Self::Note(note) => note.duration,
             Self::Rest(rest) => rest.duration,
             Self::Chord { duration, .. } => *duration,
+            Self::Spacer { duration } => *duration,
         }
     }
 
     fn tie_to_next(&self) -> bool {
         match self {
             Self::Note(note) => note.tie_to_next,
-            Self::Rest(_) => false,
+            Self::Rest(_) | Self::Spacer { .. } => false,
             Self::Chord { tie_to_next, .. } => *tie_to_next,
         }
     }
@@ -550,6 +560,151 @@ impl ParsedEvent {
             Self::Note(note) => note.annotations.clone(),
             Self::Rest(rest) => rest.annotations.clone(),
             Self::Chord { annotations, .. } => annotations.clone(),
+            Self::Spacer { .. } => Vec::new(),
+        }
+    }
+
+    fn is_silent(&self) -> bool {
+        matches!(self, Self::Rest(_) | Self::Spacer { .. })
+    }
+}
+
+/// The staves of a score in top-to-bottom order, together with the home staff
+/// that owns the voice being parsed. A voice keeps its rhythm, beams, and
+/// pitch anchors on its home staff while individual events may be drawn on
+/// another staff.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StaffContext {
+    staff_ids: Vec<String>,
+    clefs: Vec<Clef>,
+    home_staff: usize,
+}
+
+impl StaffContext {
+    pub fn single(clef: Clef) -> Self {
+        Self {
+            staff_ids: vec!["staff".to_string()],
+            clefs: vec![clef],
+            home_staff: 0,
+        }
+    }
+
+    pub fn new(staves: Vec<(String, Clef)>, home_staff_id: &str) -> Result<Self, String> {
+        let home_staff = staves
+            .iter()
+            .position(|(staff_id, _)| staff_id == home_staff_id)
+            .ok_or_else(|| format!("home staff {home_staff_id:?} is not a declared staff"))?;
+        let (staff_ids, clefs) = staves.into_iter().unzip();
+        Ok(Self {
+            staff_ids,
+            clefs,
+            home_staff,
+        })
+    }
+
+    /// Decodes `home␞id␟clef␞id␟clef…`, listing the staves top to bottom
+    /// after the home staff ID, with ␞ (U+001E) between records and ␟
+    /// (U+001F) between a staff ID and its clef.
+    fn from_request(request: &str) -> Result<Self, String> {
+        let mut records = request.split('\u{1e}');
+        let home_staff_id = records.next().unwrap_or("");
+        let staves = records
+            .map(|record| {
+                let (staff_id, clef) = record
+                    .split_once('\u{1f}')
+                    .ok_or_else(|| format!("malformed staff record {record:?}"))?;
+                Ok((staff_id.to_string(), parse_clef(clef)?))
+            })
+            .collect::<Result<Vec<_>, String>>()?;
+        Self::new(staves, home_staff_id)
+    }
+
+    fn home_clef(&self) -> Clef {
+        self.clefs[self.home_staff]
+    }
+
+    fn clef_of(&self, staff: usize) -> Clef {
+        self.clefs[staff]
+    }
+
+    fn staff_id(&self, staff: usize) -> &str {
+        &self.staff_ids[staff]
+    }
+
+    fn resolve_staff_id(&self, staff_id: &str) -> Result<usize, String> {
+        if self.staff_ids.len() == 1 && staff_id != self.staff_ids[0] {
+            return Err(format!(
+                "staff switch @{staff_id} needs a score with several staves; declare them with staves: (upper: (clef: \"treble\"), lower: (clef: \"bass\"))"
+            ));
+        }
+        self.staff_ids
+            .iter()
+            .position(|declared| declared == staff_id)
+            .ok_or_else(|| {
+                let declared = self
+                    .staff_ids
+                    .iter()
+                    .map(|declared| format!("@{declared}"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!(
+                    "staff switch @{staff_id} names an unknown staff; expected one of {declared}"
+                )
+            })
+    }
+}
+
+/// The staff that draws the next event. Every sequence starts on its home
+/// staff, and an `@staff` switch holds until the next switch.
+struct StaffCursor<'a> {
+    context: &'a StaffContext,
+    display_staff: usize,
+    switch_awaiting_event: Option<String>,
+}
+
+impl<'a> StaffCursor<'a> {
+    fn new(context: &'a StaffContext) -> Self {
+        Self {
+            context,
+            display_staff: context.home_staff,
+            switch_awaiting_event: None,
+        }
+    }
+
+    fn switch_to(&mut self, staff_id: &str) -> Result<(), String> {
+        if let Some(previous) = &self.switch_awaiting_event {
+            return Err(format!(
+                "staff switches @{previous} and @{staff_id} have no event between them; keep only the switch you intend"
+            ));
+        }
+        let target = self.context.resolve_staff_id(staff_id)?;
+        if target == self.display_staff {
+            return Err(format!(
+                "staff switch @{staff_id} does not change staff because the events here are already drawn on {staff_id}; remove it"
+            ));
+        }
+        self.display_staff = target;
+        self.switch_awaiting_event = Some(staff_id.to_string());
+        Ok(())
+    }
+
+    fn staff_for_next_event(&mut self) -> usize {
+        self.switch_awaiting_event = None;
+        self.display_staff
+    }
+
+    fn reject_switch_inside(&self, group: &str) -> Result<(), String> {
+        Err(format!(
+            "staff switches are not supported inside {group}; place the switch before the group"
+        ))
+    }
+
+    fn finish(&self) -> Result<(), String> {
+        match &self.switch_awaiting_event {
+            Some(staff_id) => Err(format!(
+                "staff switch @{staff_id} must be followed by a note, chord, rest, or spacer"
+            )),
+            None => Ok(()),
         }
     }
 }
@@ -557,6 +712,7 @@ impl ParsedEvent {
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Token {
     Event(String),
+    StaffSwitch(String),
     Grace {
         style: String,
         contents: Vec<Token>,
@@ -607,6 +763,7 @@ struct GraceMeta {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct SequencedEvent {
     event: ParsedEvent,
+    display_staff: usize,
     beam_directive: BeamDirective,
     duration_scale: Rational,
     grace: Option<GraceMeta>,
@@ -675,6 +832,7 @@ pub fn parse_event(input: &str) -> Result<ParsedEvent, String> {
             duration,
             tie_to_next: false,
             annotations,
+            split_staff: None,
         }))
     }
 }
@@ -683,25 +841,44 @@ fn parse_event_relative(
     input: &str,
     pitch_anchor: &mut Option<Pitch>,
     duration_anchor: &mut Option<Duration>,
-    clef: Clef,
+    staves: &StaffContext,
+    display_staff: usize,
 ) -> Result<ParsedEvent, String> {
     let input = input.trim();
     if input.is_empty() {
         return Err("empty event".to_string());
     }
+    let notation_before_annotations = input.split('[').next().unwrap_or(input);
+    if !input.starts_with('(') && notation_before_annotations.contains('@') {
+        return Err(
+            "a staff switch must stand alone, separated by spaces, as in \"C4 @lower E3\""
+                .to_string(),
+        );
+    }
 
     if input.starts_with('(') {
-        let chord_event =
-            parse_chord_event_relative(input, pitch_anchor.as_ref(), duration_anchor, clef)?;
+        let chord_event = parse_chord_event_relative(
+            input,
+            pitch_anchor.as_ref(),
+            duration_anchor,
+            staves,
+            display_staff,
+        )?;
         if let ParsedEvent::Chord { notes, .. } = &chord_event {
             *pitch_anchor = notes.first().map(|note| note.pitch.clone());
         }
         Ok(chord_event)
     } else if input == "r" || input.starts_with("r:") || input.starts_with("r[") {
         parse_rest_event_relative(input, duration_anchor)
+    } else if input == "s" || input.starts_with("s:") || input.starts_with("s[") {
+        parse_spacer_event_relative(input, duration_anchor)
     } else {
         let (pitch_part, tail, duration_is_explicit) = split_note_pitch_and_tail(input)?;
-        let pitch = resolve_pitch(parse_pitch_spec(pitch_part)?, pitch_anchor.as_ref(), clef);
+        let pitch = resolve_pitch(
+            parse_pitch_spec(pitch_part)?,
+            pitch_anchor.as_ref(),
+            staves.home_clef(),
+        );
         let (duration, annotations) =
             parse_duration_with_state(tail, duration_is_explicit, duration_anchor, input)?;
         *pitch_anchor = Some(pitch.clone());
@@ -710,6 +887,7 @@ fn parse_event_relative(
             duration,
             tie_to_next: false,
             annotations,
+            split_staff: None,
         }))
     }
 }
@@ -718,10 +896,17 @@ fn parse_sequence_event_relative(
     event_text: &str,
     pitch_anchor: &mut Option<Pitch>,
     duration_anchor: &mut Option<Duration>,
-    clef: Clef,
+    staves: &mut StaffCursor,
 ) -> Result<ParsedEvent, String> {
-    parse_event_relative(event_text, pitch_anchor, duration_anchor, clef)
-        .map_err(|error| format!("invalid event {event_text:?}: {error}"))
+    let display_staff = staves.staff_for_next_event();
+    parse_event_relative(
+        event_text,
+        pitch_anchor,
+        duration_anchor,
+        staves.context,
+        display_staff,
+    )
+    .map_err(|error| format!("invalid event {event_text:?}: {error}"))
 }
 
 fn split_note_pitch_and_tail(input: &str) -> Result<(&str, &str, bool), String> {
@@ -802,7 +987,8 @@ fn parse_chord_event_relative(
     input: &str,
     external_pitch_anchor: Option<&Pitch>,
     duration_anchor: &mut Option<Duration>,
-    clef: Clef,
+    staves: &StaffContext,
+    display_staff: usize,
 ) -> Result<ParsedEvent, String> {
     let closing_parenthesis = input
         .find(')')
@@ -829,11 +1015,23 @@ fn parse_chord_event_relative(
 
     let mut notes = Vec::new();
     let mut chord_pitch_anchor = external_pitch_anchor.cloned();
+    let mut split_staff: Option<usize> = None;
     for pitch_text in pitch_list.split_whitespace() {
+        if let Some(staff_id) = pitch_text.strip_prefix('@') {
+            split_staff = Some(resolve_split_chord_staff(
+                staff_id,
+                split_staff,
+                notes.len(),
+                staves,
+                display_staff,
+                input,
+            )?);
+            continue;
+        }
         let pitch = resolve_pitch(
             parse_pitch_spec(pitch_text)?,
             chord_pitch_anchor.as_ref(),
-            clef,
+            staves.home_clef(),
         );
         chord_pitch_anchor = Some(pitch.clone());
         notes.push(Note {
@@ -841,12 +1039,22 @@ fn parse_chord_event_relative(
             duration,
             tie_to_next: false,
             annotations: annotations.clone(),
+            split_staff,
         });
     }
     if notes.is_empty() {
         return Err(format!("empty chord in {input:?}"));
     }
+    if let Some(split_staff) = split_staff {
+        if notes.last().is_some_and(|note| note.split_staff.is_none()) {
+            return Err(format!(
+                "split chord {input:?} must list at least one pitch after @{}",
+                staves.staff_id(split_staff)
+            ));
+        }
+    }
     validate_chord_pitches(&notes, input)?;
+    validate_split_chord_registers(&notes, staves, display_staff, input)?;
 
     Ok(ParsedEvent::Chord {
         notes,
@@ -854,6 +1062,74 @@ fn parse_chord_event_relative(
         tie_to_next: false,
         annotations,
     })
+}
+
+/// A split chord spans two adjacent staves with one stem: the pitches before
+/// its `@staff` marker stay on the event's staff and the rest move.
+fn resolve_split_chord_staff(
+    staff_id: &str,
+    previous_split_staff: Option<usize>,
+    pitches_before_switch: usize,
+    staves: &StaffContext,
+    display_staff: usize,
+    input: &str,
+) -> Result<usize, String> {
+    if staff_id.is_empty() {
+        return Err(format!(
+            "split chord {input:?} has '@' without a staff ID; write @ followed by a declared staff"
+        ));
+    }
+    if previous_split_staff.is_some() {
+        return Err(format!(
+            "split chord {input:?} switches staff more than once; a chord may span only two staves"
+        ));
+    }
+    if pitches_before_switch == 0 {
+        return Err(format!(
+            "split chord {input:?} starts with @{staff_id}; move the switch before the chord to draw the whole chord on {staff_id}"
+        ));
+    }
+    let target = staves.resolve_staff_id(staff_id)?;
+    if target == display_staff {
+        return Err(format!(
+            "split chord {input:?} switches to @{staff_id}, which already draws this chord; remove the switch"
+        ));
+    }
+    if target.abs_diff(display_staff) != 1 {
+        return Err(format!(
+            "split chord {input:?} joins {} and {staff_id}, which are not adjacent staves; one stem can only join neighboring staves",
+            staves.staff_id(display_staff)
+        ));
+    }
+    Ok(target)
+}
+
+fn validate_split_chord_registers(
+    notes: &[Note],
+    staves: &StaffContext,
+    display_staff: usize,
+    input: &str,
+) -> Result<(), String> {
+    let Some(split_staff) = notes.iter().find_map(|note| note.split_staff) else {
+        return Ok(());
+    };
+    let staff_of = |note: &Note| note.split_staff.unwrap_or(display_staff);
+    let upper_staff = display_staff.min(split_staff);
+    let lower_staff = display_staff.max(split_staff);
+    for upper_note in notes.iter().filter(|note| staff_of(note) == upper_staff) {
+        for lower_note in notes.iter().filter(|note| staff_of(note) == lower_staff) {
+            if upper_note.pitch.diatonic_index() < lower_note.pitch.diatonic_index() {
+                return Err(format!(
+                    "split chord {input:?} places {} on staff {} below {} on staff {}; each staff must hold its own register, with the upper staff's pitches at or above the lower staff's",
+                    pitch_anchor_string(&upper_note.pitch),
+                    staves.staff_id(upper_staff),
+                    pitch_anchor_string(&lower_note.pitch),
+                    staves.staff_id(lower_staff)
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 fn build_chord_event(
@@ -869,6 +1145,7 @@ fn build_chord_event(
             duration,
             tie_to_next: false,
             annotations: annotations.clone(),
+            split_staff: None,
         });
     }
     if notes.is_empty() {
@@ -986,6 +1263,28 @@ fn parse_rest_event_relative(
         duration,
         annotations,
     }))
+}
+
+fn parse_spacer_event_relative(
+    input: &str,
+    duration_anchor: &mut Option<Duration>,
+) -> Result<ParsedEvent, String> {
+    let spacer = &input[1..];
+    if spacer.contains('[') {
+        return Err(
+            "spacer 's' draws nothing and cannot carry annotations; attach them to a note, chord, or rest"
+                .to_string(),
+        );
+    }
+    let (tail, duration_is_explicit) = if let Some(tail) = spacer.strip_prefix(':') {
+        (tail, true)
+    } else {
+        (spacer, false)
+    };
+    let (duration, _) =
+        parse_duration_with_state(tail, duration_is_explicit, duration_anchor, input)?;
+
+    Ok(ParsedEvent::Spacer { duration })
 }
 
 fn is_valid_span_id(annotation: &str, prefix: char, suffix: char) -> bool {
@@ -1111,11 +1410,14 @@ fn validate_annotation_combinations(annotations: &[String]) -> Result<(), String
 }
 
 pub fn parse_sequence(input: &str) -> Result<Vec<ParsedEvent>, String> {
-    Ok(parse_sequence_marked(input, Clef::Treble, None, None)?
-        .events
-        .into_iter()
-        .map(|item| item.event)
-        .collect())
+    let staves = StaffContext::single(Clef::Treble);
+    Ok(
+        parse_sequence_marked(input, &mut StaffCursor::new(&staves), None, None)?
+            .events
+            .into_iter()
+            .map(|item| item.event)
+            .collect(),
+    )
 }
 
 fn set_pending_beam_directive(
@@ -1136,7 +1438,7 @@ fn parse_tuplet_tokens(
     denominator: u32,
     options: TupletOptions,
     tokens: &[Token],
-    clef: Clef,
+    staves: &mut StaffCursor,
     pitch_anchor: &mut Option<Pitch>,
     duration_anchor: &mut Option<Duration>,
     scale: Rational,
@@ -1158,8 +1460,9 @@ fn parse_tuplet_tokens(
                         event_text,
                         pitch_anchor,
                         duration_anchor,
-                        clef,
+                        staves,
                     )?,
+                    display_staff: staves.display_staff,
                     beam_directive: pending_beam,
                     duration_scale: scale,
                     grace: None,
@@ -1181,7 +1484,7 @@ fn parse_tuplet_tokens(
                     *denominator,
                     options.clone(),
                     contents,
-                    clef,
+                    staves,
                     pitch_anchor,
                     duration_anchor,
                     scale,
@@ -1197,7 +1500,7 @@ fn parse_tuplet_tokens(
                 }
                 parse_cue_tokens(
                     contents,
-                    clef,
+                    staves,
                     pitch_anchor,
                     duration_anchor,
                     scale,
@@ -1220,6 +1523,7 @@ fn parse_tuplet_tokens(
                 set_pending_beam_directive(&mut pending_beam, BeamDirective::Break)?
             }
             Token::BeamJoin => set_pending_beam_directive(&mut pending_beam, BeamDirective::Join)?,
+            Token::StaffSwitch(staff_id) => staves.switch_to(&staff_id)?,
             Token::Tie => {
                 let Some(previous) = events.last_mut() else {
                     return Err("tie marker '~' cannot appear before a note or chord".to_string());
@@ -1249,7 +1553,7 @@ fn parse_tuplet_tokens(
 /// their full rhythmic value.
 fn parse_cue_tokens(
     tokens: &[Token],
-    clef: Clef,
+    staves: &mut StaffCursor,
     pitch_anchor: &mut Option<Pitch>,
     duration_anchor: &mut Option<Duration>,
     scale: Rational,
@@ -1267,8 +1571,9 @@ fn parse_cue_tokens(
                         event_text,
                         pitch_anchor,
                         duration_anchor,
-                        clef,
+                        staves,
                     )?,
+                    display_staff: staves.display_staff,
                     beam_directive: pending_beam,
                     duration_scale: scale,
                     grace: None,
@@ -1290,7 +1595,7 @@ fn parse_cue_tokens(
                     *denominator,
                     options.clone(),
                     contents,
-                    clef,
+                    staves,
                     pitch_anchor,
                     duration_anchor,
                     scale,
@@ -1320,6 +1625,7 @@ fn parse_cue_tokens(
                 set_pending_beam_directive(&mut pending_beam, BeamDirective::Break)?
             }
             Token::BeamJoin => set_pending_beam_directive(&mut pending_beam, BeamDirective::Join)?,
+            Token::StaffSwitch(staff_id) => staves.switch_to(&staff_id)?,
             Token::Tie => {
                 let Some(previous) = events.last_mut() else {
                     return Err("tie marker '~' cannot appear before a note or chord".to_string());
@@ -1348,7 +1654,7 @@ fn parse_grace_tokens(
     style: String,
     tokens: &[Token],
     group: usize,
-    clef: Clef,
+    staves: &mut StaffCursor,
     pitch_anchor: &mut Option<Pitch>,
     duration_anchor: &mut Option<Duration>,
 ) -> Result<Vec<SequencedEvent>, String> {
@@ -1362,8 +1668,9 @@ fn parse_grace_tokens(
                         event_text,
                         pitch_anchor,
                         duration_anchor,
-                        clef,
+                        staves,
                     )?,
+                    display_staff: staves.display_staff,
                     beam_directive: pending_beam,
                     duration_scale: Rational::new(0, 1),
                     grace: None,
@@ -1375,6 +1682,7 @@ fn parse_grace_tokens(
                 set_pending_beam_directive(&mut pending_beam, BeamDirective::Break)?
             }
             Token::BeamJoin => set_pending_beam_directive(&mut pending_beam, BeamDirective::Join)?,
+            Token::StaffSwitch(_) => staves.reject_switch_inside("grace groups")?,
             Token::Tie => {
                 let Some(previous) = grace_events.last_mut() else {
                     return Err("tie marker '~' cannot appear before a grace note".to_string());
@@ -1404,11 +1712,11 @@ fn parse_grace_tokens(
     if grace_events.is_empty() {
         return Err("grace group must contain at least one note or chord".to_string());
     }
-    if grace_events
-        .iter()
-        .any(|item| matches!(item.event, ParsedEvent::Rest(_)))
-    {
-        return Err("written rests are not supported inside grace groups".to_string());
+    if grace_events.iter().any(|item| item.event.is_silent()) {
+        return Err(
+            "written rests are not supported inside grace groups, and neither are spacers"
+                .to_string(),
+        );
     }
     let count = grace_events.len();
     for (index, grace_event) in grace_events.iter_mut().enumerate() {
@@ -1425,7 +1733,7 @@ fn parse_grace_tokens(
 fn parse_tremolo_tokens(
     subdivision: u32,
     tokens: &[Token],
-    clef: Clef,
+    staves: &mut StaffCursor,
     pitch_anchor: &mut Option<Pitch>,
     duration_anchor: &mut Option<Duration>,
     events: &mut Vec<SequencedEvent>,
@@ -1439,15 +1747,21 @@ fn parse_tremolo_tokens(
     for token in tokens {
         match token {
             Token::Event(event_text) => {
-                let tremolo_event =
-                    parse_sequence_event_relative(event_text, pitch_anchor, duration_anchor, clef)?;
-                if matches!(tremolo_event, ParsedEvent::Rest(_)) {
+                let tremolo_event = parse_sequence_event_relative(
+                    event_text,
+                    pitch_anchor,
+                    duration_anchor,
+                    staves,
+                )?;
+                if tremolo_event.is_silent() {
                     return Err(
-                        "alternating tremolo requires notes or chords, not rests".to_string()
+                        "alternating tremolo requires notes or chords, not rests or spacers"
+                            .to_string(),
                     );
                 }
                 events.push(SequencedEvent {
                     event: tremolo_event,
+                    display_staff: staves.display_staff,
                     beam_directive: pending_beam,
                     duration_scale: Rational::new(1, 1),
                     grace: None,
@@ -1458,6 +1772,7 @@ fn parse_tremolo_tokens(
             Token::BeamBreak | Token::BeamJoin => {
                 return Err("beam markers are not used inside alternating tremolos".to_string())
             }
+            Token::StaffSwitch(_) => staves.reject_switch_inside("alternating tremolos")?,
             Token::Tie => {
                 return Err("ties are not supported inside alternating tremolos".to_string())
             }
@@ -1498,7 +1813,7 @@ fn parse_tremolo_tokens(
 
 fn parse_sequence_marked(
     input: &str,
-    clef: Clef,
+    staves: &mut StaffCursor,
     initial_pitch_anchor: Option<Pitch>,
     initial_duration_anchor: Option<Duration>,
 ) -> Result<ParsedSequenceState, String> {
@@ -1518,8 +1833,9 @@ fn parse_sequence_marked(
                         &event_text,
                         &mut pitch_anchor,
                         &mut duration_anchor,
-                        clef,
+                        staves,
                     )?,
+                    display_staff: staves.display_staff,
                     beam_directive: pending_beam,
                     duration_scale: Rational::new(1, 1),
                     grace: None,
@@ -1542,7 +1858,7 @@ fn parse_sequence_marked(
                     style,
                     &contents,
                     group,
-                    clef,
+                    staves,
                     &mut pitch_anchor,
                     &mut duration_anchor,
                 )?);
@@ -1560,7 +1876,7 @@ fn parse_sequence_marked(
                 parse_tremolo_tokens(
                     subdivision,
                     &contents,
-                    clef,
+                    staves,
                     &mut pitch_anchor,
                     &mut duration_anchor,
                     &mut events,
@@ -1581,7 +1897,7 @@ fn parse_sequence_marked(
                     denominator,
                     options,
                     &contents,
-                    clef,
+                    staves,
                     &mut pitch_anchor,
                     &mut duration_anchor,
                     Rational::new(1, 1),
@@ -1597,7 +1913,7 @@ fn parse_sequence_marked(
                 }
                 parse_cue_tokens(
                     &contents,
-                    clef,
+                    staves,
                     &mut pitch_anchor,
                     &mut duration_anchor,
                     Rational::new(1, 1),
@@ -1614,6 +1930,7 @@ fn parse_sequence_marked(
             Token::BeamJoin => {
                 set_pending_beam_directive(&mut pending_beam, BeamDirective::Join)?;
             }
+            Token::StaffSwitch(staff_id) => staves.switch_to(&staff_id)?,
             Token::Tie => {
                 let Some(previous) = events.last_mut() else {
                     return Err("tie marker '~' cannot appear before a note or chord".to_string());
@@ -1626,6 +1943,7 @@ fn parse_sequence_marked(
     if pending_beam != BeamDirective::Auto {
         return Err("beam marker '/' or '-' cannot end a sequence".to_string());
     }
+    staves.finish()?;
     if events.last().is_some_and(|item| item.grace.is_some()) {
         return Err("grace group must be followed by a main note, chord, or rest".to_string());
     }
@@ -1679,6 +1997,7 @@ fn tokenize_sequence_with_depth(input: &str, nesting_depth: usize) -> Result<Vec
                 tokens.push(Token::Tie);
                 cursor += 1;
             }
+            '@' => tokens.push(parse_staff_switch_token(&chars, &mut cursor)?),
             '(' => {
                 let event_start = cursor;
                 cursor += 1;
@@ -1757,6 +2076,29 @@ fn tokenize_sequence_with_depth(input: &str, nesting_depth: usize) -> Result<Vec
     }
 
     Ok(tokens)
+}
+
+fn parse_staff_switch_token(chars: &[char], cursor: &mut usize) -> Result<Token, String> {
+    *cursor += 1;
+    let staff_id_start = *cursor;
+    while *cursor < chars.len()
+        && !chars[*cursor].is_whitespace()
+        && !matches!(
+            chars[*cursor],
+            '~' | '/' | '{' | '}' | '|' | '(' | ')' | '[' | ']' | '@'
+        )
+    {
+        *cursor += 1;
+    }
+    if *cursor == staff_id_start {
+        return Err(
+            "staff switch '@' must name a declared staff, as in @lower, followed by a space"
+                .to_string(),
+        );
+    }
+    Ok(Token::StaffSwitch(
+        chars[staff_id_start..*cursor].iter().collect(),
+    ))
 }
 
 fn parse_tremolo_token(
@@ -2008,17 +2350,37 @@ fn parse_sequence_with_auto_rests(
     input: &str,
     time: &str,
 ) -> Result<Vec<(ParsedEvent, BeamDirective)>, String> {
-    Ok(
-        parse_sequence_with_auto_rests_relative(input, time, Clef::Treble, None, None)?
-            .events
-            .into_iter()
-            .map(|item| (item.event, item.beam_directive))
-            .collect(),
-    )
+    Ok(parse_sequence_with_auto_rests_relative(
+        input,
+        time,
+        &mut StaffCursor::new(&StaffContext::single(Clef::Treble)),
+        None,
+        None,
+    )?
+    .events
+    .into_iter()
+    .map(|item| (item.event, item.beam_directive))
+    .collect())
+}
+
+/// One written position in a measured sequence: a parsed event, or an
+/// automatic rest whose duration is known only after the whole measure is read.
+enum MeasureSlot {
+    Event(SequencedEvent),
+    AutomaticRest { display_staff: usize },
+}
+
+impl MeasureSlot {
+    fn event(&self) -> Option<&SequencedEvent> {
+        match self {
+            Self::Event(event) => Some(event),
+            Self::AutomaticRest { .. } => None,
+        }
+    }
 }
 
 fn append_measured_group_events(
-    slots: &mut Vec<Option<SequencedEvent>>,
+    slots: &mut Vec<MeasureSlot>,
     known_total: &mut Rational,
     group_events: Vec<SequencedEvent>,
     group_tuplets: &mut [ParsedTuplet],
@@ -2033,7 +2395,7 @@ fn append_measured_group_events(
         let scaled_duration =
             duration_to_rational(item.event.duration()).checked_mul(item.duration_scale)?;
         *known_total = known_total.checked_add(scaled_duration)?;
-        slots.push(Some(item));
+        slots.push(MeasureSlot::Event(item));
     }
     Ok(())
 }
@@ -2041,13 +2403,13 @@ fn append_measured_group_events(
 fn parse_sequence_with_auto_rests_relative(
     input: &str,
     time: &str,
-    clef: Clef,
+    staves: &mut StaffCursor,
     initial_pitch_anchor: Option<Pitch>,
     initial_duration_anchor: Option<Duration>,
 ) -> Result<ParsedSequenceState, String> {
     let tokens = tokenize_sequence(input)?;
     let expected = parse_time_signature(time)?.value();
-    let mut slots: Vec<Option<SequencedEvent>> = Vec::new();
+    let mut slots: Vec<MeasureSlot> = Vec::new();
     let mut tuplets = Vec::new();
     let mut tremolos = Vec::new();
     let mut known_total = Rational::new(0, 1);
@@ -2063,12 +2425,13 @@ fn parse_sequence_with_auto_rests_relative(
                     &event_text,
                     &mut pitch_anchor,
                     &mut duration_anchor,
-                    clef,
+                    staves,
                 )?;
                 known_total =
                     known_total.checked_add(duration_to_rational(parsed_event.duration()))?;
-                slots.push(Some(SequencedEvent {
+                slots.push(MeasureSlot::Event(SequencedEvent {
                     event: parsed_event,
+                    display_staff: staves.display_staff,
                     beam_directive: pending_beam,
                     duration_scale: Rational::new(1, 1),
                     grace: None,
@@ -2084,7 +2447,7 @@ fn parse_sequence_with_auto_rests_relative(
                 }
                 let group = slots
                     .iter()
-                    .flatten()
+                    .filter_map(MeasureSlot::event)
                     .filter_map(|item| item.grace.as_ref().map(|grace| grace.group))
                     .max()
                     .map_or(0, |value| value + 1);
@@ -2092,11 +2455,11 @@ fn parse_sequence_with_auto_rests_relative(
                     style,
                     &contents,
                     group,
-                    clef,
+                    staves,
                     &mut pitch_anchor,
                     &mut duration_anchor,
                 )? {
-                    slots.push(Some(item));
+                    slots.push(MeasureSlot::Event(item));
                 }
             }
             Token::Tremolo {
@@ -2115,7 +2478,7 @@ fn parse_sequence_with_auto_rests_relative(
                 parse_tremolo_tokens(
                     subdivision,
                     &contents,
-                    clef,
+                    staves,
                     &mut pitch_anchor,
                     &mut duration_anchor,
                     &mut group_events,
@@ -2124,7 +2487,7 @@ fn parse_sequence_with_auto_rests_relative(
                 for item in group_events {
                     known_total =
                         known_total.checked_add(duration_to_rational(item.event.duration()))?;
-                    slots.push(Some(item));
+                    slots.push(MeasureSlot::Event(item));
                 }
                 for mut tremolo in group_tremolos {
                     tremolo.start += start;
@@ -2148,7 +2511,7 @@ fn parse_sequence_with_auto_rests_relative(
                     denominator,
                     options,
                     &contents,
-                    clef,
+                    staves,
                     &mut pitch_anchor,
                     &mut duration_anchor,
                     Rational::new(1, 1),
@@ -2172,7 +2535,7 @@ fn parse_sequence_with_auto_rests_relative(
                 let mut group_events = Vec::new();
                 parse_cue_tokens(
                     &contents,
-                    clef,
+                    staves,
                     &mut pitch_anchor,
                     &mut duration_anchor,
                     Rational::new(1, 1),
@@ -2193,7 +2556,9 @@ fn parse_sequence_with_auto_rests_relative(
                     );
                 }
                 auto_rest_count += 1;
-                slots.push(None);
+                slots.push(MeasureSlot::AutomaticRest {
+                    display_staff: staves.staff_for_next_event(),
+                });
             }
             Token::BeamBreak => {
                 set_pending_beam_directive(&mut pending_beam, BeamDirective::Break)?;
@@ -2201,11 +2566,12 @@ fn parse_sequence_with_auto_rests_relative(
             Token::BeamJoin => {
                 set_pending_beam_directive(&mut pending_beam, BeamDirective::Join)?;
             }
+            Token::StaffSwitch(staff_id) => staves.switch_to(&staff_id)?,
             Token::Tie => {
                 let Some(last) = slots.last_mut() else {
                     return Err("tie marker '~' cannot appear before a note or chord".to_string());
                 };
-                let Some(previous) = last else {
+                let MeasureSlot::Event(previous) = last else {
                     return Err("tie marker '~' cannot follow an automatic rest".to_string());
                 };
                 previous.event.set_tie_to_next()?;
@@ -2216,11 +2582,11 @@ fn parse_sequence_with_auto_rests_relative(
     if pending_beam != BeamDirective::Auto {
         return Err("beam marker '/' or '-' cannot end a sequence".to_string());
     }
+    staves.finish()?;
     if slots
         .iter()
         .rev()
-        .flatten()
-        .next()
+        .find_map(MeasureSlot::event)
         .is_some_and(|item| item.grace.is_some())
     {
         return Err("grace group must be followed by a main note, chord, or rest".to_string());
@@ -2241,7 +2607,13 @@ fn parse_sequence_with_auto_rests_relative(
             ));
         }
         return Ok(ParsedSequenceState {
-            events: slots.into_iter().flatten().collect(),
+            events: slots
+                .into_iter()
+                .filter_map(|slot| match slot {
+                    MeasureSlot::Event(event) => Some(event),
+                    MeasureSlot::AutomaticRest { .. } => None,
+                })
+                .collect(),
             tuplets,
             tremolos,
             pitch_anchor,
@@ -2259,8 +2631,8 @@ fn parse_sequence_with_auto_rests_relative(
     let mut expanded_events = Vec::new();
     for slot in slots {
         match slot {
-            Some(event) => expanded_events.push(event),
-            None => {
+            MeasureSlot::Event(event) => expanded_events.push(event),
+            MeasureSlot::AutomaticRest { display_staff } => {
                 let duration = generated_rest_durations.next().ok_or_else(|| {
                     "internal auto-rest expansion produced too few durations".to_string()
                 })?;
@@ -2269,6 +2641,7 @@ fn parse_sequence_with_auto_rests_relative(
                         duration,
                         annotations: Vec::new(),
                     }),
+                    display_staff,
                     beam_directive: BeamDirective::Auto,
                     duration_scale: Rational::new(1, 1),
                     grace: None,
@@ -2354,12 +2727,20 @@ fn consume_event_suffix(chars: &[char], mut cursor: usize) -> Result<usize, Stri
 pub struct PositionedPitch {
     pub pitch: Pitch,
     pub staff_position: i32,
+    /// Top-to-bottom index of the staff that draws this pitch.
+    pub staff_index: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NoteLayout {
     pub kind: String,
+    /// Clef of the staff that draws this event.
     pub clef: Clef,
+    /// Top-to-bottom index of the staff that draws this event. Split chords
+    /// record the staff of each pitch separately.
+    pub staff_index: usize,
+    /// Spacers occupy rhythmic time without drawing anything.
+    pub spacer: bool,
     pub duration: Duration,
     pub duration_value: Rational,
     /// Time elapsed before this event, as a fraction of a whole note.
@@ -2418,7 +2799,8 @@ pub struct RelativeLayoutResponse {
 
 fn layout_event(
     event: ParsedEvent,
-    clef: Clef,
+    staves: &StaffContext,
+    display_staff: usize,
     beam_directive: BeamDirective,
     onset: Rational,
     duration_scale: Rational,
@@ -2439,19 +2821,18 @@ fn layout_event(
     let stem = !matches!(duration.base, DurationBase::Whole);
     let flags = duration.base.flag_count();
 
-    let pitches = match &event {
-        ParsedEvent::Note(note) => vec![PositionedPitch {
+    let position_on_staff = |note: &Note| {
+        let staff_index = note.split_staff.unwrap_or(display_staff);
+        PositionedPitch {
             pitch: note.pitch.clone(),
-            staff_position: pitch_to_staff_position(&note.pitch, clef),
-        }],
-        ParsedEvent::Chord { notes, .. } => notes
-            .iter()
-            .map(|note| PositionedPitch {
-                pitch: note.pitch.clone(),
-                staff_position: pitch_to_staff_position(&note.pitch, clef),
-            })
-            .collect(),
-        ParsedEvent::Rest(_) => Vec::new(),
+            staff_position: pitch_to_staff_position(&note.pitch, staves.clef_of(staff_index)),
+            staff_index,
+        }
+    };
+    let pitches = match &event {
+        ParsedEvent::Note(note) => vec![position_on_staff(note)],
+        ParsedEvent::Chord { notes, .. } => notes.iter().map(position_on_staff).collect(),
+        ParsedEvent::Rest(_) | ParsedEvent::Spacer { .. } => Vec::new(),
     };
 
     let tie_to_next = event.tie_to_next();
@@ -2460,8 +2841,10 @@ fn layout_event(
         ParsedEvent::Note(_) => "note",
         ParsedEvent::Rest(_) => "rest",
         ParsedEvent::Chord { .. } => "chord",
+        ParsedEvent::Spacer { .. } => "spacer",
     }
     .to_string();
+    let is_silent = event.is_silent();
     if kind != "chord"
         && annotations
             .iter()
@@ -2481,7 +2864,7 @@ fn layout_event(
             }
         }
     }
-    if kind == "rest" {
+    if is_silent {
         let invalid_annotation = annotations.iter().find(|mark| {
             matches!(
                 mark.as_str(),
@@ -2538,9 +2921,11 @@ fn layout_event(
     };
 
     Ok(NoteLayout {
-        rest: kind == "rest",
+        rest: is_silent,
+        spacer: kind == "spacer",
         kind,
-        clef,
+        clef: staves.clef_of(display_staff),
+        staff_index: display_staff,
         duration,
         duration_value,
         onset,
@@ -2566,7 +2951,10 @@ fn layout_event(
     })
 }
 
-fn layout_events(events: Vec<SequencedEvent>, clef: Clef) -> Result<Vec<NoteLayout>, String> {
+fn layout_events(
+    events: Vec<SequencedEvent>,
+    staves: &StaffContext,
+) -> Result<Vec<NoteLayout>, String> {
     let mut onset = Rational::new(0, 1);
     let mut event_layouts = Vec::with_capacity(events.len());
     for sequenced_event in events {
@@ -2574,7 +2962,8 @@ fn layout_events(events: Vec<SequencedEvent>, clef: Clef) -> Result<Vec<NoteLayo
             .checked_mul(sequenced_event.duration_scale)?;
         event_layouts.push(layout_event(
             sequenced_event.event,
-            clef,
+            staves,
+            sequenced_event.display_staff,
             sequenced_event.beam_directive,
             onset,
             sequenced_event.duration_scale,
@@ -2716,9 +3105,11 @@ fn assign_beam_groups(layouts: &mut [NoteLayout], beat: Option<Rational>) -> Res
 }
 
 pub fn layout_note_native(input: &str, clef: Clef) -> Result<NoteLayout, String> {
+    let staves = StaffContext::single(clef);
     layout_event(
         parse_event(input)?,
-        clef,
+        &staves,
+        0,
         BeamDirective::Auto,
         Rational::new(0, 1),
         Rational::new(1, 1),
@@ -2771,21 +3162,13 @@ pub fn layout_sequence_relative_with_state_native(
     pitch_anchor: Option<&str>,
     duration_anchor: Option<&str>,
 ) -> Result<RelativeLayoutResponse, String> {
-    let parsed = parse_sequence_marked(
+    layout_staff_sequence_native(
         input,
-        clef,
-        parse_anchor(pitch_anchor)?,
-        parse_duration_anchor(duration_anchor)?,
-    )?;
-    let mut layouts = layout_events(parsed.events, clef)?;
-    assign_beam_groups(&mut layouts, None)?;
-    attach_tuplets(&mut layouts, parsed.tuplets)?;
-    attach_tremolos(&mut layouts, parsed.tremolos)?;
-    Ok(RelativeLayoutResponse {
-        layouts,
-        anchor: parsed.pitch_anchor.as_ref().map(pitch_anchor_string),
-        duration_anchor: parsed.duration_anchor.map(duration_anchor_string),
-    })
+        &StaffContext::single(clef),
+        None,
+        pitch_anchor,
+        duration_anchor,
+    )
 }
 
 pub fn layout_sequence_with_time_relative_native(
@@ -2804,16 +3187,46 @@ pub fn layout_sequence_with_time_relative_state_native(
     pitch_anchor: Option<&str>,
     duration_anchor: Option<&str>,
 ) -> Result<RelativeLayoutResponse, String> {
-    let signature = parse_time_signature(time)?;
-    let parsed = parse_sequence_with_auto_rests_relative(
+    layout_staff_sequence_native(
         input,
-        time,
-        clef,
-        parse_anchor(pitch_anchor)?,
-        parse_duration_anchor(duration_anchor)?,
-    )?;
-    let mut layouts = layout_events(parsed.events, clef)?;
-    assign_beam_groups(&mut layouts, Some(signature.beat_unit()))?;
+        &StaffContext::single(clef),
+        Some(time),
+        pitch_anchor,
+        duration_anchor,
+    )
+}
+
+/// Lay out one voice's sequence for one measure. Without a time signature,
+/// automatic rests are unavailable and beams join each run of flagged notes
+/// between rests and explicit breaks.
+pub fn layout_staff_sequence_native(
+    input: &str,
+    staves: &StaffContext,
+    time: Option<&str>,
+    pitch_anchor: Option<&str>,
+    duration_anchor: Option<&str>,
+) -> Result<RelativeLayoutResponse, String> {
+    let mut staff_cursor = StaffCursor::new(staves);
+    let pitch_anchor = parse_anchor(pitch_anchor)?;
+    let duration_anchor = parse_duration_anchor(duration_anchor)?;
+    let (parsed, beat) = match time {
+        Some(time) => (
+            parse_sequence_with_auto_rests_relative(
+                input,
+                time,
+                &mut staff_cursor,
+                pitch_anchor,
+                duration_anchor,
+            )?,
+            Some(parse_time_signature(time)?.beat_unit()),
+        ),
+        None => (
+            parse_sequence_marked(input, &mut staff_cursor, pitch_anchor, duration_anchor)?,
+            None,
+        ),
+    };
+    let mut layouts = layout_events(parsed.events, staves)?;
+    assign_beam_groups(&mut layouts, beat)?;
     attach_tuplets(&mut layouts, parsed.tuplets)?;
     attach_tremolos(&mut layouts, parsed.tremolos)?;
     Ok(RelativeLayoutResponse {
@@ -2905,42 +3318,44 @@ mod wasm_entrypoint {
         })())
     }
 
+    /// Request lines: staff context, pitch anchor, duration anchor, notes.
     #[wasm_func]
     pub fn layout_sequence_relative(input: &[u8]) -> Result<Vec<u8>, String> {
         encode_plugin_response((|| {
             let request_text = core::str::from_utf8(input)
                 .map_err(|error| format!("input is not valid UTF-8: {error}"))?;
             let mut request_lines = request_text.splitn(4, '\n');
-            let clef_text = request_lines.next().unwrap_or("treble");
+            let staves = StaffContext::from_request(request_lines.next().unwrap_or(""))?;
             let pitch_anchor = request_lines.next().filter(|value| !value.is_empty());
             let duration_anchor = request_lines.next().filter(|value| !value.is_empty());
             let sequence_text = request_lines.next().unwrap_or("");
-            let clef = parse_clef(clef_text)?;
-            layout_sequence_relative_with_state_native(
+            layout_staff_sequence_native(
                 sequence_text,
-                clef,
+                &staves,
+                None,
                 pitch_anchor,
                 duration_anchor,
             )
         })())
     }
 
+    /// Request lines: staff context, time signature, pitch anchor,
+    /// duration anchor, notes.
     #[wasm_func]
     pub fn layout_sequence_timed_relative(input: &[u8]) -> Result<Vec<u8>, String> {
         encode_plugin_response((|| {
             let request_text = core::str::from_utf8(input)
                 .map_err(|error| format!("input is not valid UTF-8: {error}"))?;
             let mut request_lines = request_text.splitn(5, '\n');
-            let clef_text = request_lines.next().unwrap_or("treble");
+            let staves = StaffContext::from_request(request_lines.next().unwrap_or(""))?;
             let time_signature = request_lines.next().unwrap_or("4/4");
             let pitch_anchor = request_lines.next().filter(|value| !value.is_empty());
             let duration_anchor = request_lines.next().filter(|value| !value.is_empty());
             let sequence_text = request_lines.next().unwrap_or("");
-            let clef = parse_clef(clef_text)?;
-            layout_sequence_with_time_relative_state_native(
+            layout_staff_sequence_native(
                 sequence_text,
-                clef,
-                time_signature,
+                &staves,
+                Some(time_signature),
                 pitch_anchor,
                 duration_anchor,
             )
@@ -3454,16 +3869,12 @@ mod tests {
                 .unwrap_err()
                 .contains("only one ornament")
         );
-        assert!(
-            layout_sequence_native("C4:q[trill mordent]", Clef::Treble)
-                .unwrap_err()
-                .contains("only one ornament")
-        );
-        assert!(
-            layout_sequence_native("C4:q[trill turn]", Clef::Treble)
-                .unwrap_err()
-                .contains("only one ornament")
-        );
+        assert!(layout_sequence_native("C4:q[trill mordent]", Clef::Treble)
+            .unwrap_err()
+            .contains("only one ornament"));
+        assert!(layout_sequence_native("C4:q[trill turn]", Clef::Treble)
+            .unwrap_err()
+            .contains("only one ornament"));
         assert!(layout_sequence_native("r:q[trill]", Clef::Treble)
             .unwrap_err()
             .contains("cannot be attached to a rest"));
@@ -3795,13 +4206,28 @@ mod tests {
             ("cue { C5:q", "unterminated cue group"),
             ("cue{ C5:q }", "braces must follow a group header"),
             ("cue { cue { C5:q } }", "cue groups cannot nest"),
-            ("cue { tuplet 3:2 { cue { C5:e D E } } }", "cue groups cannot nest"),
-            ("cue { grace { D5:e } C5:q }", "grace groups are not supported inside cue groups"),
-            ("grace { cue { D5:e } } C5:q", "cue groups are not supported inside grace groups"),
-            ("cue { tremolo 16 { C5:h G5:h } }", "alternating tremolos are not supported inside cue groups"),
+            (
+                "cue { tuplet 3:2 { cue { C5:e D E } } }",
+                "cue groups cannot nest",
+            ),
+            (
+                "cue { grace { D5:e } C5:q }",
+                "grace groups are not supported inside cue groups",
+            ),
+            (
+                "grace { cue { D5:e } } C5:q",
+                "cue groups are not supported inside grace groups",
+            ),
+            (
+                "cue { tremolo 16 { C5:h G5:h } }",
+                "alternating tremolos are not supported inside cue groups",
+            ),
             ("cue { C5:e / }", "cannot end a cue group"),
             ("C5:e / cue { D5:e }", "cannot appear before a cue group"),
-            ("cue { C5:e } - D5:e", "cannot join cue-sized and normal-sized notes"),
+            (
+                "cue { C5:e } - D5:e",
+                "cannot join cue-sized and normal-sized notes",
+            ),
         ];
         for (input, expected_error) in cases {
             let error = layout_sequence_native(input, Clef::Treble).unwrap_err();
@@ -3886,5 +4312,172 @@ mod tests {
             duration_to_rational(parsed_events[2].0.duration()),
             Rational::new(3, 8)
         );
+    }
+
+    fn piano_staves(home: &str) -> StaffContext {
+        StaffContext::new(
+            vec![
+                ("upper".to_string(), Clef::Treble),
+                ("lower".to_string(), Clef::Bass),
+            ],
+            home,
+        )
+        .unwrap()
+    }
+
+    fn layout_piano(input: &str, home: &str) -> Result<Vec<NoteLayout>, String> {
+        Ok(
+            layout_staff_sequence_native(input, &piano_staves(home), Some("2/4"), None, None)?
+                .layouts,
+        )
+    }
+
+    #[test]
+    fn staff_switches_move_events_to_the_target_clef() {
+        let layouts = layout_piano("C2:s G2 @upper E4 G4 C5:q", "lower").unwrap();
+        let staves: Vec<usize> = layouts.iter().map(|layout| layout.staff_index).collect();
+        assert_eq!(staves, vec![1, 1, 0, 0, 0]);
+        assert_eq!(
+            layouts[0].pitches[0].staff_position,
+            staff_position("C2", Clef::Bass)
+        );
+        assert_eq!(
+            layouts[2].pitches[0].staff_position,
+            staff_position("E4", Clef::Treble)
+        );
+        assert_eq!(layouts[2].clef, Clef::Treble);
+        assert_eq!(layouts[0].beam_group, layouts[3].beam_group);
+    }
+
+    #[test]
+    fn staff_switches_keep_relative_pitch_resolution_in_written_order() {
+        let layouts = layout_piano("C4:q @lower g:q", "upper").unwrap();
+        assert_eq!(layouts[1].pitches[0].pitch, parse_pitch("G3").unwrap());
+        assert_eq!(layouts[1].staff_index, 1);
+    }
+
+    #[test]
+    fn staff_switches_apply_inside_tuplets_and_to_automatic_rests() {
+        let layouts = layout_piano("tuplet 3:2 { C2:e @upper E4 G4 } _", "lower").unwrap();
+        let staves: Vec<usize> = layouts.iter().map(|layout| layout.staff_index).collect();
+        assert_eq!(staves, vec![1, 0, 0, 0]);
+        assert!(layouts[3].rest);
+    }
+
+    #[test]
+    fn staff_switches_reject_invalid_targets_and_placement() {
+        let cases = [
+            ("C4:q @middle D4:q", "unknown staff"),
+            ("C4:q @upper D4:q", "does not change staff"),
+            ("C4:q D4:q @lower", "must be followed"),
+            ("C4:q @lower @upper D4:q", "no event between them"),
+            ("C4:q @ D4:q", "must name a declared staff"),
+            ("C4:q@lower D4:q", "must stand alone"),
+            ("grace { C4:e @lower D3:e } E4:h", "inside grace groups"),
+            (
+                "tremolo 16 { C4:q @lower C3:q }",
+                "inside alternating tremolos",
+            ),
+        ];
+        for (input, expected) in cases {
+            let error = layout_piano(input, "upper").unwrap_err();
+            assert!(error.contains(expected), "{input}: {error}");
+        }
+    }
+
+    #[test]
+    fn staff_switches_in_single_staff_scores_explain_the_missing_staves() {
+        let error = layout_staff_sequence_native(
+            "C4:q @lower D4:q",
+            &StaffContext::single(Clef::Treble),
+            Some("2/4"),
+            None,
+            None,
+        )
+        .unwrap_err();
+        assert!(
+            error.contains("needs a score with several staves"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn spacers_fill_time_without_ink_or_annotations() {
+        let layouts = layout_piano("s:q C4", "upper").unwrap();
+        assert!(layouts[0].spacer);
+        assert!(layouts[0].rest);
+        assert!(layouts[0].pitches.is_empty());
+        assert_eq!(layouts[1].onset, Rational::new(1, 4));
+        let inherited = layout_piano("C4:e s D4:q", "upper").unwrap();
+        assert_eq!(inherited[1].duration.base, DurationBase::Eighth);
+        for (input, expected) in [
+            ("s:q[stacc] C4", "cannot carry annotations"),
+            ("s:q ~ C4:q", "cannot follow a spacer"),
+            ("grace { s:e } C4:h", "neither are spacers"),
+        ] {
+            let error = layout_piano(input, "upper").unwrap_err();
+            assert!(error.contains(expected), "{input}: {error}");
+        }
+    }
+
+    #[test]
+    fn split_chords_place_each_register_on_its_own_staff() {
+        let layouts = layout_piano("(C3 G3 @upper E4 C5):h", "lower").unwrap();
+        let chord = &layouts[0];
+        assert_eq!(chord.staff_index, 1);
+        let pitch_staves: Vec<usize> = chord
+            .pitches
+            .iter()
+            .map(|pitch| pitch.staff_index)
+            .collect();
+        assert_eq!(pitch_staves, vec![1, 1, 0, 0]);
+        assert_eq!(
+            chord.pitches[2].staff_position,
+            staff_position("E4", Clef::Treble)
+        );
+        assert_eq!(
+            chord.pitches[1].staff_position,
+            staff_position("G3", Clef::Bass)
+        );
+    }
+
+    #[test]
+    fn split_chords_reject_ambiguous_staff_assignments() {
+        let cases = [
+            ("(@upper C3 E4):h", "starts with @upper"),
+            ("(C3 E4 @upper):h", "at least one pitch after"),
+            ("(C3 @upper E4 @lower G4):h", "more than once"),
+            ("(C3 @lower E3):h", "already draws this chord"),
+            ("(E4 @upper C3):h", "on staff upper below"),
+            ("(C3 @ E4):h", "without a staff ID"),
+        ];
+        for (input, expected) in cases {
+            let error = layout_piano(input, "lower").unwrap_err();
+            assert!(error.contains(expected), "{input}: {error}");
+        }
+        let three_staves = StaffContext::new(
+            vec![
+                ("top".to_string(), Clef::Treble),
+                ("middle".to_string(), Clef::Treble),
+                ("bottom".to_string(), Clef::Bass),
+            ],
+            "bottom",
+        )
+        .unwrap();
+        let error =
+            layout_staff_sequence_native("(C3 @top E5):h", &three_staves, Some("2/4"), None, None)
+                .unwrap_err();
+        assert!(error.contains("not adjacent"), "{error}");
+    }
+
+    #[test]
+    fn staff_context_requests_name_the_home_staff() {
+        let staves =
+            StaffContext::from_request("lower\u{1e}upper\u{1f}treble\u{1e}lower\u{1f}bass")
+                .unwrap();
+        assert_eq!(staves.home_clef(), Clef::Bass);
+        assert_eq!(staves.resolve_staff_id("upper"), Ok(0));
+        assert!(StaffContext::from_request("x").is_err());
+        assert!(StaffContext::from_request("upper\u{1e}upper").is_err());
     }
 }

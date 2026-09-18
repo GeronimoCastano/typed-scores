@@ -1,7 +1,7 @@
 #import "@preview/cetz:0.5.2"
-#import "primitives.typ": _bravura-width, _draw-bravura-glyph, draw-accidental, draw-articulation, draw-breath-mark, draw-dynamic, draw-fermata, draw-hairpin, draw-ornament-mordent, draw-ornament-trill, draw-ornament-turn, draw-pedal-mark, dynamic-width, sampled-y-at-x, staff-y
+#import "primitives.typ": _bravura-width, _draw-bravura-glyph, draw-accidental, draw-articulation, draw-breath-mark, draw-dynamic, draw-fermata, draw-hairpin, draw-ornament-mordent, draw-ornament-trill, draw-ornament-turn, draw-pedal-mark, dynamic-width, sampled-y-at-x
 #import "../foundation/diagnostics.typ": _score-error, _validate-marking
-#import "event-geometry.typ": _head-half-width, _stem-direction
+#import "event-geometry.typ": _event-bottom-y, _event-pitch-ys, _head-half-width, _is-split-chord, _stem-direction
 #import "events.typ": _beam-group-visible, _event-stem-geometry
 
 // Tempo, event markings, and direction spanners.
@@ -139,10 +139,11 @@
 }
 
 #let _event-top(item, bottom-y: 0, line-gap: 1.0) = {
+  let bottom-y = _event-bottom-y(item.layout, bottom-y)
   if item.layout.rest or item.layout.pitches.len() == 0 {
     bottom-y + 3 * line-gap
   } else {
-    let y-values = item.layout.pitches.map(p => staff-y(p.staff_position, bottom-y: bottom-y, line-gap: line-gap))
+    let y-values = _event-pitch-ys(item.layout, bottom-y: bottom-y, line-gap: line-gap)
     let stem-geometry = _event-stem-geometry(
       item.layout,
       item.x,
@@ -158,6 +159,9 @@
 }
 
 #let _annotation-stem-direction(item, placed, beams: false, bottom-y: 0) = {
+  if item.layout.at("beam-crosses-staves", default: false) {
+    return item.layout.stem-direction
+  }
   let group-id = item.layout.at("beam_group", default: none)
   if group-id != none {
     let group = placed.filter(candidate => candidate.layout.at("beam_group", default: none) == group-id)
@@ -244,11 +248,12 @@
 }
 
 #let _event-decoration-top(item, placed, beams: false, bottom-y: 0) = {
+  let bottom-y = _event-bottom-y(item.layout, bottom-y)
   let top = _event-top(item, bottom-y: bottom-y) + 0.55
   if item.layout.rest or item.layout.pitches.len() == 0 {
     return top
   }
-  let y-values = item.layout.pitches.map(p => staff-y(p.staff_position, bottom-y: bottom-y))
+  let y-values = _event-pitch-ys(item.layout, bottom-y: bottom-y)
   let articulations = _event-articulations(item.layout)
   let articulation-above = false
   let articulation-top = none
@@ -330,7 +335,7 @@
 #let _event-ink-bottom(item, bottom-y: 0) = {
   let event-bottom = bottom-y
   if not item.layout.rest and item.layout.pitches.len() > 0 {
-    let y-values = item.layout.pitches.map(p => staff-y(p.staff_position, bottom-y: bottom-y))
+    let y-values = _event-pitch-ys(item.layout, bottom-y: bottom-y)
     event-bottom = calc.min(event-bottom, calc.min(..y-values) - 0.3)
     let stem-geometry = _event-stem-geometry(item.layout, item.x, bottom-y: bottom-y)
     if stem-geometry != none and stem-geometry.direction == "down" {
@@ -349,10 +354,15 @@
   let baseline = none
   for item in placed-flat {
     if _annotation-with-prefix(item.layout, "dyn=") != none {
-      let demand = calc.min(
-        bottom-y - 2.0,
-        _event-ink-bottom(item, bottom-y: bottom-y) - 2.05,
+      let is-drawn-on-home-staff = (
+        _event-bottom-y(item.layout, bottom-y) == bottom-y
+          and not _is-split-chord(item.layout)
       )
+      let demand = if is-drawn-on-home-staff {
+        calc.min(bottom-y - 2.0, _event-ink-bottom(item, bottom-y: bottom-y) - 2.05)
+      } else {
+        bottom-y - 2.0
+      }
       baseline = if baseline == none { demand } else { calc.min(baseline, demand) }
     }
   }
@@ -379,8 +389,10 @@
       )
     }
     if item.layout.rest { continue }
+    let voice-bottom-y = bottom-y
+    let bottom-y = _event-bottom-y(item.layout, bottom-y)
     let top = _event-top(item, bottom-y: bottom-y)
-    let y-values = item.layout.pitches.map(p => staff-y(p.staff_position, bottom-y: bottom-y))
+    let y-values = _event-pitch-ys(item.layout, bottom-y: bottom-y)
     let articulations = _event-articulations(item.layout)
     let articulation-placement = none
     let articulation-cursor = none
@@ -481,7 +493,7 @@
     let below-marking = _annotation-with-prefix(item.layout, "text-below=")
     if below-marking != none {
       content(
-        (item.x, bottom-y - 6.8),
+        (item.x, voice-bottom-y - 6.8),
         text(size: unit * 0.9, style: "italic", fill: paint, below-marking.replace("_", " ")),
         anchor: "north-west",
         padding: 0pt,

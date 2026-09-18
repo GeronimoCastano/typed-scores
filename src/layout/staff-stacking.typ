@@ -1,5 +1,7 @@
 #import "../engraving/primitives.typ": brace-width-for-span, staff-y
-#import "../engraving/event-geometry.typ": _layout-stem-direction
+#import "../foundation/diagnostics.typ": _score-error
+#import "../engraving/event-geometry.typ": _event-staff-index, _layout-stem-direction, _pitch-staff-index
+#import "../engraving/events.typ": _kneed-beam-required-gap
 #import "../engraving/markings.typ": _annotation-with-prefix, _articulation-height, _articulation-stack, _event-articulations, _has-annotation
 #import "../engraving/lyrics.typ": _lyric-lane-center, _lyric-verse-counts
 
@@ -50,20 +52,98 @@
   lane-layouts
 }
 
+// Dynamics, hairpins, pedal marks, and below-staff text belong to the voice
+// and stay under its home staff even while its notes are drawn elsewhere.
+#let _voice-direction-annotations(layout) = {
+  layout.annotations.filter(annotation => {
+    let annotation-text = str(annotation)
+    (
+      annotation-text.starts-with("dyn=")
+        or annotation-text.starts-with("text-below=")
+        or (
+          annotation-text.starts-with("h")
+            and (annotation-text.ends-with("<") or annotation-text.ends-with(">") or annotation-text.ends-with("!"))
+        )
+        or (
+          annotation-text.starts-with("p")
+            and (annotation-text.ends-with("(") or annotation-text.ends-with(")"))
+        )
+    )
+  })
+}
+
+// The ink of one event on each staff that draws part of it. Stems joining
+// two staves (kneed beams and split chords) are left out: their length
+// follows the gap between the staves instead of shaping it.
+#let _display-staff-parts(layout) = {
+  if layout.pitches.len() == 0 {
+    return ((staff-index: _event-staff-index(layout), layout: layout),)
+  }
+  let staves = layout.pitches.map(_pitch-staff-index).dedup().sorted()
+  let joins-staves = layout.at("beam-crosses-staves", default: false)
+  let stem-staff = if _layout-stem-direction(layout) == "up" { staves.first() } else { staves.last() }
+  staves.map(staff-index => (
+    staff-index: staff-index,
+    layout: layout + (
+      pitches: layout.pitches.filter(positioned-pitch => _pitch-staff-index(positioned-pitch) == staff-index),
+      stem: layout.stem and not joins-staves and staff-index == stem-staff,
+    ),
+  ))
+}
+
 #let _staff-layouts-for-measures(measures) = {
-  let staff-layouts = ()
-  for staff-index in range(measures.first().staff-count) {
-    let layouts = ()
-    for measure in measures {
-      for voice in measure.voices {
-        if voice.staff-index == staff-index {
-          layouts += voice.layouts
+  let staff-layouts = range(measures.first().staff-count).map(_ => ())
+  for measure in measures {
+    for voice in measure.voices {
+      for layout in voice.layouts {
+        let is-drawn-on-home-staff = (
+          layout.pitches.all(positioned-pitch => _pitch-staff-index(positioned-pitch) == voice.staff-index)
+            and _event-staff-index(layout) == voice.staff-index
+        )
+        if is-drawn-on-home-staff and not layout.at("beam-crosses-staves", default: false) {
+          staff-layouts.at(voice.staff-index).push(layout)
+          continue
+        }
+        let voice-directions = _voice-direction-annotations(layout)
+        let note-annotations = layout.annotations.filter(annotation => annotation not in voice-directions)
+        for part in _display-staff-parts(layout + (annotations: note-annotations)) {
+          staff-layouts.at(part.staff-index).push(part.layout)
+        }
+        if voice-directions.len() > 0 {
+          staff-layouts.at(voice.staff-index).push(layout + (
+            rest: true,
+            pitches: (),
+            annotations: voice-directions,
+          ))
         }
       }
     }
-    staff-layouts.push(layouts)
   }
   staff-layouts
+}
+
+// Minimum distances between the bottom lines of adjacent staves, keyed by
+// the upper staff's index, that keep every kneed beam clear of the notes.
+#let _kneed-beam-gaps(measures) = {
+  let required-gaps = (:)
+  for measure in measures {
+    for voice in measure.voices {
+      let group-ids = voice.layouts
+        .filter(layout => layout.at("beam-crosses-staves", default: false))
+        .map(layout => layout.beam_group)
+        .dedup()
+      for group-id in group-ids {
+        let requirement = _kneed-beam-required-gap(
+          voice.layouts.filter(layout => layout.at("beam_group", default: none) == group-id),
+        )
+        if requirement != none {
+          let key = str(requirement.upper-staff)
+          required-gaps.insert(key, calc.max(required-gaps.at(key, default: 0), requirement.gap))
+        }
+      }
+    }
+  }
+  required-gaps
 }
 
 // Estimated vertical ink span of one event relative to its staff's bottom
@@ -167,6 +247,7 @@
 #let _staff-stack(
   voice-layouts,
   staff-gap: none,
+  required-gaps: (:),
   lyric-verse-counts: (:),
   lyric-size: 0.9,
   lyric-gap: 0.8,
@@ -200,8 +281,18 @@
   if voice-count > 1 {
     for voice-index in range(voice-count - 2, -1, step: -1) {
       let extent = staff-extents.at(voice-index)
+      let required-gap = required-gaps.at(str(voice-index), default: 0)
+      if staff-gap != none and staff-gap < required-gap {
+        _score-error(
+          "score staff-gap",
+          "staff-gap is too small for a kneed beam between staff " + str(voice-index + 1) + " and staff " + str(voice-index + 2),
+          value: staff-gap,
+          expected: "at least " + str(calc.round(required-gap, digits: 2)),
+          fix: "increase staff-gap or remove it so the gap is computed from the notes",
+        )
+      }
       let gap = if staff-gap == none {
-        calc.max(7, lower-high - extent.low + 1.2)
+        calc.max(7, lower-high - extent.low + 1.2, required-gap)
       } else {
         staff-gap
       }
@@ -232,6 +323,7 @@
   let stack = _staff-stack(
     _staff-layouts-for-measures(measures),
     staff-gap: staff-gap,
+    required-gaps: _kneed-beam-gaps(measures),
     lyric-verse-counts: _lyric-verse-counts(measures, measures.first().staff-count),
     lyric-size: lyric-size,
     lyric-gap: lyric-gap,
