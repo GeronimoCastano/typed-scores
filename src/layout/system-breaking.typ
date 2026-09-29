@@ -8,6 +8,7 @@
     _prologue-start-x(
       measure.key,
       measure.time,
+      measure.at("show-time"),
       previous-key: measure.at("previous-key"),
       staff-x: staff-x,
       clef-x: clef-x,

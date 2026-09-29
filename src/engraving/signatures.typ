@@ -206,23 +206,26 @@
 // ---------------------------------------------------------------------------
 
 // Absolute x where measure content coordinate 0 begins on the first
-// measure of a system.
-#let _prologue-start-x(key, time, previous-key: none, staff-x: 0, clef-x: 0.35) = {
+// measure of a system. Every system restates its clef and key, but the time
+// signature appears only where the meter is first set or changes.
+#let _prologue-start-x(key, time, show-time, previous-key: none, staff-x: 0, clef-x: 0.35) = {
   let x = clef-x + _clef-advance
   let key-width = _key-change-width(previous-key, key)
   if key-width > 0 { x += key-width + _prologue-gap }
-  let time-width = time-signature-width(time)
+  let time-width = if show-time { time-signature-width(time) } else { 0 }
   if time-width > 0 { x += time-width + _prologue-gap }
   x + _content-lead-in
 }
 
-#let _draw-prologue(clef, key, time, previous-key: none, bottom-y: 0, unit: 8pt, staff-x: 0, clef-x: 0.35, paint: black) = {
+#let _draw-prologue(clef, key, time, show-time, previous-key: none, bottom-y: 0, unit: 8pt, staff-x: 0, clef-x: 0.35, paint: black) = {
   draw-clef(clef, clef-x, _clef-origin-y(clef, bottom-y: bottom-y), unit: unit, paint: paint)
   let x = clef-x + _clef-advance
   _draw-key-change(clef, previous-key, key, x, bottom-y: bottom-y, unit: unit, paint: paint)
   let key-width = _key-change-width(previous-key, key)
   if key-width > 0 { x += key-width + _prologue-gap }
-  draw-time-signature(time, x, bottom-y: bottom-y, unit: unit, paint: paint)
+  if show-time {
+    draw-time-signature(time, x, bottom-y: bottom-y, unit: unit, paint: paint)
+  }
 }
 
 // Mid-score key/time changes shown at the start of a measure.
