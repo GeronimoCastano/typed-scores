@@ -88,19 +88,27 @@
   time: none,
   anchor: none,
   duration-anchor: none,
+  transposition: none,
   location: "notes",
 ) = {
   let staff-context = _staff-context-request(home-staff-id, staff-clefs)
+  // repr keeps an ASCII minus sign, which str replaces with U+2212.
+  let transposition-str = if transposition == none { "" } else {
+    repr(transposition.steps) + " " + repr(transposition.semitones)
+  }
   let anchor-str = if anchor == none { "" } else { anchor }
   let duration-anchor-str = if duration-anchor == none { "" } else { duration-anchor }
   let response = if time == none {
     json(_score-plugin.layout_sequence_relative(bytes(
-      (staff-context, "\n", anchor-str, "\n", duration-anchor-str, "\n", sequence-str).join(),
+      (
+        staff-context, "\n", transposition-str, "\n", anchor-str, "\n",
+        duration-anchor-str, "\n", sequence-str,
+      ).join(),
     )))
   } else {
     json(_score-plugin.layout_sequence_timed_relative(bytes(
       (
-        staff-context, "\n", time, "\n", anchor-str, "\n",
+        staff-context, "\n", transposition-str, "\n", time, "\n", anchor-str, "\n",
         duration-anchor-str, "\n", sequence-str,
       ).join(),
     )))

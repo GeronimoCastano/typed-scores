@@ -123,6 +123,57 @@ Write each symbol as `symbol:duration`; the harmony sequence must fill the
 active bar. Symbols such as `F#7(b9)`, `Bb/D`, and `N.C.` are rendered as
 written.
 
+## Transposition and parts
+
+Type music at concert pitch and set `transpose` to draw a transposing
+instrument's written part. The value is an interval from the pitches as typed
+to the pitches as drawn, such as `M2` (B-flat clarinet or trumpet), `M6`
+(alto saxophone), `P5` (F horn), or `-P8` (piccolo). Notes, key signatures,
+and chord-symbol roots all move; relative octaves resolve as typed, before the
+interval applies.
+
+```typst
+#score(
+  key: "D",
+  time: "4/4",
+  transpose: "M6",
+  bars: (
+    (notes: "F#4:q F# G A", harmony: "D:h A7:h"),
+    (notes: "F#:q. E:e E:h", harmony: "D:h A:h"),
+  ),
+)
+```
+
+A part whose key would need more than six sharps or flats takes the
+enharmonic key instead, so concert F-sharp major for alto saxophone is written
+in E-flat major, with notes and chord symbols spelled to match.
+
+`part` extracts one staff from a multi-staff score. Keep the score's arguments
+in a dictionary, engrave the full score from it, and spread `part` into
+another `score` call for each instrumental part:
+
+```typst
+#let duet = (
+  staves: (
+    sax: (clef: "treble", label: "Alto Sax"),
+    cello: (clef: "bass", label: "Cello"),
+  ),
+  key: "D",
+  time: "4/4",
+  bars: (
+    (sax: "F#4:q F# G A", cello: "D3:w"),
+    (sax: "F#:q. E:e E:h", cello: "A2:w"),
+  ),
+)
+
+#score(..duet)                                // concert score
+#score(..part(duet, "sax"), transpose: "M6")  // alto sax part
+```
+
+The part keeps its staff's clef changes and lyrics plus every bar's key,
+meter, tempo, harmony, barlines, endings, and marks; `staff-gap` and `group`
+are dropped.
+
 ## Lyrics
 
 Add `lyrics` beside a bar's notes. Syllables align to the main pitched events

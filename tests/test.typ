@@ -1,4 +1,4 @@
-#import "../src/lib.typ": score, bar
+#import "../src/lib.typ": score, bar, part
 #import "../examples/chopin-opening.typ": chopin-opening
 #import "../examples/mozart-eine-kleine-nachtmusik.typ": mozart-k525-opening
 #import "../examples/bach-cello-suite-prelude.typ": bach-bwv1007-opening
@@ -1703,6 +1703,60 @@ staff and back up, with triplets, cross-staff slurs, and kneed sextuplet
 beams, all written directly in the notation language.
 
 #moonlight-coda()
+
+#pagebreak()
+
+== Transposition and part extraction
+
+The duet is written at concert pitch. Its alto saxophone part moves up a major
+sixth: concert F-sharp major would need nine sharps, so the part is written in
+E-flat major and its notes and chord symbols are spelled to match. The later
+change to G-flat needs no new signature. The cello part keeps its clef change
+and lyrics-free staff, and drops the ensemble bracket and staff gap.
+
+#let concert-duet = (
+  staves: (
+    sax: (clef: "treble", label: "Alto Sax"),
+    cello: (clef: "bass", label: "Cello"),
+  ),
+  key: "F#",
+  time: "4/4",
+  staff-gap: 9,
+  group: "bracket",
+  bars: (
+    (
+      sax: "F#4:q G# A# B",
+      cello: "F#2:w",
+      harmony: "F#:h C#7/E#:h",
+      lyrics: (sax: "la la la la"),
+    ),
+    (sax: "C#5:h A#4", cello: "C#3:w", clef: (cello: "tenor"), harmony: "D#m:h N.C.:h"),
+    (key: "Gb", sax: "Gb4:q Ab Bb Cb", cello: "Db4:w", barline: (right: "final")),
+  ),
+)
+
+#score(..concert-duet)
+
+#v(1em)
+
+#score(..part(concert-duet, "sax"), transpose: "M6")
+
+#v(1em)
+
+#score(..part(concert-duet, "cello"))
+
+#v(1em)
+
+Relative octaves resolve as typed, before the interval applies: B4 to C is a
+step up, so a tenor saxophone part a major ninth above concert pitch still
+steps up from C-sharp 6 to D 6.
+
+#score(
+  key: "D",
+  time: "3/4",
+  transpose: "M9",
+  bars: ((notes: "B4:h C:q"), (notes: "D:h. ", barline: (right: "final"))),
+)
 
 #pagebreak()
 

@@ -1,6 +1,7 @@
 #import "foundation/diagnostics.typ": _nonnegative-number, _positive-number, _score-error, _validate-marking, _validate-system-gap
 #import "engraving/signatures.typ": _validate-clef, _validate-key
 #import "foundation/meter.typ": _parse-time-rational
+#import "foundation/transposition.typ": _parse-transposition
 #import "engraving/markings.typ": _normalize-tempo, _validate-staff-direction-spans
 #import "engraving/ties-slurs.typ": _validate-staff-slurs, _validate-staff-ties
 #import "score-input.typ": _prepare-score-measures
@@ -31,6 +32,7 @@
   bars: (),
   key: "C",
   time: "4/4",
+  transpose: none,
   theme: "auto",
   tempo: none,
   composer: none,
@@ -56,6 +58,7 @@
   let _ = _validate-clef(clef, "score clef")
   let _ = _validate-key(key, "score key")
   let _ = _parse-time-rational(time, label: "score time")
+  let transposition = _parse-transposition(transpose, "score transpose")
   let theme = _validate-theme(theme)
   let _ = _normalize-tempo(tempo, "score tempo")
   let _ = _validate-marking(composer, "score composer")
@@ -204,6 +207,7 @@
       beams: beams,
       lyric-size: lyric-size,
       lyric-font: lyric-font,
+      transposition: transposition,
     )
     let lane-count = measures.first().voices.len()
     let staff-count = measures.first().staff-count

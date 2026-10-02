@@ -1,7 +1,8 @@
 #import "../src/lib.typ": score
 
-// Four-bar opening phrase of Beethoven's D-major "Ode to Joy" theme,
-// transposed a major sixth upward to written pitch for E-flat alto saxophone.
+// Four-bar opening phrase of Beethoven's D-major "Ode to Joy" theme, typed at
+// concert pitch and transposed a major sixth upward to written pitch for
+// E-flat alto saxophone.
 #let ode-to-joy-alto-sax(
   scale: 0.82,
   note-spacing: 3.8,
@@ -11,13 +12,14 @@
 ) = score(
   clef: "treble",
   bars: (
-    (notes: "D#5:q[dyn=p] D#5:q E5:q F#5:q"),
-    (notes: "F#5:q E5:q D#5:q C#5:q"),
-    (notes: "B4:q B4:q C#5:q D#5:q"),
-    (notes: "D#5:q. C#5:e C#5:h"),
+    (notes: "F#4:q[dyn=p] F# G A"),
+    (notes: "A G F# E"),
+    (notes: "D D E F#"),
+    (notes: "F#:q. E:e E:h"),
   ),
-  key: "B",
+  key: "D",
   time: "4/4",
+  transpose: "M6",
   tempo: [Allegro assai],
   composer: composer,
   scale: scale,

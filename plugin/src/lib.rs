@@ -37,6 +37,31 @@ impl Letter {
             Self::B => 6,
         }
     }
+
+    fn from_diatonic_index(index: i32) -> Self {
+        match index.rem_euclid(7) {
+            0 => Self::C,
+            1 => Self::D,
+            2 => Self::E,
+            3 => Self::F,
+            4 => Self::G,
+            5 => Self::A,
+            _ => Self::B,
+        }
+    }
+
+    /// Semitones above C of the unaltered letter.
+    fn natural_semitone(self) -> i32 {
+        match self {
+            Self::C => 0,
+            Self::D => 2,
+            Self::E => 4,
+            Self::F => 5,
+            Self::G => 7,
+            Self::A => 9,
+            Self::B => 11,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -46,6 +71,29 @@ pub enum Accidental {
     Flat,
     DoubleSharp,
     DoubleFlat,
+}
+
+impl Accidental {
+    fn alteration(self) -> i32 {
+        match self {
+            Self::Natural => 0,
+            Self::Sharp => 1,
+            Self::Flat => -1,
+            Self::DoubleSharp => 2,
+            Self::DoubleFlat => -2,
+        }
+    }
+
+    fn from_alteration(alteration: i32) -> Option<Self> {
+        match alteration {
+            0 => Some(Self::Natural),
+            1 => Some(Self::Sharp),
+            -1 => Some(Self::Flat),
+            2 => Some(Self::DoubleSharp),
+            -2 => Some(Self::DoubleFlat),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -58,6 +106,73 @@ pub struct Pitch {
 impl Pitch {
     fn diatonic_index(&self) -> i32 {
         self.octave * 7 + self.letter.diatonic_index()
+    }
+
+    fn semitone(&self) -> i32 {
+        self.octave * 12 + self.letter.natural_semitone() + self.accidental.alteration()
+    }
+
+    /// Moves the pitch by the interval, keeping the interval's letter
+    /// distance. A result that would need a triple accidental is respelled on
+    /// the nearest letter that a double accidental can reach.
+    fn transposed(&self, transposition: Transposition) -> Result<Pitch, String> {
+        let target_semitone = self.semitone() + transposition.semitones;
+        let mut diatonic_index = self.diatonic_index() + transposition.steps;
+        loop {
+            let octave = diatonic_index.div_euclid(7);
+            let letter = Letter::from_diatonic_index(diatonic_index);
+            let alteration = target_semitone - (octave * 12 + letter.natural_semitone());
+            if alteration > 2 {
+                diatonic_index += 1;
+            } else if alteration < -2 {
+                diatonic_index -= 1;
+            } else {
+                if !(-1..=9).contains(&octave) {
+                    return Err(format!(
+                        "transposition moves {} to octave {octave}, outside the supported range -1 through 9; write the passage in a different octave or choose a smaller interval",
+                        pitch_anchor_string(self)
+                    ));
+                }
+                let accidental = Accidental::from_alteration(alteration)
+                    .expect("alteration is within a double accidental");
+                return Ok(Pitch {
+                    letter,
+                    accidental,
+                    octave,
+                });
+            }
+        }
+    }
+}
+
+/// A signed interval applied to every resolved pitch: `steps` counts letter
+/// names and `semitones` the sounding distance, so M6 up is (5, 9).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Transposition {
+    pub steps: i32,
+    pub semitones: i32,
+}
+
+impl Transposition {
+    /// Parses the request form `steps semitones`, or an empty line for none.
+    fn from_request(request: &str) -> Result<Option<Self>, String> {
+        let request = request.trim();
+        if request.is_empty() {
+            return Ok(None);
+        }
+        let parts: Vec<&str> = request.split(' ').collect();
+        let [steps, semitones] = parts.as_slice() else {
+            return Err(format!("malformed transposition request {request:?}"));
+        };
+        let parse = |value: &str| {
+            value
+                .parse::<i32>()
+                .map_err(|_| format!("malformed transposition request {request:?}"))
+        };
+        Ok(Some(Self {
+            steps: parse(steps)?,
+            semitones: parse(semitones)?,
+        }))
     }
 }
 
@@ -566,6 +681,19 @@ impl ParsedEvent {
 
     fn is_silent(&self) -> bool {
         matches!(self, Self::Rest(_) | Self::Spacer { .. })
+    }
+
+    fn transpose(&mut self, transposition: Transposition) -> Result<(), String> {
+        match self {
+            Self::Note(note) => note.pitch = note.pitch.transposed(transposition)?,
+            Self::Chord { notes, .. } => {
+                for note in notes {
+                    note.pitch = note.pitch.transposed(transposition)?;
+                }
+            }
+            Self::Rest(_) | Self::Spacer { .. } => {}
+        }
+        Ok(())
     }
 }
 
@@ -3206,6 +3334,27 @@ pub fn layout_staff_sequence_native(
     pitch_anchor: Option<&str>,
     duration_anchor: Option<&str>,
 ) -> Result<RelativeLayoutResponse, String> {
+    layout_transposed_staff_sequence_native(
+        input,
+        staves,
+        time,
+        pitch_anchor,
+        duration_anchor,
+        None,
+    )
+}
+
+/// Like `layout_staff_sequence_native`, but draws every pitch moved by the
+/// transposition. Relative octaves resolve against the pitches as written, so
+/// the returned pitch anchor stays in the written key for the next measure.
+pub fn layout_transposed_staff_sequence_native(
+    input: &str,
+    staves: &StaffContext,
+    time: Option<&str>,
+    pitch_anchor: Option<&str>,
+    duration_anchor: Option<&str>,
+    transposition: Option<Transposition>,
+) -> Result<RelativeLayoutResponse, String> {
     let mut staff_cursor = StaffCursor::new(staves);
     let pitch_anchor = parse_anchor(pitch_anchor)?;
     let duration_anchor = parse_duration_anchor(duration_anchor)?;
@@ -3225,7 +3374,13 @@ pub fn layout_staff_sequence_native(
             None,
         ),
     };
-    let mut layouts = layout_events(parsed.events, staves)?;
+    let mut events = parsed.events;
+    if let Some(transposition) = transposition {
+        for item in &mut events {
+            item.event.transpose(transposition)?;
+        }
+    }
+    let mut layouts = layout_events(events, staves)?;
     assign_beam_groups(&mut layouts, beat)?;
     attach_tuplets(&mut layouts, parsed.tuplets)?;
     attach_tremolos(&mut layouts, parsed.tremolos)?;
@@ -3318,46 +3473,51 @@ mod wasm_entrypoint {
         })())
     }
 
-    /// Request lines: staff context, pitch anchor, duration anchor, notes.
+    /// Request lines: staff context, transposition, pitch anchor, duration
+    /// anchor, notes.
     #[wasm_func]
     pub fn layout_sequence_relative(input: &[u8]) -> Result<Vec<u8>, String> {
         encode_plugin_response((|| {
             let request_text = core::str::from_utf8(input)
                 .map_err(|error| format!("input is not valid UTF-8: {error}"))?;
-            let mut request_lines = request_text.splitn(4, '\n');
+            let mut request_lines = request_text.splitn(5, '\n');
             let staves = StaffContext::from_request(request_lines.next().unwrap_or(""))?;
+            let transposition = Transposition::from_request(request_lines.next().unwrap_or(""))?;
             let pitch_anchor = request_lines.next().filter(|value| !value.is_empty());
             let duration_anchor = request_lines.next().filter(|value| !value.is_empty());
             let sequence_text = request_lines.next().unwrap_or("");
-            layout_staff_sequence_native(
+            layout_transposed_staff_sequence_native(
                 sequence_text,
                 &staves,
                 None,
                 pitch_anchor,
                 duration_anchor,
+                transposition,
             )
         })())
     }
 
-    /// Request lines: staff context, time signature, pitch anchor,
-    /// duration anchor, notes.
+    /// Request lines: staff context, transposition, time signature, pitch
+    /// anchor, duration anchor, notes.
     #[wasm_func]
     pub fn layout_sequence_timed_relative(input: &[u8]) -> Result<Vec<u8>, String> {
         encode_plugin_response((|| {
             let request_text = core::str::from_utf8(input)
                 .map_err(|error| format!("input is not valid UTF-8: {error}"))?;
-            let mut request_lines = request_text.splitn(5, '\n');
+            let mut request_lines = request_text.splitn(6, '\n');
             let staves = StaffContext::from_request(request_lines.next().unwrap_or(""))?;
+            let transposition = Transposition::from_request(request_lines.next().unwrap_or(""))?;
             let time_signature = request_lines.next().unwrap_or("4/4");
             let pitch_anchor = request_lines.next().filter(|value| !value.is_empty());
             let duration_anchor = request_lines.next().filter(|value| !value.is_empty());
             let sequence_text = request_lines.next().unwrap_or("");
-            layout_staff_sequence_native(
+            layout_transposed_staff_sequence_native(
                 sequence_text,
                 &staves,
                 Some(time_signature),
                 pitch_anchor,
                 duration_anchor,
+                transposition,
             )
         })())
     }
@@ -4468,6 +4628,86 @@ mod tests {
             layout_staff_sequence_native("(C3 @top E5):h", &three_staves, Some("2/4"), None, None)
                 .unwrap_err();
         assert!(error.contains("not adjacent"), "{error}");
+    }
+
+    fn transposed(input: &str, steps: i32, semitones: i32) -> Result<RelativeLayoutResponse, String> {
+        layout_transposed_staff_sequence_native(
+            input,
+            &StaffContext::single(Clef::Treble),
+            Some("4/4"),
+            None,
+            None,
+            Some(Transposition { steps, semitones }),
+        )
+    }
+
+    fn written_pitches(response: &RelativeLayoutResponse) -> Vec<String> {
+        response
+            .layouts
+            .iter()
+            .flat_map(|layout| &layout.pitches)
+            .map(|positioned| {
+                let pitch = &positioned.pitch;
+                let accidental = match pitch.accidental {
+                    Accidental::Natural => "",
+                    Accidental::Sharp => "#",
+                    Accidental::Flat => "b",
+                    Accidental::DoubleSharp => "##",
+                    Accidental::DoubleFlat => "bb",
+                };
+                format!("{:?}{accidental}{}", pitch.letter, pitch.octave)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn transposition_keeps_the_interval_spelling() {
+        // Concert D major up a major sixth is written B major for alto sax.
+        let response = transposed("F#4:q F# G A", 5, 9).unwrap();
+        assert_eq!(written_pitches(&response), vec!["D#5", "D#5", "E5", "F#5"]);
+        assert_eq!(
+            response.layouts[0].pitches[0].staff_position,
+            staff_position("D#5", Clef::Treble)
+        );
+        // Down a major second: Bb clarinet sounding pitches.
+        let response = transposed("C4:q Eb4 (G4 Bb4 D5):h", -1, -2).unwrap();
+        assert_eq!(
+            written_pitches(&response),
+            vec!["Bb3", "Db4", "F4", "Ab4", "C5"]
+        );
+    }
+
+    #[test]
+    fn transposition_resolves_relative_octaves_before_moving_pitches() {
+        // B4 to C is a step up as written, so the transposed C lands a step
+        // above the transposed B even though the interval crosses an octave.
+        let response = transposed("B4:h C", 5, 9).unwrap();
+        assert_eq!(written_pitches(&response), vec!["G#5", "A5"]);
+        assert_eq!(response.anchor.as_deref(), Some("C5"));
+    }
+
+    #[test]
+    fn transposition_respells_triple_accidentals_and_rejects_unrenderable_octaves() {
+        // B## up an augmented unison would be B###, which sounds as C##.
+        let response = transposed("B##4:w", 0, 1).unwrap();
+        assert_eq!(written_pitches(&response), vec!["C##5"]);
+        let response = transposed("Fbb4:w", 0, -1).unwrap();
+        assert_eq!(written_pitches(&response), vec!["Ebb4"]);
+        let error = transposed("C9:w", 7, 12).unwrap_err();
+        assert!(error.contains("outside the supported range"), "{error}");
+    }
+
+    #[test]
+    fn transposition_requests_are_optional_step_and_semitone_pairs() {
+        assert_eq!(Transposition::from_request("").unwrap(), None);
+        assert_eq!(
+            Transposition::from_request("-1 -2").unwrap(),
+            Some(Transposition {
+                steps: -1,
+                semitones: -2
+            })
+        );
+        assert!(Transposition::from_request("M6").is_err());
     }
 
     #[test]
