@@ -33,6 +33,10 @@ GLYPHS = [
     ("augmentationDot", "augmentation-dot.svg", 0xE1E7),
     ("gClef", "treble-clef.svg", 0xE050),
     ("fClef", "bass-clef.svg", 0xE062),
+    ("gClef8vb", "treble-8-clef.svg", 0xE052),
+    ("fClef8vb", "bass-8-clef.svg", 0xE064),
+    ("6stringTabClef", "tab-clef.svg", 0xE06D),
+    ("4stringTabClef", "tab-clef-small.svg", 0xE06E),
     ("cClef", "alto-clef.svg", 0xE05C),
     ("cClef", "tenor-clef.svg", 0xE05C),
     ("accidentalSharp", "sharp.svg", 0xE262),
@@ -150,7 +154,10 @@ def main() -> None:
     arguments = argument_parser.parse_args()
 
     font_path = arguments.bravura_root / "redist" / "otf" / "Bravura.otf"
+    # Upstream renamed bravura_metadata.json to Bravura.json.
     metadata_path = arguments.bravura_root / "redist" / "bravura_metadata.json"
+    if not metadata_path.exists():
+        metadata_path = arguments.bravura_root / "redist" / "Bravura.json"
     font = TTFont(font_path)
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
 

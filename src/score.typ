@@ -7,15 +7,17 @@
 #import "layout/staff-stacking.typ": _left-bar-x-for-group, _staff-label-reserve, _system-clef-after-barline-gap
 #import "layout/system-breaking.typ": _finalize-systems, _measure-width-in-system, _pack-score-systems
 #import "layout/system-rendering.typ": _collect-ending-spans, _render-score-system
+#import "engraving/primitives.typ": music-canvas
+#import "engraving/chord-diagrams.typ": _draw-chord-diagram, _normalize-chord-shape, _validate-chord-diagrams
 
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
-#let _validate-theme(value) = {
+#let _validate-theme(value, label: "score theme") = {
   if type(value) != str or value not in ("auto", "light", "dark") {
     _score-error(
-      "score theme",
+      label,
       "unsupported notation theme",
       value: value,
       expected: "auto, light, or dark",
@@ -23,6 +25,27 @@
     )
   }
   value
+}
+
+// The ink color of a validated theme. Must be called in context, since the
+// automatic theme follows the surrounding text color.
+#let _theme-paint(theme, label: "score theme") = {
+  if theme == "light" {
+    black
+  } else if theme == "dark" {
+    white
+  } else {
+    if type(text.fill) != color {
+      _score-error(
+        label,
+        "auto cannot follow a non-color text fill",
+        value: text.fill,
+        expected: "a solid surrounding text color",
+        fix: "set a solid text fill or choose theme: \"light\" or theme: \"dark\"",
+      )
+    }
+    text.fill
+  }
 }
 
 #let score(
@@ -42,6 +65,7 @@
   lyric-gap: 0.8,
   verse-gap: 1.45,
   beams: false,
+  chord-diagrams: none,
   staff-gap: none,
   group: auto,
   wrap: true,
@@ -180,28 +204,15 @@
       fix: "use bar-numbers: \"all\" or enable wrap",
     )
   }
+  let _ = _validate-chord-diagrams(chord-diagrams)
   let unit = 8pt * scale
   layout(size => context {
-    let paint = if theme == "light" {
-      black
-    } else if theme == "dark" {
-      white
-    } else {
-      if type(text.fill) != color {
-        _score-error(
-          "score theme",
-          "auto cannot follow a non-color text fill",
-          value: text.fill,
-          expected: "a solid surrounding text color",
-          fix: "set a solid text fill or choose theme: \"light\" or theme: \"dark\"",
-        )
-      }
-      text.fill
-    }
+    let paint = _theme-paint(theme)
     let measures = _prepare-score-measures(
       staves, bars, clef, key, time, tempo,
       note-spacing: note-spacing,
       beams: beams,
+      chord-diagrams: chord-diagrams,
       lyric-size: lyric-size,
       lyric-font: lyric-font,
     )
@@ -218,6 +229,8 @@
     }
     let group-style = if group == auto {
       if staff-count == 1 { "none" }
+      // Notation and its tablature form one instrument's bracketed group.
+      else if measures.first().staff-tabs.any(tab => tab != none) { "bracket" }
       else if staff-count == 2 { "brace" }
       else { "bracket" }
     } else {
@@ -348,4 +361,39 @@
     lyric-gap: lyric-gap,
     verse-gap: verse-gap,
   )
+}
+
+// A standalone fretboard diagram. Frets list one entry per string from the
+// lowest string: x for muted, 0 for open, or the fret number.
+#let chord-diagram(
+  frets,
+  name: none,
+  fingers: none,
+  barre: auto,
+  position: auto,
+  fret-count: 4,
+  scale: 1.0,
+  theme: "auto",
+) = {
+  let shape = _normalize-chord-shape(
+    frets,
+    fingers: fingers,
+    barre: barre,
+    position: position,
+    fret-count: fret-count,
+  )
+  let _ = _validate-marking(name, "chord-diagram name")
+  _positive-number(scale, "chord-diagram scale")
+  let theme = _validate-theme(theme, label: "chord-diagram theme")
+  context {
+    let paint = _theme-paint(theme, label: "chord-diagram theme")
+    box(music-canvas(length: 8pt * scale, _draw-chord-diagram(
+      shape,
+      0,
+      0,
+      unit: 8pt * scale,
+      name: name,
+      paint: paint,
+    )))
+  }
 }

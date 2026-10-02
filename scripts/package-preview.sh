@@ -29,6 +29,8 @@ engraving/lyrics.typ
 engraving/events.typ
 engraving/markings.typ
 engraving/ties-slurs.typ
+engraving/tablature.typ
+engraving/chord-diagrams.typ
 layout/staff-stacking.typ
 layout/system-breaking.typ
 layout/system-rendering.typ

@@ -5,7 +5,7 @@
 
 #import "@preview/codly:1.3.0": *
 #import "@preview/codly-languages:0.1.1": *
-#import "../src/lib.typ": score, bar
+#import "../src/lib.typ": score, bar, chord-diagram, guitar-chords
 #import "../examples/chopin-opening.typ": chopin-opening
 #import "../examples/mozart-eine-kleine-nachtmusik.typ": mozart-k525-opening
 #import "../examples/beethoven-ode-to-joy-alto-sax.typ": ode-to-joy-alto-sax
@@ -54,7 +54,7 @@
   stroke: none,
 )
 
-#let pkg-scope = (score: score, bar: bar)
+#let pkg-scope = (score: score, bar: bar, chord-diagram: chord-diagram, guitar-chords: guitar-chords)
 
 #let example(body, side: true) = block(
   width: 100%,
@@ -190,8 +190,9 @@ The package is designed for lecture notes, theory worksheets, analytical
 examples, short compositions, and reusable excerpts whose musical content
 should remain readable and versionable as text.
 
-#note-box[The public API intentionally has only two entry points:
-#c("score") for complete scores and #c("bar") for a quick one-staff measure.]
+#note-box[The public API is intentionally small: #c("score") for complete
+scores, #c("bar") for a quick one-staff measure, and #c("chord-diagram") for a
+standalone fretboard diagram, with the #c("guitar-chords") shape library.]
 
 #demo[
   #example(```typ
@@ -582,7 +583,7 @@ matching LilyPond's usual sparse numbering; `"all"` prints every bar number.
 
 #argtable(
   [#c("clef")], [`str`], [#c("\"treble\"")], [Clef for the implicit single staff only.],
-  [#c("staves")], [`dictionary | none`], [`none`], [Permanent staff-ID map. Each spec has `clef`, plus optional first-system `label` and later-system `short-label`.],
+  [#c("staves")], [`dictionary | none`], [`none`], [Permanent staff-ID map. Each spec has `clef`, plus optional first-system `label` and later-system `short-label`. A `tab` staff also accepts `tuning` and `source` (@guitar).],
   [#c("bars")], [`array`], [`()`], [Required non-empty array of bar dictionaries.],
   [#c("key")], [`str`], [#c("\"C\"")], [Initial key signature.],
   [#c("time")], [`str`], [#c("\"4/4\"")], [Initial meter and full-bar duration.],
@@ -597,8 +598,9 @@ matching LilyPond's usual sparse numbering; `"all"` prints every bar number.
   [#c("lyric-gap")], [`number`], [`0.8`], [Clearance between existing below-staff ink and the first verse.],
   [#c("verse-gap")], [`number`], [`1.45`], [Baseline distance between lyric verses; must be at least `lyric-size`.],
   [#c("beams")], [`bool`], [`false`], [Connect automatic beam groups.],
+  [#c("chord-diagrams")], [`dictionary | none`], [`none`], [Harmony symbols to fretboard shapes, such as #c("guitar-chords"); draws a diagram above each symbol (@chord-diagrams).],
   [#c("staff-gap")], [`number | none`], [`none`], [Fixed distance between adjacent staff lines.],
-  [#c("group")], [`auto | str`], [`auto`], [Auto, brace, bracket, line, or none.],
+  [#c("group")], [`auto | str`], [`auto`], [Auto, brace, bracket, line, or none. Auto brackets a score with a tab staff.],
   [#c("wrap")], [`bool`], [`true`], [Wrap complete bars into systems.],
   [#c("indent")], [`number`], [`0`], [First-system indentation in staff spaces. The system still ends at the normal right edge.],
   [#c("short-indent")], [`number`], [`0`], [Indentation for every system after the first.],
@@ -1072,6 +1074,216 @@ another staff follows that staff's accidentals.
 ```, side: false)
 ]
 
+= Guitar notation <guitar>
+
+Guitar music is usually printed twice over: standard notation for rhythm and
+phrasing, and tablature beneath it that tells the player which string and fret
+to use. typed-scores writes both from one event string. The notation staff
+uses the guitar's octave clef, a tab staff repeats its music as fret numbers,
+and chord diagrams can stand above the harmony symbols.
+
+== Guitar clefs
+
+Guitar music is written an octave above its sounding pitch. The `treble-8`
+clef, a treble clef with a small 8 below, says so on the page: write the
+pitches the guitar sounds, and each one appears on the line it occupies in
+guitar music. The open strings are E2, A2, D3, G3, B3, and E4, and the low E
+sits three ledger lines below the staff. `bass-8` does the same for bass
+guitar. Both clefs share their plain clef's key signatures, and a first note
+without an octave starts from octave 3 (`treble-8`) or 2 (`bass-8`).
+
+#demo[
+  #example(```typ
+#score(
+  clef: "treble-8",
+  key: "E",
+  time: "4/4",
+  bars: (
+    (notes: "e2:q a2 d3 g3"),
+    (notes: "b3:h (e2 b2 e3 g#3 b3 e4)"),
+  ),
+)
+```, side: false)
+]
+
+== Tablature staves
+
+Declare a staff with `clef: "tab"` to draw tablature. Its lines are the
+strings, the highest string on top, one and a half staff spaces apart, and
+every note becomes a fret number on its string. `source` names a notation
+staff whose music the tab repeats, so the bars never write it twice; a bar
+must not give the tab staff a field of its own. A score with a tab staff
+groups its staves with a bracket.
+
+#demo[
+  #example(```typ
+#score(
+  staves: (
+    guitar: (clef: "treble-8"),
+    tab: (clef: "tab", source: "guitar"),
+  ),
+  key: "G",
+  time: "4/4",
+  bars: (
+    (guitar: "g2:e d3 g3 b3 d4 g3 b3 d4"),
+    (guitar: "(c3 e3 g3 c4 e4):h (d3 a3 d4 f#4):q e4:e~ e4"),
+  ),
+)
+```, side: false)
+]
+
+Without `source`, a tab staff reads its own event strings like any staff. The
+tab reads every pitch as sounding pitch, which is why the guitar staff above
+uses `treble-8`. A treble staff written at guitar pitch would put every fret
+an octave too high.
+
+=== Choosing strings
+
+Each note takes the lowest fret that reaches it, the same default LilyPond
+uses, so music in open position needs no help. Notes that start together
+spread across separate strings with the smallest stretch, a note still ringing
+in another voice keeps its string when it can, and a tied note stays on the
+string it was tied from. To choose yourself, add `string=` with the string
+number, where string 1 is the highest; for a chord, list one string per pitch
+in written order.
+
+#demo[
+  #example(```typ
+#score(
+  clef: "tab",
+  time: "4/4",
+  bars: (
+    (notes: "g3:q g3[string=4] (e3 g#3 e4)[string=4,3,1] b3~"),
+    (notes: "b3:h (a2 e3 a3 c#4 e4)"),
+  ),
+)
+```, side: false)
+]
+
+A tab staff without a notation staff beside it prints the time signature,
+since nothing else shows the meter. Grace and cue notes use smaller numbers.
+Repeat barlines take their dots in the second and fourth spaces.
+
+=== Tunings
+
+`tuning` accepts a preset name or an array of open-string pitches, listed from
+the lowest string to string 1 in the order players name tunings. The number of
+pitches sets the number of lines. The default is `"guitar"`.
+
+#reference-table(
+  (22%, 78%),
+  [*Preset*], [*Open strings, lowest string first*],
+  [#c("guitar")], [E2 A2 D3 G3 B3 E4],
+  [#c("drop-d")], [D2 A2 D3 G3 B3 E4],
+  [#c("dadgad")], [D2 A2 D3 G3 A3 D4],
+  [#c("open-g")], [D2 G2 D3 G3 B3 D4],
+  [#c("bass")], [E1 A1 D2 G2],
+  [#c("ukulele")], [G4 C4 E4 A4 (re-entrant)],
+)
+
+#demo[
+  #example(```typ
+#score(
+  staves: (
+    bass: (
+      clef: "tab",
+      tuning: ("b0", "e1", "a1", "d2", "g2"),
+      label: "Bass",
+    ),
+  ),
+  time: "3/4",
+  bars: ((bass: "b0:q e1 a1"), (bass: "d2:q g2 c3")),
+)
+```, side: false)
+]
+
+=== What a tab staff draws
+
+A tab staff draws its clef, fret numbers, and barlines. Rests, stems, beams,
+tuplet brackets, articulations, dynamics, slurs, and ties stay on the notation
+staff it repeats. A tied note is not restated in the tab, except where it
+continues onto a new system, where its fret appears in parentheses. Tab lines
+break around each number instead of being painted over, so the tab reads on
+any page color. A tab staff keeps its clef for the whole score, and cross-staff
+switches can neither enter nor leave it.
+
+The parser reports a pitch below the lowest open string or above the 24th
+fret, a `string=` the pitch cannot reach, and simultaneous notes that cannot
+share the strings.
+
+== Chord diagrams <chord-diagrams>
+
+`chord-diagram` draws a fretboard box on its own, anywhere in a document. The
+first argument lists one entry per string from the lowest string: `x` for a
+muted string, `0` for an open one, or the fret. Write a compact string such
+as `"x32010"`, separate the entries with spaces or commas once frets reach 10
+(`"x 7 9 9 9 7"`), or pass an array such as `(0, 0, 0, 3)`. The number of
+entries sets the number of strings, so ukulele and bass shapes work the same
+way.
+
+#demo[
+  #example(```typ
+#grid(
+  columns: 4,
+  column-gutter: 1.5em,
+  align: bottom,
+  chord-diagram("x32010", name: "C", fingers: "032010"),
+  chord-diagram("133211", name: "F", fingers: "134211"),
+  chord-diagram("x 7 9 9 9 7", name: "E/B"),
+  chord-diagram((0, 0, 0, 3), name: "C"),
+)
+```, side: false)
+]
+
+#argtable(
+  [#c("frets")], [`str | array`], [required], [One entry per string from the lowest: `x`, `0`, or a fret up to 24.],
+  [#c("name")], [`str | content | none`], [`none`], [Chord name above the diagram.],
+  [#c("fingers")], [`str | array | none`], [`none`], [One finger label per string, printed under the grid; `0`, `x`, or `-` for none.],
+  [#c("barre")], [`auto | none | int | array`], [`auto`], [Auto draws a barre wherever one finger stops several strings at one fret. A fret number or array sets barres explicitly.],
+  [#c("position")], [`auto | int`], [`auto`], [Fret at the top of the grid. Auto keeps the nut for shapes within the first frets and otherwise starts at the lowest fretted note, with a label such as `5fr`.],
+  [#c("fret-count")], [`int`], [`4`], [Minimum number of frets the grid shows.],
+  [#c("scale")], [`number`], [`1.0`], [Uniform size.],
+  [#c("theme")], [`str`], [#c("\"auto\"")], [Ink color, as for `score`.],
+)
+
+=== Diagrams above harmony symbols
+
+Pass `chord-diagrams` to `score` to draw a diagram above every harmony symbol.
+It maps each symbol to a shape: a frets string or array, or a dictionary with
+`frets` and optional `fingers`, `barre`, `position`, and `fret-count`.
+`guitar-chords` provides standard-tuning shapes for the major, minor, 7, m7,
+and maj7 chords on every root, spelled with sharps and with flats, plus Asus2,
+Asus4, Cadd9, Dsus2, Dsus4, and Esus4. Extend it with `+`. A symbol mapped to
+`none` has no diagram, and `N.C.` never takes one. Any other symbol missing
+from the dictionary is reported, so a typo cannot silently drop a diagram.
+
+#demo[
+  #example(```typ
+#score(
+  staves: (
+    guitar: (clef: "treble-8"),
+    tab: (clef: "tab", source: "guitar"),
+  ),
+  time: "4/4",
+  chord-diagrams: guitar-chords + ("Cadd9/G": "332033"),
+  bars: (
+    (
+      guitar: "(c3 e3 g3 c4 e4):h (a2 e3 a3 c4 e4)",
+      harmony: "C:h Am:h",
+    ),
+    (
+      guitar: "(g2 c3 e3 g3 d4 g4):w",
+      harmony: "Cadd9/G:w",
+    ),
+  ),
+)
+```, side: false)
+]
+
+The diagrams stand in one row above the top staff's highest ink, with their
+tops aligned and the chord names above them, and each bar widens as needed to
+keep neighboring diagrams apart.
+
 = Validation and layout
 
 The package validates every full bar against its active `time` signature and
@@ -1163,6 +1375,12 @@ instrument whose written pitch has been prepared by the author:
   chord.
 - Pedals and hairpins are event-anchored and do not split automatically at a
   system break.
+- Tab staves draw fret numbers only: no rhythm stems, bends, slides,
+  hammer-ons, or harmonics yet. Automatic fretting takes the lowest position
+  for each onset rather than planning hand positions across a phrase; use
+  `string=` where a passage should stay in one position.
+- A chord cannot repeat a written pitch, so shapes that double a pitch on two
+  strings (such as ukulele F or G) need one of the doubled notes left out.
 - Dense editorial markings or lyric verses may require `staff-gap`,
   `note-spacing`, `lyric-gap`, `verse-gap`, or `scale` adjustments.
 
@@ -1191,6 +1409,9 @@ instrument whose written pitch has been prepared by the author:
   [#c("barline: (left: \"repeat-start\")")], [Repeat sign on a bar edge.],
   [#c("barline: (right: \"final\")")], [Final barline on the right edge.],
   [#c("clef: \"bass\"")], [Persistent single-staff clef change at a bar boundary.],
+  [#c("clef: \"treble-8\"")], [Guitar clef: treble, sounding an octave lower.],
+  [#c("tab: (clef: \"tab\", source: \"guitar\")")], [Tab staff repeating the guitar staff's music.],
+  [#c("(c3 e3 g3):h[string=5,4,3]")], [Choose tab strings, in written pitch order.],
   [#c("rehearsal: \"A\"") / #c("navigation: \"segno\"")], [Boundary rehearsal / navigation mark.],
   [#c("ending: (label: \"Final\", start: true)")], [Literal volta label.],
 )

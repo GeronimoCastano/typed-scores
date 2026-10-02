@@ -244,8 +244,14 @@
   (high: high, low: low)
 }
 
+// Fret numbers sit centered on the tab lines, so their ink reaches about
+// half a digit beyond the outer lines.
+#let _tab-number-overhang = 0.6
+
 #let _staff-stack(
   voice-layouts,
+  staff-heights: none,
+  staff-tabs: none,
   staff-gap: none,
   required-gaps: (:),
   lyric-verse-counts: (:),
@@ -254,7 +260,15 @@
   verse-gap: 1.45,
 ) = {
   let voice-count = voice-layouts.len()
-  let note-extents = voice-layouts.map(_voice-vertical-extent)
+  let staff-heights = if staff-heights == none { range(voice-count).map(_ => 4) } else { staff-heights }
+  let staff-tabs = if staff-tabs == none { range(voice-count).map(_ => none) } else { staff-tabs }
+  let note-extents = range(voice-count).map(staff-index => {
+    if staff-tabs.at(staff-index) != none {
+      (high: staff-heights.at(staff-index) + _tab-number-overhang, low: -_tab-number-overhang)
+    } else {
+      _voice-vertical-extent(voice-layouts.at(staff-index))
+    }
+  })
   let staff-extents = ()
   for staff-index in range(voice-count) {
     let note-extent = note-extents.at(staff-index)
@@ -277,11 +291,21 @@
   let bottom-map = (:)
   let current-bottom = 0
   let lower-high = staff-extents.last().high
+  let lower-height = staff-heights.last()
   bottom-map.insert(str(voice-count - 1), current-bottom)
   if voice-count > 1 {
     for voice-index in range(voice-count - 2, -1, step: -1) {
       let extent = staff-extents.at(voice-index)
       let required-gap = required-gaps.at(str(voice-index), default: 0)
+      if staff-gap != none and staff-tabs.at(voice-index + 1) != none and staff-gap < lower-height + 1 {
+        _score-error(
+          "score staff-gap",
+          "staff-gap leaves no room for the tab staff below staff " + str(voice-index + 1),
+          value: staff-gap,
+          expected: "at least " + str(lower-height + 1) + ", the tab staff's height plus one staff space",
+          fix: "increase staff-gap or remove it so the gap is computed from the notes",
+        )
+      }
       if staff-gap != none and staff-gap < required-gap {
         _score-error(
           "score staff-gap",
@@ -291,20 +315,23 @@
           fix: "increase staff-gap or remove it so the gap is computed from the notes",
         )
       }
+      // Adjacent staves keep at least three staff spaces between them.
       let gap = if staff-gap == none {
-        calc.max(7, lower-high - extent.low + 1.2, required-gap)
+        calc.max(lower-height + 3, lower-high - extent.low + 1.2, required-gap)
       } else {
         staff-gap
       }
       current-bottom += gap
       bottom-map.insert(str(voice-index), current-bottom)
       lower-high = extent.high
+      lower-height = staff-heights.at(voice-index)
     }
   }
   (
     bottoms: bottom-map,
     bottom: bottom-map.at(str(voice-count - 1)),
-    top: bottom-map.at("0") + 4,
+    top: bottom-map.at("0") + staff-heights.first(),
+    heights: staff-heights,
     note-extents: note-extents,
   )
 }
@@ -322,6 +349,8 @@
   }
   let stack = _staff-stack(
     _staff-layouts-for-measures(measures),
+    staff-heights: measures.first().staff-heights,
+    staff-tabs: measures.first().staff-tabs,
     staff-gap: staff-gap,
     required-gaps: _kneed-beam-gaps(measures),
     lyric-verse-counts: _lyric-verse-counts(measures, measures.first().staff-count),

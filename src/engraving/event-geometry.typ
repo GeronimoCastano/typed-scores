@@ -79,8 +79,8 @@
 }
 
 #let _clef-origin-y(clef, bottom-y: 0, line-gap: 1.0) = {
-  if clef == "treble" { staff-y(4, bottom-y: bottom-y, line-gap: line-gap) }
-  else if clef == "bass" { staff-y(8, bottom-y: bottom-y, line-gap: line-gap) }
+  if clef in ("treble", "treble-8") { staff-y(4, bottom-y: bottom-y, line-gap: line-gap) }
+  else if clef in ("bass", "bass-8") { staff-y(8, bottom-y: bottom-y, line-gap: line-gap) }
   else if clef == "alto" { staff-y(6, bottom-y: bottom-y, line-gap: line-gap) }
   else if clef == "tenor" { staff-y(8, bottom-y: bottom-y, line-gap: line-gap) }
   else { panic("unknown clef " + clef) }

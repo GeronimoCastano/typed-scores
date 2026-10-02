@@ -1,13 +1,15 @@
 #import "@preview/cetz:0.5.2"
 #import "../foundation/diagnostics.typ": _score-error
 #import "../engraving/primitives.typ": barline-separation, draw-augmentation-dot, draw-grand-brace, draw-navigation-symbol, draw-staff-bracket, draw-staff-group-line, draw-staff-lines, music-canvas, repeat-barline-dot-separation, repeat-ending-line-thickness, thick-barline-thickness, thin-barline-thickness
-#import "../engraving/signatures.typ": _draw-inline-signature, _draw-prologue, _inline-signature-note-start, _prologue-start-x
+#import "../engraving/signatures.typ": _draw-inline-signature, _draw-prologue, _inline-signature-note-start, _inline-time-x, _prologue-start-x, _prologue-time-x
 #import "../engraving/spacing.typ": _onset-key, _place-voice-at-onsets
 #import "../engraving/event-geometry.typ": _event-pitch-ys, _event-staff-index, _pitch-staff-index
 #import "../engraving/events.typ": _beamed-stem-tips, _draw-placed-sequence, _draw-tuplets, _event-stem-geometry, _resolve-cross-staff-beams, _resolve-staff-accidentals
 #import "../engraving/markings.typ": _annotation-stem-direction, _collect-hairpins, _collect-pedal-spans, _draw-hairpins, _draw-pedal-spans, _draw-placed-annotations, _draw-tempo, _dynamics-baseline, _event-decoration-top
 #import "../engraving/ties-slurs.typ": _collect-system-slurs, _collect-ties, _draw-slur-bows, _draw-ties, _layout-slurs, _slur-clearance-obstacles
 #import "../engraving/lyrics.typ": _draw-system-lyrics, _lyric-verse-counts, _placed-lyric-items
+#import "../engraving/chord-diagrams.typ": _chord-diagram-extent, _draw-chord-diagram, _score-diagram-scale
+#import "../engraving/tablature.typ": _draw-tab-clef, _draw-tab-numbers, _draw-tab-staff-lines, _draw-tab-time-signature, _tab-number-items, tab-line-gap
 #import "staff-stacking.typ": _group-symbol-to-bar-gap, _kneed-beam-gaps, _staff-layouts-for-measures, _staff-stack, _system-clef-after-barline-gap, _system-repeat-start-gap
 #import "system-breaking.typ": _allocate-measure-widths, _measure-prefix-in-system, _minimum-justification-scale
 
@@ -59,7 +61,7 @@
   spans
 }
 
-#let _draw-barline-stroke(x, thickness, voice-count, system-bottom, system-top, bottom-map, unit, connected, paint) = {
+#let _draw-barline-stroke(x, thickness, voice-count, system-bottom, system-top, bottom-map, heights, unit, connected, paint) = {
   import cetz.draw: *
   let stroke = thickness * unit + paint
   if connected {
@@ -67,28 +69,41 @@
   } else {
     for voice-index in range(voice-count) {
       let bottom-y = bottom-map.at(str(voice-index))
-      line((x, bottom-y), (x, bottom-y + 4), stroke: stroke)
+      line((x, bottom-y), (x, bottom-y + heights.at(voice-index)), stroke: stroke)
     }
   }
 }
 
-#let _draw-repeat-dots(x, voice-count, bottom-map, unit, paint) = {
+// Repeat dots take the two spaces nearest the staff's middle, straddling the
+// middle line or, when the middle falls in a space, skipping over it.
+#let _repeat-dot-offsets(height, tab) = {
+  let line-gap = if tab == none { 1 } else { tab-line-gap }
+  let spaces = calc.round(height / line-gap)
+  let middle = spaces / 2
+  let spread = if calc.rem(spaces, 2) == 0 { 0.5 } else { 1 }
+  ((middle - spread) * line-gap, (middle + spread) * line-gap)
+}
+
+#let _draw-repeat-dots(x, voice-count, bottom-map, heights, tabs, unit, paint) = {
   for voice-index in range(voice-count) {
     let bottom-y = bottom-map.at(str(voice-index))
-    draw-augmentation-dot(x, bottom-y + 1.5, unit: unit, scale: 0.85, paint: paint)
-    draw-augmentation-dot(x, bottom-y + 2.5, unit: unit, scale: 0.85, paint: paint)
+    for offset in _repeat-dot-offsets(heights.at(voice-index), tabs.at(voice-index)) {
+      draw-augmentation-dot(x, bottom-y + offset, unit: unit, scale: 0.85, paint: paint)
+    }
   }
 }
 
-#let _draw-dashed-barline(x, staff-count, bottom-map, unit, paint) = {
+#let _draw-dashed-barline(x, staff-count, bottom-map, heights, unit, paint) = {
   import cetz.draw: *
   for staff-index in range(staff-count) {
     let bottom-y = bottom-map.at(str(staff-index))
-    for step in range(6) {
+    let top-y = bottom-y + heights.at(staff-index)
+    for step in range(calc.ceil(heights.at(staff-index) / 0.72) + 1) {
       let y = bottom-y + step * 0.72
+      if y >= top-y { break }
       line(
         (x, y),
-        (x, calc.min(y + 0.38, bottom-y + 4)),
+        (x, calc.min(y + 0.38, top-y)),
         stroke: thin-barline-thickness * unit + paint,
       )
     }
@@ -114,6 +129,8 @@
   system-bottom,
   system-top,
   bottom-map,
+  heights: (),
+  tabs: (),
   backward: false,
   forward: false,
   kind: none,
@@ -129,38 +146,38 @@
   let dot-offset = repeat-barline-dot-separation + 0.17
   if backward and forward {
     let center-offset = barline-separation / 2 + thick-half
-    _draw-barline-stroke(x - center-offset, thick-barline-thickness, voice-count, system-bottom, system-top, bottom-map, unit, connected, paint)
-    _draw-barline-stroke(x + center-offset, thick-barline-thickness, voice-count, system-bottom, system-top, bottom-map, unit, connected, paint)
-    _draw-repeat-dots(x - center-offset - thick-half - dot-offset, voice-count, bottom-map, unit, paint)
-    _draw-repeat-dots(x + center-offset + thick-half + dot-offset, voice-count, bottom-map, unit, paint)
+    _draw-barline-stroke(x - center-offset, thick-barline-thickness, voice-count, system-bottom, system-top, bottom-map, heights, unit, connected, paint)
+    _draw-barline-stroke(x + center-offset, thick-barline-thickness, voice-count, system-bottom, system-top, bottom-map, heights, unit, connected, paint)
+    _draw-repeat-dots(x - center-offset - thick-half - dot-offset, voice-count, bottom-map, heights, tabs, unit, paint)
+    _draw-repeat-dots(x + center-offset + thick-half + dot-offset, voice-count, bottom-map, heights, tabs, unit, paint)
   } else if backward {
     let span = thin-barline-thickness + barline-separation + thick-barline-thickness
     let thin-center = x - span / 2 + thin-half
     let thick-center = x + span / 2 - thick-half
-    _draw-barline-stroke(thin-center, thin-barline-thickness, voice-count, system-bottom, system-top, bottom-map, unit, connected, paint)
-    _draw-barline-stroke(thick-center, thick-barline-thickness, voice-count, system-bottom, system-top, bottom-map, unit, connected, paint)
-    _draw-repeat-dots(thin-center - thin-half - dot-offset, voice-count, bottom-map, unit, paint)
+    _draw-barline-stroke(thin-center, thin-barline-thickness, voice-count, system-bottom, system-top, bottom-map, heights, unit, connected, paint)
+    _draw-barline-stroke(thick-center, thick-barline-thickness, voice-count, system-bottom, system-top, bottom-map, heights, unit, connected, paint)
+    _draw-repeat-dots(thin-center - thin-half - dot-offset, voice-count, bottom-map, heights, tabs, unit, paint)
   } else if forward {
     let span = thin-barline-thickness + barline-separation + thick-barline-thickness
     let thick-center = x - span / 2 + thick-half
     let thin-center = x + span / 2 - thin-half
-    _draw-barline-stroke(thick-center, thick-barline-thickness, voice-count, system-bottom, system-top, bottom-map, unit, connected, paint)
-    _draw-barline-stroke(thin-center, thin-barline-thickness, voice-count, system-bottom, system-top, bottom-map, unit, connected, paint)
-    _draw-repeat-dots(thin-center + thin-half + dot-offset, voice-count, bottom-map, unit, paint)
+    _draw-barline-stroke(thick-center, thick-barline-thickness, voice-count, system-bottom, system-top, bottom-map, heights, unit, connected, paint)
+    _draw-barline-stroke(thin-center, thin-barline-thickness, voice-count, system-bottom, system-top, bottom-map, heights, unit, connected, paint)
+    _draw-repeat-dots(thin-center + thin-half + dot-offset, voice-count, bottom-map, heights, tabs, unit, paint)
   } else if kind == "double" {
     let offset = (barline-separation + thin-barline-thickness) / 2
-    _draw-barline-stroke(x - offset, thin-barline-thickness, voice-count, system-bottom, system-top, bottom-map, unit, connected, paint)
-    _draw-barline-stroke(x + offset, thin-barline-thickness, voice-count, system-bottom, system-top, bottom-map, unit, connected, paint)
+    _draw-barline-stroke(x - offset, thin-barline-thickness, voice-count, system-bottom, system-top, bottom-map, heights, unit, connected, paint)
+    _draw-barline-stroke(x + offset, thin-barline-thickness, voice-count, system-bottom, system-top, bottom-map, heights, unit, connected, paint)
   } else if kind == "final" {
     let span = thin-barline-thickness + barline-separation + thick-barline-thickness
     let thin-center = x - span / 2 + thin-half
     let thick-center = x + span / 2 - thick-half
-    _draw-barline-stroke(thin-center, thin-barline-thickness, voice-count, system-bottom, system-top, bottom-map, unit, connected, paint)
-    _draw-barline-stroke(thick-center, thick-barline-thickness, voice-count, system-bottom, system-top, bottom-map, unit, connected, paint)
+    _draw-barline-stroke(thin-center, thin-barline-thickness, voice-count, system-bottom, system-top, bottom-map, heights, unit, connected, paint)
+    _draw-barline-stroke(thick-center, thick-barline-thickness, voice-count, system-bottom, system-top, bottom-map, heights, unit, connected, paint)
   } else if kind == "dashed" {
-    _draw-dashed-barline(x, voice-count, bottom-map, unit, paint)
+    _draw-dashed-barline(x, voice-count, bottom-map, heights, unit, paint)
   } else {
-    _draw-barline-stroke(x, thin-barline-thickness, voice-count, system-bottom, system-top, bottom-map, unit, connected, paint)
+    _draw-barline-stroke(x, thin-barline-thickness, voice-count, system-bottom, system-top, bottom-map, heights, unit, connected, paint)
   }
 }
 
@@ -244,8 +261,14 @@
 
   // Stack staves bottom-up, leaving room for ledger-line excursions.
   // Extents are relative to each staff's own bottom line.
+  let staff-tabs = system-measures.first().staff-tabs
+  // Tablature repeats the rhythm of the notation above it, so a tab staff
+  // prints time signatures only when the score has no notation staff.
+  let tab-shows-time = staff-tabs.all(tab => tab != none)
   let stack = _staff-stack(
     staff-layouts,
+    staff-heights: system-measures.first().staff-heights,
+    staff-tabs: staff-tabs,
     staff-gap: staff-gap,
     required-gaps: _kneed-beam-gaps(system-measures),
     lyric-verse-counts: _lyric-verse-counts(measures, staff-count),
@@ -254,6 +277,7 @@
     verse-gap: verse-gap,
   )
   let bottom-map = stack.bottoms
+  let staff-heights = stack.heights
   let staff-note-extents = stack.note-extents
   let system-bottom = stack.bottom
   let system-top = stack.top
@@ -377,9 +401,14 @@
     measure-note-starts,
     measure-justifications,
   )
+  let is-tab-voice(voice-index) = system-measures.first().voices.at(voice-index).tab != none
   let slurs-by-voice = ()
   for voice-index in range(lane-count) {
     let voice = system-measures.first().voices.at(voice-index)
+    if voice.tab != none {
+      slurs-by-voice.push(())
+      continue
+    }
     slurs-by-voice.push(_collect-system-slurs(
       placed-by-voice.at(voice-index),
       voice.id,
@@ -394,6 +423,10 @@
   // share one system-wide baseline.
   let dynamics-baseline-by-voice = ()
   for voice-index in range(lane-count) {
+    if is-tab-voice(voice-index) {
+      dynamics-baseline-by-voice.push(none)
+      continue
+    }
     let staff-index = system-measures.first().voices.at(voice-index).staff-index
     let bottom-y = bottom-map.at(str(staff-index))
     let placed-flat = ()
@@ -404,6 +437,10 @@
   }
   let slur-layouts-by-voice = ()
   for voice-index in range(lane-count) {
+    if is-tab-voice(voice-index) {
+      slur-layouts-by-voice.push(())
+      continue
+    }
     let staff-index = system-measures.first().voices.at(voice-index).staff-index
     let bottom-y = bottom-map.at(str(staff-index))
     let placed-flat = ()
@@ -481,7 +518,7 @@
   )
   let has-harmony = system-measures.any(measure => measure.harmony.len() > 0)
   let volta-y = system-top + 2.0
-  if has-system-ending {
+  if has-system-ending and not is-tab-voice(0) {
     for placed in placed-by-voice.first() {
       for item in placed {
         volta-y = calc.max(
@@ -507,6 +544,35 @@
     system-top + 4.6
   }
   let harmony-y = system-top + 2.4
+  // Chord diagrams stand in one row above the top staff's ink, tops
+  // aligned, with their chord names above them.
+  let system-diagrams = ()
+  for measure in system-measures {
+    system-diagrams += measure.harmony.filter(item => item.at("diagram", default: none) != none)
+  }
+  let diagram-top-y = none
+  if system-diagrams.len() > 0 {
+    let top-staff-ink = bottom-map.at("0") + staff-note-extents.first().high
+    let tallest = calc.max(..system-diagrams.map(item => _chord-diagram-extent(item.diagram, _score-diagram-scale).height))
+    // Diagrams also clear a volta bracket, whose label hangs below its line.
+    let volta-clearance = if has-system-ending { volta-y + 0.8 } else { system-top }
+    diagram-top-y = calc.max(system-top + 1.4, top-staff-ink + 0.8, volta-clearance) + tallest
+    harmony-y = diagram-top-y + 0.5
+  }
+
+  let tab-numbers-by-staff = (:)
+  for voice-index in range(lane-count) {
+    let voice = system-measures.first().voices.at(voice-index)
+    if voice.tab == none { continue }
+    let key = str(voice.staff-index)
+    tab-numbers-by-staff.insert(key, tab-numbers-by-staff.at(key, default: ()) + _tab-number-items(
+      placed-by-voice.at(voice-index),
+      voice.tab.tuning.len(),
+      bottom-map.at(key),
+      unit,
+      paint,
+    ))
+  }
   let header-y = if has-harmony { calc.max(header-y-base, harmony-y + 3.0) } else { header-y-base }
 
   block(width: system-width * unit, {
@@ -531,7 +597,10 @@
         if label != none {
           import cetz.draw: *
           content(
-            (system.name-left + system.label-reserve / 2, bottom-map.at(str(staff-index)) + 2),
+            (
+              system.name-left + system.label-reserve / 2,
+              bottom-map.at(str(staff-index)) + staff-heights.at(staff-index) / 2,
+            ),
             text(size: unit, label),
             anchor: "center",
             padding: 0pt,
@@ -540,7 +609,20 @@
       }
     }
     for staff-index in range(staff-count) {
-      draw-staff-lines(system-width - left-bar-x, x: left-bar-x, bottom-y: bottom-map.at(str(staff-index)), unit: unit, paint: paint)
+      let tab = staff-tabs.at(staff-index)
+      if tab == none {
+        draw-staff-lines(system-width - left-bar-x, x: left-bar-x, bottom-y: bottom-map.at(str(staff-index)), unit: unit, paint: paint)
+      } else {
+        _draw-tab-staff-lines(
+          left-bar-x,
+          system-width,
+          tab.tuning.len(),
+          bottom-map.at(str(staff-index)),
+          tab-numbers-by-staff.at(str(staff-index), default: ()),
+          unit: unit,
+          paint: paint,
+        )
+      }
     }
     // A multi-staff system opens with a barline joining all its staves,
     // whatever group symbol (or none) sits to its left.
@@ -651,10 +733,55 @@
           anchor: "south",
           padding: 0pt,
         )
+        let diagram = harmony.at("diagram", default: none)
+        if diagram != none {
+          _draw-chord-diagram(
+            diagram,
+            onset-x,
+            diagram-top-y - _chord-diagram-extent(diagram, _score-diagram-scale).height,
+            unit: unit,
+            scale: _score-diagram-scale,
+            paint: paint,
+          )
+        }
       }
       for voice-index in range(lane-count) {
         let voice = measure.voices.at(voice-index)
         let bottom-y = bottom-map.at(str(voice.staff-index))
+        if voice.tab != none {
+          // A tab staff opens with its clef alone; its fret numbers are
+          // drawn once per staff after every voice is placed.
+          let string-count = voice.tab.tuning.len()
+          if voice.layer-index == 0 and measure-index == 0 {
+            _draw-tab-clef(clef-x, string-count, bottom-y, unit: unit, paint: paint)
+            if tab-shows-time {
+              _draw-tab-time-signature(
+                measure.time,
+                _prologue-time-x(measure.key, previous-key: measure.at("previous-key"), clef-x: clef-x),
+                string-count,
+                bottom-y,
+                unit: unit,
+                paint: paint,
+              )
+            }
+          } else if voice.layer-index == 0 and tab-shows-time and measure.at("show-time") {
+            _draw-tab-time-signature(
+              measure.time,
+              _inline-time-x(
+                measure-start,
+                measure.key,
+                measure.at("show-key"),
+                reserve-clef: measure.at("show-clef"),
+                previous-key: measure.at("previous-key"),
+              ),
+              string-count,
+              bottom-y,
+              unit: unit,
+              paint: paint,
+            )
+          }
+          continue
+        }
         if voice.layer-index == 0 and measure-index == 0 {
           _draw-prologue(
             voice.clef,
@@ -710,7 +837,12 @@
       }
     }
 
+    for numbers in tab-numbers-by-staff.values() {
+      _draw-tab-numbers(numbers)
+    }
+
     for voice-index in range(lane-count) {
+      if is-tab-voice(voice-index) { continue }
       let staff-index = system-measures.first().voices.at(voice-index).staff-index
       let bottom-y = bottom-map.at(str(staff-index))
       let placed-flat = ()
@@ -803,6 +935,8 @@
         system-bottom,
         system-top,
         bottom-map,
+        heights: staff-heights,
+        tabs: staff-tabs,
         backward: backward,
         forward: forward,
         kind: barline-kind,
