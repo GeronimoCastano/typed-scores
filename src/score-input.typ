@@ -7,7 +7,7 @@
 #import "engraving/markings.typ": _normalize-tempo
 #import "engraving/lyrics.typ": _layout-measure-lyrics, _normalize-measure-lyrics, _validate-lyric-continuations
 #import "engraving/event-geometry.typ": _event-staff-index, _is-split-chord
-#import "engraving/events.typ": _classify-cross-staff-beams
+#import "engraving/events.typ": _classify-cross-staff-beams, _separate-voice-rests
 #import "engraving/ottava.typ": _apply-ottava, _validate-ottava-closed
 #import "engraving/figured-bass.typ": _layout-figures
 #import "engraving/tablature.typ": _assign-tab-frets, _normalize-tuning, _tab-staff-height
@@ -778,6 +778,7 @@
         if replacement == none { voice } else { replacement }
       })
     }
+    prepared-voices = _separate-voice-rests(prepared-voices)
     let harmony = _layout-harmony(
       normalized-measure.harmony,
       validation-time,

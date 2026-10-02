@@ -19,6 +19,7 @@ lib.typ
 score.typ
 score-input.typ
 part.typ
+importing.typ
 foundation/diagnostics.typ
 foundation/parser.typ
 foundation/meter.typ

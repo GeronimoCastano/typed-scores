@@ -15,6 +15,7 @@ features are deliberately excluded.
 | `nested-tuplets` | [Nested tuplets](https://lilypond.org/doc/v2.26/Documentation/notation/writing-rhythms) |
 | `arpeggio-directions` | [Arpeggio directions](https://lilypond.org/doc/v2.26/Documentation/notation/expressive-marks-as-lines) |
 | `single-tremolos` | [Single-note tremolo values](https://lilypond.org/doc/v2.26/Documentation/notation/short-repeats) |
+| `voice-rests` | [Rest collisions between voices](https://lilypond.org/doc/v2.26/Documentation/notation/multiple-voices), with rests below chords, beside high and low notes, and coincident rests |
 | `cross-staff-beams` | [Changing staff manually](https://lilypond.org/doc/v2.26/Documentation/notation/common-notation-for-keyboards), with automatic beams across the staves |
 | `ottava-brackets` | [Ottava brackets](https://lilypond.org/doc/v2.26/Documentation/notation/displaying-pitches), with the ordinal `8va` and `15ma` markups that match Bravura's glyphs |
 | `figured-bass` | [Figured bass](https://lilypond.org/doc/v2.26/Documentation/notation/figured-bass), including stacks, accidentals before a numeral, and an accidental alone |

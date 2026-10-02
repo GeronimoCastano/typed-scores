@@ -768,13 +768,26 @@
 
 // Rests attach to staff lines: the whole rest hangs from the 4th line,
 // the half rest sits on the middle line, the rest glyphs center there.
+// Bravura rest glyph and its origin, in staff spaces above the bottom line.
+#let _rest-glyph(duration-base) = {
+  if duration-base == "Whole" { ("rest-whole", 3) }
+  else if duration-base == "Half" { ("rest-half", 2) }
+  else if duration-base == "Quarter" { ("rest-quarter", 2) }
+  else if duration-base == "Eighth" { ("rest-eighth", 2) }
+  else if duration-base == "Sixteenth" { ("rest-sixteenth", 2) }
+  else { ("rest-thirty-second", 2) }
+}
+
+// Lowest and highest ink of an unshifted rest, in staff spaces above the
+// bottom line.
+#let rest-extent(duration-base) = {
+  let (name, origin-y) = _rest-glyph(duration-base)
+  let bounds = _bravura-bounding-box(name)
+  (bottom: origin-y + bounds.sw.at(1), top: origin-y + bounds.ne.at(1))
+}
+
 #let draw-rest(duration-base, x, bottom-y: 0, line-gap: 1.0, unit: 8pt, scale: 1.0, paint: black) = {
-  let (name, origin-y) = if duration-base == "Whole" { ("rest-whole", 3) }
-    else if duration-base == "Half" { ("rest-half", 2) }
-    else if duration-base == "Quarter" { ("rest-quarter", 2) }
-    else if duration-base == "Eighth" { ("rest-eighth", 2) }
-    else if duration-base == "Sixteenth" { ("rest-sixteenth", 2) }
-    else { ("rest-thirty-second", 2) }
+  let (name, origin-y) = _rest-glyph(duration-base)
   _draw-bravura-glyph(name, x, bottom-y + origin-y * line-gap, unit: unit, origin: true, glyph-scale: scale, paint: paint)
 }
 

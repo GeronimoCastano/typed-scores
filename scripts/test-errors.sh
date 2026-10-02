@@ -169,3 +169,6 @@ check_error tests/errors/invalid-diagram-fret.typ "chord diagram fret must be x 
 check_error tests/errors/finger-on-open-string.typ "finger 1 is on string 1, which is not fretted"
 check_error tests/errors/invalid-diagram-barre.typ "barre at fret 3 needs at least two strings stopped at that fret"
 check_error tests/errors/tab-staff-gap.typ "staff-gap leaves no room for the tab staff below staff 1"
+check_error tests/errors/import-overfull-bar.typ "bar 1 holds 4/4 of music, more than its 3/4 meter allows"
+check_error tests/errors/import-invalid-source.typ "source must be the file contents as bytes or a string"
+check_error tests/errors/import-malformed-xml.typ "the MusicXML file is not well-formed XML"

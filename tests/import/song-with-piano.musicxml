@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">
+<score-partwise version="4.0">
+  <work><work-title>Morning Song</work-title></work>
+  <identification><creator type="composer">Importer Fixture</creator></identification>
+  <part-list>
+    <score-part id="P1"><part-name>Voice</part-name><part-abbreviation>V.</part-abbreviation></score-part>
+    <score-part id="P2"><part-name>Piano</part-name><part-abbreviation>Pno.</part-abbreviation></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="0" implicit="yes">
+      <attributes>
+        <divisions>12</divisions>
+        <key><fifths>-1</fifths><mode>major</mode></key>
+        <time><beats>3</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <direction placement="above">
+        <direction-type><words font-weight="bold">Andante</words></direction-type>
+        <direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>72</per-minute></metronome></direction-type>
+        <sound tempo="72"/>
+      </direction>
+      <direction placement="below">
+        <direction-type><dynamics><mp/></dynamics></direction-type>
+      </direction>
+      <note><pitch><step>C</step><octave>5</octave></pitch><duration>12</duration><voice>1</voice><type>quarter</type>
+        <lyric number="1"><syllabic>single</syllabic><text>The</text></lyric></note>
+    </measure>
+    <measure number="1">
+      <harmony><root><root-step>F</root-step></root><kind>major</kind></harmony>
+      <note><pitch><step>F</step><octave>5</octave></pitch><duration>6</duration><voice>1</voice><type>eighth</type><beam number="1">begin</beam>
+        <notations><slur type="start" number="1"/></notations>
+        <lyric number="1"><syllabic>begin</syllabic><text>morn</text></lyric></note>
+      <note><pitch><step>G</step><octave>5</octave></pitch><duration>6</duration><voice>1</voice><type>eighth</type><beam number="1">end</beam>
+        <notations><slur type="stop" number="1"/></notations>
+        <lyric number="1"><syllabic>end</syllabic><text>ing</text></lyric></note>
+      <note><pitch><step>A</step><octave>5</octave></pitch><duration>4</duration><voice>1</voice><type>eighth</type>
+        <time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification><beam number="1">begin</beam>
+        <notations><tuplet type="start" bracket="no"/></notations>
+        <lyric number="1"><syllabic>single</syllabic><text>light</text><extend/></lyric></note>
+      <note><pitch><step>G</step><octave>5</octave></pitch><duration>4</duration><voice>1</voice><type>eighth</type>
+        <time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification><beam number="1">continue</beam></note>
+      <note><pitch><step>F</step><octave>5</octave></pitch><duration>4</duration><voice>1</voice><type>eighth</type>
+        <time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification><beam number="1">end</beam>
+        <notations><tuplet type="stop"/></notations></note>
+      <harmony><root><root-step>C</root-step></root><kind text="7">dominant</kind></harmony>
+      <note><pitch><step>E</step><octave>5</octave></pitch><duration>12</duration><voice>1</voice><type>quarter</type>
+        <notations><articulations><tenuto/></articulations></notations>
+        <lyric number="1"><syllabic>single</syllabic><text>breaks</text></lyric></note>
+    </measure>
+    <measure number="2">
+      <barline location="left"><bar-style>heavy-light</bar-style><repeat direction="forward"/></barline>
+      <direction placement="below">
+        <direction-type><wedge type="crescendo" number="1"/></direction-type>
+      </direction>
+      <note><grace slash="yes"/><pitch><step>D</step><octave>5</octave></pitch><voice>1</voice><type>eighth</type></note>
+      <note><pitch><step>C</step><octave>5</octave></pitch><duration>12</duration><voice>1</voice><type>quarter</type>
+        <lyric number="1"><syllabic>single</syllabic><text>sing</text></lyric></note>
+      <note><pitch><step>D</step><octave>5</octave></pitch><duration>12</duration><voice>1</voice><type>quarter</type>
+        <lyric number="1"><syllabic>single</syllabic><text>a</text></lyric></note>
+      <direction placement="below">
+        <direction-type><wedge type="stop" number="1"/></direction-type>
+      </direction>
+      <direction placement="below">
+        <direction-type><dynamics><f/></dynamics></direction-type>
+      </direction>
+      <note><pitch><step>E</step><octave>5</octave></pitch><duration>12</duration><voice>1</voice><type>quarter</type>
+        <notations><fermata type="upright"/></notations>
+        <lyric number="1"><syllabic>single</syllabic><text>song</text></lyric></note>
+    </measure>
+    <measure number="3">
+      <barline location="left"><ending number="1" type="start">1.</ending></barline>
+      <note><pitch><step>F</step><octave>5</octave></pitch><duration>24</duration><voice>1</voice><type>half</type>
+        <lyric number="1"><syllabic>single</syllabic><text>now</text></lyric></note>
+      <forward><duration>12</duration><voice>1</voice></forward>
+      <barline location="right"><bar-style>light-heavy</bar-style><ending number="1" type="stop"/><repeat direction="backward"/></barline>
+    </measure>
+    <measure number="4">
+      <barline location="left"><ending number="2" type="start">2.</ending></barline>
+      <note><pitch><step>F</step><octave>5</octave></pitch><duration>36</duration><voice>1</voice><type>half</type><dot/>
+        <lyric number="1"><syllabic>single</syllabic><text>home.</text></lyric></note>
+      <barline location="right"><bar-style>light-heavy</bar-style><ending number="2" type="stop"/></barline>
+    </measure>
+  </part>
+  <part id="P2">
+    <measure number="0" implicit="yes">
+      <attributes>
+        <divisions>12</divisions>
+        <key><fifths>-1</fifths><mode>major</mode></key>
+        <time><beats>3</beats><beat-type>4</beat-type></time>
+        <staves>2</staves>
+        <clef number="1"><sign>G</sign><line>2</line></clef>
+        <clef number="2"><sign>F</sign><line>4</line></clef>
+      </attributes>
+      <note><rest/><duration>12</duration><voice>1</voice><type>quarter</type><staff>1</staff></note>
+      <backup><duration>12</duration></backup>
+      <note><pitch><step>F</step><octave>3</octave></pitch><duration>12</duration><voice>5</voice><type>quarter</type><staff>2</staff></note>
+    </measure>
+    <measure number="1">
+      <note><pitch><step>A</step><octave>4</octave></pitch><duration>36</duration><tie type="start"/><voice>1</voice><type>half</type><dot/><staff>1</staff><notations><tied type="start"/></notations></note>
+      <note><chord/><pitch><step>C</step><octave>5</octave></pitch><duration>36</duration><tie type="start"/><voice>1</voice><type>half</type><dot/><staff>1</staff><notations><tied type="start"/></notations></note>
+      <note><chord/><pitch><step>F</step><octave>5</octave></pitch><duration>36</duration><tie type="start"/><voice>1</voice><type>half</type><dot/><staff>1</staff><notations><tied type="start"/></notations></note>
+      <backup><duration>36</duration></backup>
+      <direction placement="below">
+        <direction-type><pedal type="start" line="yes"/></direction-type>
+        <staff>2</staff>
+      </direction>
+      <note><pitch><step>F</step><octave>2</octave></pitch><duration>6</duration><voice>5</voice><type>eighth</type><staff>2</staff><beam number="1">begin</beam></note>
+      <note><pitch><step>C</step><octave>3</octave></pitch><duration>6</duration><voice>5</voice><type>eighth</type><staff>2</staff><beam number="1">continue</beam></note>
+      <note><pitch><step>A</step><octave>3</octave></pitch><duration>6</duration><voice>5</voice><type>eighth</type><staff>2</staff><beam number="1">continue</beam></note>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>6</duration><voice>5</voice><type>eighth</type><staff>1</staff><beam number="1">end</beam></note>
+      <note><pitch><step>F</step><octave>4</octave></pitch><duration>12</duration><voice>5</voice><type>quarter</type><staff>1</staff></note>
+      <direction placement="below">
+        <direction-type><pedal type="stop" line="yes"/></direction-type>
+        <offset>12</offset>
+        <staff>2</staff>
+      </direction>
+    </measure>
+    <measure number="2">
+      <barline location="left"><bar-style>heavy-light</bar-style><repeat direction="forward"/></barline>
+      <note><pitch><step>A</step><octave>4</octave></pitch><duration>12</duration><tie type="stop"/><voice>1</voice><type>quarter</type><staff>1</staff><notations><tied type="stop"/></notations></note>
+      <note><chord/><pitch><step>C</step><octave>5</octave></pitch><duration>12</duration><tie type="stop"/><voice>1</voice><type>quarter</type><staff>1</staff><notations><tied type="stop"/></notations></note>
+      <note><chord/><pitch><step>F</step><octave>5</octave></pitch><duration>12</duration><tie type="stop"/><voice>1</voice><type>quarter</type><staff>1</staff><notations><tied type="stop"/></notations></note>
+      <note><rest/><duration>12</duration><voice>1</voice><type>quarter</type><staff>1</staff></note>
+      <note><pitch><step>B</step><alter>-1</alter><octave>4</octave></pitch><duration>12</duration><voice>1</voice><type>quarter</type><stem>up</stem><staff>1</staff>
+        <notations><articulations><staccato/></articulations><arpeggiate/></notations></note>
+      <note><chord/><pitch><step>D</step><octave>5</octave></pitch><duration>12</duration><voice>1</voice><type>quarter</type><staff>1</staff><notations><arpeggiate/></notations></note>
+      <backup><duration>36</duration></backup>
+      <note><pitch><step>F</step><octave>4</octave></pitch><duration>24</duration><voice>2</voice><type>half</type><stem>down</stem><staff>1</staff></note>
+      <note><rest/><duration>12</duration><voice>2</voice><type>quarter</type><staff>1</staff></note>
+      <backup><duration>36</duration></backup>
+      <note><pitch><step>B</step><alter>-1</alter><octave>2</octave></pitch><duration>36</duration><voice>5</voice><type>half</type><dot/><staff>2</staff></note>
+      <attributes><clef number="2"><sign>G</sign><line>2</line></clef></attributes>
+    </measure>
+    <measure number="3">
+      <barline location="left"><ending number="1" type="start">1.</ending></barline>
+      <note><pitch><step>A</step><octave>4</octave></pitch><duration>24</duration><voice>1</voice><type>half</type><staff>1</staff></note>
+      <note><chord/><pitch><step>C</step><octave>5</octave></pitch><duration>24</duration><voice>1</voice><type>half</type><staff>1</staff></note>
+      <note><rest/><duration>12</duration><voice>1</voice><type>quarter</type><staff>1</staff></note>
+      <backup><duration>36</duration></backup>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>36</duration><voice>5</voice><type>half</type><dot/><staff>2</staff></note>
+      <barline location="right"><bar-style>light-heavy</bar-style><ending number="1" type="stop"/><repeat direction="backward"/></barline>
+    </measure>
+    <measure number="4">
+      <attributes><clef number="2"><sign>F</sign><line>4</line></clef></attributes>
+      <barline location="left"><ending number="2" type="start">2.</ending></barline>
+      <note><rest measure="yes"/><duration>36</duration><voice>1</voice><staff>1</staff></note>
+      <backup><duration>36</duration></backup>
+      <note><pitch><step>F</step><octave>2</octave></pitch><duration>36</duration><voice>5</voice><type>half</type><dot/><staff>2</staff></note>
+      <barline location="right"><bar-style>light-heavy</bar-style><ending number="2" type="stop"/></barline>
+    </measure>
+  </part>
+</score-partwise>

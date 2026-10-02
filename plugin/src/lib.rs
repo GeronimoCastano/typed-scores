@@ -1,3 +1,5 @@
+pub mod importer;
+
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -3760,6 +3762,16 @@ mod wasm_entrypoint {
         };
         serde_json::to_vec(&response)
             .map_err(|error| format!("typed-scores internal JSON serialization error: {error}"))
+    }
+
+    /// Arguments: the score file's bytes, then `name=value` option lines.
+    #[wasm_func]
+    pub fn import_score(source: &[u8], options: &[u8]) -> Result<Vec<u8>, String> {
+        let options = core::str::from_utf8(options).unwrap_or("");
+        Ok(match crate::importer::import(source, options) {
+            Ok(json) => format!("{{\"ok\":true,\"data\":{json}}}").into_bytes(),
+            Err(error) => encode_plugin_response::<()>(Err(error))?,
+        })
     }
 
     #[wasm_func]

@@ -1,0 +1,16 @@
+%abc-2.1
+% Importer fixture: two voices exercising the ABC features the importer maps.
+X:1
+T:Hill Song
+C:Importer Fixture
+M:6/8
+L:1/8
+Q:"Allegretto"
+V:1 name="Flute" sname="Fl."
+V:2 name="Cello" sname="Vc." clef=bass
+K:G
+[V:1] d |: "G"!p!(B2 A) G2 B | "D7"!crescendo(!A2^c d2!crescendo)!=c | "G"{/c}B3- B2 d |
+w: Oh the sun-ny morn-ing bright_ and clear a-
+[V:1] "C"(3efg .e Td3 |1 "G"G3 !fermata!G2 D :|2 [K:D] "D"d6 |]
+w: bove the hill so fine and still my home.
+[V:2] z |: G,3 D,3 | D,6 & z3 F,3 | Z2 |1 G,3 D,3 :|2 D,6 |]

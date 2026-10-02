@@ -11,6 +11,7 @@ cd "$repo_root"
 ./build.sh
 cargo test --manifest-path plugin/Cargo.toml
 scripts/test-errors.sh
+scripts/test-import.sh
 typst compile --root . tests/test.typ tests/test.pdf
 typst compile --root . docs/documentation.typ docs/documentation.pdf
 typst compile --root . examples/showcase.typ examples/showcase.pdf
@@ -20,11 +21,12 @@ scripts/package-preview.sh "$version" "$tmp_dir/packages-repo"
 
 smoke="$tmp_dir/smoke.typ"
 printf '%s\n' \
-  '#import "packages-repo/packages/preview/typed-scores/'"$version"'/src/lib.typ": score, bar' \
+  '#import "packages-repo/packages/preview/typed-scores/'"$version"'/src/lib.typ": score, bar, import-score' \
   '#bar("C5:q[dyn=mf fermata]", time: "1/4")' \
   '#score(time: "2/4", bars: ((notes: "F#5:h ~"), (notes: "F#5:h")))' \
   '#score(time: "4/4", bar-numbers: "all", bars: ((rehearsal: "A", notes: ("acciaccatura { D5:s } C5:q F5:q G5:h", "C4:w"), barline: (right: "final")),))' \
   '#score(time: "4/4", bars: ((notes: "C5:h[tremolo=16] (E5 G5 C6):h[arpeggio=up]"), (clef: "bass", notes: "tremolo 16 { C3:h G3:h }")))' \
+  '#import-score("X:1\nT:Smoke\nM:2/4\nL:1/8\nK:G\n|: \"G\"B2 AG | \"D\"A4 :|")' \
   >"$smoke"
 typst compile --root "$tmp_dir" "$smoke" "$tmp_dir/smoke.pdf"
 
