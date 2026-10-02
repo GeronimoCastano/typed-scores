@@ -4,6 +4,7 @@
 #import "../engraving/events.typ": _kneed-beam-required-gap
 #import "../engraving/markings.typ": _annotation-with-prefix, _articulation-height, _articulation-stack, _event-articulations, _has-annotation
 #import "../engraving/lyrics.typ": _lyric-lane-center, _lyric-verse-counts
+#import "../engraving/figured-bass.typ": _figure-row-step
 
 #let _system-repeat-start-gap = 1.7
 #let _default-left-bar-x = 1.36
@@ -209,6 +210,15 @@
     low = calc.min(low, -2.7, note-ink-low - 2.7)
   }
   if _annotation-with-prefix(layout, "text=") != none { low = calc.min(low, -2.4) }
+  // An ottava bracket stands on the outermost ink of its events.
+  let ottava = layout.at("ottava", default: none)
+  if ottava != none {
+    if ottava.kind in ("8va", "15ma") {
+      high = calc.max(high + 1.8, 6.2)
+    } else {
+      low = calc.min(low - 1.8, -2.9)
+    }
+  }
   if _annotation-with-prefix(layout, "text-below=") != none { low = calc.min(low, -7.8) }
   for annotation in layout.annotations {
     let annotation-text = str(annotation)
@@ -252,9 +262,20 @@
   lyric-size: 0.9,
   lyric-gap: 0.8,
   verse-gap: 1.45,
+  figure-rows: 0,
 ) = {
   let voice-count = voice-layouts.len()
   let note-extents = voice-layouts.map(_voice-vertical-extent)
+  // Figured bass fills a band under the bottom staff's ink; lyrics of that
+  // staff then sit below the band.
+  let figure-top = none
+  if figure-rows > 0 {
+    let bottom-extent = note-extents.last()
+    figure-top = calc.min(bottom-extent.low - 0.7, -1.8)
+    note-extents.last() = bottom-extent + (
+      low: figure-top - _figure-row-step * (figure-rows - 1) - 1.3,
+    )
+  }
   let staff-extents = ()
   for staff-index in range(voice-count) {
     let note-extent = note-extents.at(staff-index)
@@ -306,6 +327,7 @@
     bottom: bottom-map.at(str(voice-count - 1)),
     top: bottom-map.at("0") + 4,
     note-extents: note-extents,
+    figure-top: figure-top,
   )
 }
 

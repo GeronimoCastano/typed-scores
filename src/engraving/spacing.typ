@@ -1,7 +1,8 @@
 #import "primitives.typ": accidental-width, notehead-half-width, rest-width, stem-thickness
-#import "event-geometry.typ": _accidental-gap, _dot-gap-from-head, _dot-step, _duration-base, _grace-main-gap, _grace-note-step, _head-half-width, _min-onset-step, _pitch-vertical-rank, _stem-direction
+#import "event-geometry.typ": _accidental-gap, _dot-gap-from-head, _dot-step, _duration-base, _grace-main-gap, _grace-note-step, _head-half-width, _min-onset-step, _pitch-head-shape, _pitch-vertical-rank, _stem-direction
 #import "signatures.typ": _barline-clearance, _key-alters-natural, _key-suppresses-accidental
 #import "lyrics.typ": _add-lyric-spacing-demands
+#import "figured-bass.typ": _figure-stack-extent
 
 // ---------------------------------------------------------------------------
 // Horizontal spacing: onset-aligned positions shared by all voices
@@ -59,6 +60,8 @@
     let override = if overrides == none { auto } else { overrides.at(pitch-index) }
     let kind = if override != auto {
       override
+    } else if positioned-pitch.at("percussion", default: false) {
+      none
     } else if _key-alters-natural(positioned-pitch.pitch, key) {
       "Natural"
     } else if (
@@ -194,6 +197,7 @@
 #let _measure-positions(
   voices-layouts,
   harmony: (),
+  figures: (),
   lyrics: (),
   note-spacing: 3.1,
   beams: false,
@@ -227,12 +231,16 @@
       }
     }
   }
-  for layout in harmony {
+  for layout in harmony + figures {
     let onset-key = _onset-key(layout.onset)
     if str(onset-key) not in seen-onsets {
       seen-onsets.insert(str(onset-key), true)
       onset-keys.push(onset-key)
     }
+  }
+  let figure-extents = figures.map(_figure-stack-extent)
+  if figures.len() > 0 {
+    first-onset-x = calc.max(first-onset-x, figure-extents.first().left + 0.35)
   }
   if harmony.len() > 0 {
     // The first symbol is centered on its onset, so reserve its left half
@@ -311,6 +319,37 @@
     }
   }
 
+  // Neighboring figure stacks keep a small gap between their glyphs and, when
+  // they change during a held note, the space their time would take as notes.
+  // The last stack clears the barline.
+  for figure-index in range(figures.len()) {
+    let onset = figures.at(figure-index).onset
+    let from = _onset-key(onset)
+    let right = figure-extents.at(figure-index).right
+    if figure-index + 1 < figures.len() {
+      let next-onset = figures.at(figure-index + 1).onset
+      let next-key = str(_onset-key(next-onset))
+      let elapsed = (
+        numerator: next-onset.numerator * onset.denominator - onset.numerator * next-onset.denominator,
+        denominator: onset.denominator * next-onset.denominator,
+      )
+      let demand = (
+        from: from,
+        distance: calc.max(
+          right + figure-extents.at(figure-index + 1).left + 0.55,
+          _duration-spacing((duration_value: elapsed), note-spacing, shortest-duration-value),
+        ),
+      )
+      if next-key in demands-by-ending-onset {
+        demands-by-ending-onset.at(next-key).push(demand)
+      } else {
+        demands-by-ending-onset.insert(next-key, (demand,))
+      }
+    } else {
+      measure-end-demands.push((from: from, distance: right + 0.6))
+    }
+  }
+
   let lyric-spacing = _add-lyric-spacing-demands(
     lyrics,
     first-onset-x,
@@ -348,9 +387,13 @@
   if left-layout.rest or right-layout.rest { return false }
   let left-positions = left-layout.pitches.map(_pitch-vertical-rank)
   let right-positions = right-layout.pitches.map(_pitch-vertical-rank)
+  // Only heads of the same duration and shape can merge into one.
+  let heads = layout => layout.pitches.map(pitch => (
+    str(_pitch-vertical-rank(pitch)) + ":" + _pitch-head-shape(pitch)
+  )).sorted()
   let exact-unison = (
     left-layout.notehead == right-layout.notehead
-      and left-positions.sorted() == right-positions.sorted()
+      and heads(left-layout) == heads(right-layout)
   )
   if exact-unison { return false }
   left-positions.any(

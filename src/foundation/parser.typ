@@ -76,22 +76,27 @@
 // ---------------------------------------------------------------------------
 
 // The staves a voice may draw on, top to bottom, after its home staff ID.
-// Records are separated by U+001E and a staff ID from its clef by U+001F.
-#let _staff-context-request(home-staff-id, staff-clefs) = {
-  (home-staff-id, ..staff-clefs.map(((staff-id, clef)) => staff-id + "\u{1f}" + clef)).join("\u{1e}")
+// Records are separated by U+001E, and a staff ID, its clef, and its encoded
+// drum map by U+001F.
+#let _staff-context-request(home-staff-id, staff-clefs, staff-heads) = {
+  let records = staff-clefs.zip(staff-heads).map((((staff-id, clef), heads)) => (
+    (staff-id, clef, heads).join("\u{1f}")
+  ))
+  (home-staff-id, ..records).join("\u{1e}")
 }
 
 #let _layout-sequence(
   sequence-str,
   home-staff-id: "staff",
   staff-clefs: (("staff", "treble"),),
+  staff-heads: ("",),
   time: none,
   anchor: none,
   duration-anchor: none,
   transposition: none,
   location: "notes",
 ) = {
-  let staff-context = _staff-context-request(home-staff-id, staff-clefs)
+  let staff-context = _staff-context-request(home-staff-id, staff-clefs, staff-heads)
   // repr keeps an ASCII minus sign, which str replaces with U+2212.
   let transposition-str = if transposition == none { "" } else {
     repr(transposition.steps) + " " + repr(transposition.semitones)

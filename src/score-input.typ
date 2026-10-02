@@ -8,12 +8,14 @@
 #import "engraving/lyrics.typ": _layout-measure-lyrics, _normalize-measure-lyrics, _validate-lyric-continuations
 #import "engraving/event-geometry.typ": _event-staff-index, _is-split-chord
 #import "engraving/events.typ": _classify-cross-staff-beams
+#import "engraving/ottava.typ": _apply-ottava, _validate-ottava-closed
+#import "engraving/figured-bass.typ": _layout-figures
 
 // Public score-shape normalization and eager musical preparation.
 
 #let _measure-metadata-fields = (
-  "key", "time", "clef", "partial", "tempo", "harmony", "barline", "ending",
-  "rehearsal", "navigation", "lyrics",
+  "key", "time", "clef", "partial", "tempo", "harmony", "figures", "barline",
+  "ending", "rehearsal", "navigation", "lyrics",
 )
 
 #let _normalize-barline(value, label) = {
@@ -124,15 +126,78 @@
   (label: ending-label, start: start, stop: stop)
 }
 
-#let _normalize-staves(staves, clef) = {
+#let _drum-map-shapes = ("x", "circle-x")
+
+// A drum map names the notehead shape of the instrument on each listed pitch
+// of a staff, such as (e5: "x", g5: "circle-x"). It is sent to the parser as
+// space-separated pitch=shape pairs.
+#let _normalize-drum-map(value, label) = {
+  if value == none { return "" }
+  if type(value) != dictionary or value.len() == 0 {
+    _score-error(
+      label,
+      "heads must be a non-empty dictionary",
+      value: value,
+      expected: "written pitches mapped to x or circle-x, such as (e5: \"x\", g5: \"circle-x\")",
+      fix: "map each cymbal's pitch to its notehead shape or remove heads",
+    )
+  }
+  let seen = (:)
+  let entries = ()
+  for (pitch, shape) in value.pairs() {
+    let normalized = lower(pitch)
+    if normalized.match(regex("^[a-g](##|#|bb|b)?-?[0-9]$")) == none {
+      _score-error(
+        label,
+        "drum-map key is not a written pitch with an octave",
+        value: pitch,
+        expected: "a pitch such as g5, e5, or f#4",
+        fix: "write the pitch letter, any accidental, and the octave",
+      )
+    }
+    if type(shape) != str or shape not in _drum-map-shapes {
+      _score-error(
+        label + " " + pitch,
+        "unsupported notehead shape",
+        value: shape,
+        expected: "x or circle-x",
+        fix: "choose one of the supported notehead shapes",
+      )
+    }
+    if normalized in seen {
+      _score-error(
+        label,
+        "drum map lists the same pitch twice",
+        value: pitch,
+        expected: "each pitch once, whatever its letter case",
+        fix: "keep one entry for " + normalized,
+      )
+    }
+    seen.insert(normalized, true)
+    entries.push(normalized + "=" + shape)
+  }
+  entries.join(" ")
+}
+
+#let _normalize-staves(staves, clef, heads) = {
   if staves == none {
     return ((
       id: "staff",
       field: "notes",
       clef: _validate-clef(clef, "score clef"),
+      heads: _normalize-drum-map(heads, "score heads"),
       label: none,
       short-label: none,
     ),)
+  }
+  if heads != none {
+    _score-error(
+      "score heads",
+      "heads applies only to the implicit single-staff form and cannot be combined with staves",
+      value: heads,
+      expected: "heads inside the staves entry that needs a drum map",
+      fix: "move heads into that staff's configuration",
+    )
   }
   if clef != "treble" {
     _score-error(
@@ -159,7 +224,7 @@
         "staff id " + staff-id,
         "staff ID is reserved for bar metadata",
         value: staff-id,
-        expected: "an ID not used by notes, key, time, clef, partial, tempo, harmony, barline, ending, rehearsal, or navigation",
+        expected: "an ID not used by notes, key, time, clef, partial, tempo, harmony, figures, barline, ending, rehearsal, navigation, or lyrics",
         fix: "rename the staff and update its field in every bar",
       )
     }
@@ -183,12 +248,12 @@
       )
     }
     for field in staff-config.keys() {
-      if field not in ("clef", "label", "short-label") {
+      if field not in ("clef", "heads", "label", "short-label") {
         _score-error(
           "staff " + staff-id,
           "staff configuration has unknown field",
           value: field,
-          expected: "clef, label, or short-label",
+          expected: "clef, heads, label, or short-label",
           fix: "remove or rename the unknown field",
         )
       }
@@ -198,7 +263,7 @@
       _score-error(
         "staff " + staff-id,
         "staff configuration is missing clef",
-        expected: "clef: \"treble\", \"bass\", \"alto\", or \"tenor\"",
+        expected: "clef: \"treble\", \"bass\", \"alto\", \"tenor\", or \"percussion\"",
         fix: "add a supported clef field",
       )
     }
@@ -224,6 +289,10 @@
       id: staff-id,
       field: staff-id,
       clef: _validate-clef(staff-clef, "staff " + staff-id + " clef"),
+      heads: _normalize-drum-map(
+        staff-config.at("heads", default: none),
+        "staff " + staff-id + " heads",
+      ),
       label: staff-label,
       short-label: short-label,
     ))
@@ -231,7 +300,7 @@
   normalized-staves
 }
 
-#let _normalize-score-measures(staves, bars, clef, key, time, tempo, transposition) = {
+#let _normalize-score-measures(staves, bars, clef, key, time, tempo, transposition, heads: none) = {
   if type(bars) != array or bars.len() == 0 {
     _score-error(
       "score bars",
@@ -241,7 +310,7 @@
       fix: "add a dictionary such as (notes: \"c4:w\")",
     )
   }
-  let staff-specs = _normalize-staves(staves, clef)
+  let staff-specs = _normalize-staves(staves, clef, heads)
   let allowed-fields = _measure-metadata-fields + staff-specs.map(staff => staff.field)
   let normalized-measures = ()
   let current-key = _validate-key(key, "score key")
@@ -425,6 +494,7 @@
         "tempo in bar " + str(measure-index + 1),
       ),
       harmony: measure-input.at("harmony", default: none),
+      figures: measure-input.at("figures", default: none),
       barline: _normalize-barline(
         measure-input.at("barline", default: none),
         measure-label,
@@ -448,6 +518,7 @@
       ),
       staff-count: staff-specs.len(),
       staff-clefs: staff-specs.map(staff => (staff.id, current-clefs.at(staff.id))),
+      staff-heads: staff-specs.map(staff => staff.heads),
       voices: measure-voices,
     ))
   }
@@ -481,9 +552,10 @@
   lyric-size: 0.9,
   lyric-font: none,
   transposition: none,
+  heads: none,
 ) = {
   let normalized-measures = _normalize-score-measures(
-    staves, bars, clef, key, time, tempo, transposition,
+    staves, bars, clef, key, time, tempo, transposition, heads: heads,
   )
   let prepared-measures = ()
   let previous-key = none
@@ -491,6 +563,7 @@
   let previous-clefs = (:)
   let pitch-anchors = (:)
   let duration-anchors = (:)
+  let ottava-states = (:)
   let lyric-states = (:)
   for measure-index in range(normalized-measures.len()) {
     let normalized-measure = normalized-measures.at(measure-index)
@@ -509,13 +582,22 @@
         voice.notes,
         home-staff-id: voice.staff-id,
         staff-clefs: normalized-measure.staff-clefs,
+        staff-heads: normalized-measure.staff-heads,
         time: validation-time,
         anchor: pitch-anchors.at(voice.id, default: none),
         duration-anchor: duration-anchors.at(voice.id, default: none),
         transposition: normalized-measure.transposition,
         location: voice-location,
       )
-      let event-layouts = layout-response.layouts
+      let ottava = _apply-ottava(
+        layout-response.layouts,
+        ottava-states.at(voice.id, default: none),
+        measure-index + 1,
+        voice.staff-index,
+        voice-location,
+      )
+      ottava-states.insert(voice.id, ottava.open)
+      let event-layouts = ottava.layouts
       pitch-anchors.insert(voice.id, layout-response.anchor)
       duration-anchors.insert(voice.id, layout-response.duration_anchor)
       _validate-measure-duration(
@@ -557,6 +639,11 @@
       measure-index + 1,
       transposition: normalized-measure.transposition,
     )
+    let figures = _layout-figures(
+      normalized-measure.figures,
+      validation-time,
+      measure-index + 1,
+    )
     let lyric-layout = _layout-measure-lyrics(
       normalized-measure.lyrics,
       prepared-voices,
@@ -570,6 +657,7 @@
     let spacing = _measure-positions(
       prepared-voices.map(voice => voice.layouts),
       harmony: harmony,
+      figures: figures,
       lyrics: lyrics,
       note-spacing: note-spacing,
       beams: beams,
@@ -582,6 +670,7 @@
       partial: normalized-measure.at("partial", default: none),
       tempo: normalized-measure.at("tempo", default: none),
       harmony: harmony,
+      figures: figures,
       lyrics: lyrics,
       barline: normalized-measure.barline,
       ending: normalized-measure.ending,
@@ -600,6 +689,12 @@
     }
     previous-key = normalized-measure.key
     previous-time = normalized-measure.time
+  }
+  for voice in normalized-measures.last().voices {
+    _validate-ottava-closed(
+      ottava-states.at(voice.id),
+      "staff " + voice.staff-id + ", voice " + str(voice.layer-index + 1),
+    )
   }
   _validate-lyric-continuations(prepared-measures)
   prepared-measures

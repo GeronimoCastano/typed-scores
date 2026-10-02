@@ -86,6 +86,35 @@ incomplete bar. For a multi-staff clef change, use a staff map such as
 `clef: (lower: "treble")`. Mid-system clefs are reduced; the active clefs at a
 new system are full-size.
 
+`clef: "percussion"` draws the neutral percussion clef. Its lines and spaces
+read as a treble staff's do, so a drum kit writes the bass drum as `f4` and the
+snare as `c5`. Percussion notes take no accidentals, and the staff shows no key
+signature even when the other staves do.
+
+Cymbals take X noteheads. Give the staff a drum map with `heads`, and every
+note at a listed pitch takes that head; declared staves accept `heads` beside
+their `clef`.
+
+```typst
+#score(
+  clef: "percussion",
+  heads: (g5: "x", a5: "circle-x"),
+  time: "4/4",
+  beams: true,
+  bars: (
+    (notes: (
+      "g5:e g g g a5:q (g5 c5)",
+      "f4:q c5 f4 c5",
+    )),
+  ),
+)
+```
+
+A single note can also name its shape: `[x]`, `[circle-x]`, or `[normal]` after
+a note, after a chord for every head, or after one pitch inside a chord, as in
+`(g5[circle-x] c5):q`. A written shape wins over the map and works on any
+staff.
+
 For an engraved metronome mark, use named beat values instead of pasting a
 musical character:
 
@@ -173,6 +202,30 @@ another `score` call for each instrumental part:
 The part keeps its staff's clef changes and lyrics plus every bar's key,
 meter, tempo, harmony, barlines, endings, and marks; `staff-gap` and `group`
 are dropped.
+
+## Figured bass
+
+Use a bar's `figures` field for continuo figures below the bottom staff. Like
+harmony, it is a duration-bearing sequence that fills the bar. A token is one
+figure (`6:q`), a stack written top to bottom (`(6 4):q`), or `_:q` for a
+stretch without figures.
+
+```typst
+#score(
+  clef: "bass",
+  time: "4/4",
+  bars: (
+    (notes: "c3:h b2", figures: "_:h (6 4):q (5 3):q"),
+    (notes: "a2:q g2 f2:h", figures: "(7 #):q (#6 5):q n:h"),
+  ),
+)
+```
+
+A figure is a number with an optional accidental (`#`, `b`, `n`, `##`, `bb`) or
+`+` printed where it is written, so `#6` gives ♯6 and `6b` gives 6♭. An
+accidental alone alters the third, and `_` inside a stack keeps an empty row.
+Figures that change during a held bass note get their own onset column.
+
 
 ## Lyrics
 
@@ -307,6 +360,9 @@ before the next bar. Set `bar-numbers` to
 | `tremolo 16 { c:h g:h }` | Two-note alternating sixteenth tremolo |
 | `(c e g):h[arpeggio=up]` | Upward arpeggio over a chord |
 | `[s1(]` … `[s1)]` | Named slur |
+| `(g5[x] c5):q` / `g5:q[circle-x]` | X or circled-X noteheads, per pitch or per event |
+| `heads: (g5: "x")` | Staff drum map: noteheads by pitch |
+| `[8va(]` … `[8va)]` | Ottava bracket over sounding pitches |
 
 Durations are `w`, `h`, `q`, `e`, `s`, and `t`; append `.` or `..` for dots.
 An explicit duration becomes the current value for that staff; a note, chord,
@@ -325,8 +381,8 @@ Pitches accept `#`, `b`, `##`, or `bb`. In lowercase, `bb4` is B-flat 4 and
 notes may omit it: `g4:e a b c` resolves to G4, A4, B4, C5, all
 as eighth notes. The pitch anchor also continues independently across bars;
 an explicit octave resets it. If a staff begins without an anchor, treble,
-alto, and tenor use octave 4, while bass uses octave 3. Key signatures and
-accidentals do not alter this register calculation.
+alto, tenor, and percussion use octave 4, while bass uses octave 3. Key
+signatures and accidentals do not alter this register calculation.
 
 Chords use LilyPond-style relative entry. Their first written pitch resolves
 from the current staff anchor, and each remaining pitch resolves from the
@@ -372,8 +428,15 @@ Annotations follow an event in square brackets: fingering (`f=4`),
 articulations (`stacc`, `tenuto`, `accent`, `marcato`), dynamics (`dyn=pp`,
 `dyn=mf`, `dyn=sfz`), fermatas, breath marks, text directions, ornaments
 (`turn`, `inverted-turn`, `chromatic-turn`, `trill`, `mordent`,
-`inverted-mordent`), named slurs, pedal spans, and hairpins. Ties must join adjacent events with the same
-written pitch or chord and continue across wrapped systems.
+`inverted-mordent`), named slurs, pedal spans, hairpins, and ottava brackets.
+Ties must join adjacent events with the same written pitch or chord and
+continue across wrapped systems.
+
+An ottava span opens with `[8va(]` and closes with `[8va)]`; `8vb`, `15ma`, and
+`15mb` work the same way. Notes are written at sounding pitch and drawn one or
+two octaves nearer the staff, so `c6:q[8va(] d e f g6:q[8va)]` sits inside the
+treble staff under a dashed `8va` bracket. Brackets cross barlines and continue
+across system breaks with the bare numeral.
 
 For independent rhythms on one staff, make the staff content an array of two
 to four strings. Voice 1 stems upward, voice 2 downward, and later voices
@@ -423,6 +486,8 @@ naturals before the new signature when required.
   be flipped by hand, and ties cannot cross staves.
 - Grace groups exclude rests, tuplets, and nested ornamental groups.
 - Pedals and hairpins do not split automatically at system breaks.
+- Ottava spans stay on their voice's staff, figured bass sits under the bottom
+  staff without continuation lines, and percussion staves have five lines.
 - Dense markings or lyric verses may need `staff-gap`, `note-spacing`,
   `lyric-gap`, `verse-gap`, or `scale` adjustment.
 
