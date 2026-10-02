@@ -20,6 +20,7 @@
 #let barline-separation = 0.4
 #let repeat-barline-dot-separation = 0.16
 #let hairpin-thickness = 0.16
+#let octave-line-thickness = 0.16
 #let repeat-ending-line-thickness = 0.16
 // Bows: the midpoint value is the full ink width at the bow's center and
 // the endpoint value the width at its tips, for slurs and ties alike.
@@ -56,6 +57,12 @@
     "notehead-black": (sw: (0.0, -0.5), ne: (1.18, 0.5)),
     "notehead-half": (sw: (0.0, -0.5), ne: (1.18, 0.5)),
     "notehead-whole": (sw: (0.0, -0.5), ne: (1.688, 0.5)),
+    "notehead-x-black": (sw: (0.0, -0.5), ne: (1.16, 0.5)),
+    "notehead-x-half": (sw: (0.0, -0.5), ne: (1.336, 0.5)),
+    "notehead-x-whole": (sw: (0.0, -0.5), ne: (1.508, 0.5)),
+    "notehead-circle-x-black": (sw: (0.0, -0.5), ne: (0.996, 0.5)),
+    "notehead-circle-x-half": (sw: (0.0, -0.5), ne: (1.0, 0.5)),
+    "notehead-circle-x-whole": (sw: (0.0, -0.5), ne: (0.996, 0.5)),
     "met-note-whole": (sw: (0.0, -0.5), ne: (1.836, 0.592)),
     "met-note-half": (sw: (0.0, -0.564), ne: (1.364, 2.752)),
     "met-note-quarter": (sw: (0.0, -0.564), ne: (1.328, 2.752)),
@@ -67,6 +74,29 @@
     "bass-clef": (sw: (-0.02, -2.54), ne: (2.736, 1.048)),
     "alto-clef": (sw: (0.0, -2.024), ne: (2.796, 2.024)),
     "tenor-clef": (sw: (0.0, -2.024), ne: (2.796, 2.024)),
+    "percussion-clef": (sw: (0.0, -1.0), ne: (1.528, 1.0)),
+    "ottava-8": (sw: (0.0, -0.04), ne: (1.544, 1.852)),
+    "ottava-8va": (sw: (0.0, -0.04), ne: (3.54, 1.852)),
+    "ottava-8vb": (sw: (0.0, -0.04), ne: (3.184, 1.852)),
+    "ottava-15": (sw: (0.0, -0.04), ne: (2.668, 1.844)),
+    "ottava-15ma": (sw: (0.0, -0.04), ne: (5.26, 1.844)),
+    "ottava-15mb": (sw: (0.0, -0.04), ne: (4.928, 1.844)),
+    "figbass-0": (sw: (0.08, -0.004), ne: (0.94, 1.004)),
+    "figbass-1": (sw: (0.08, 0.0), ne: (0.548, 1.016)),
+    "figbass-2": (sw: (0.08, -0.012), ne: (0.888, 1.012)),
+    "figbass-3": (sw: (0.08, 0.0), ne: (0.82, 1.008)),
+    "figbass-4": (sw: (0.08, 0.004), ne: (0.864, 1.012)),
+    "figbass-5": (sw: (0.08, 0.0), ne: (0.82, 1.032)),
+    "figbass-6": (sw: (0.08, 0.0), ne: (0.864, 1.0)),
+    "figbass-7": (sw: (0.08, 0.0), ne: (0.868, 0.98)),
+    "figbass-8": (sw: (0.08, 0.0), ne: (0.848, 1.004)),
+    "figbass-9": (sw: (0.08, 0.0), ne: (0.864, 1.0)),
+    "figbass-sharp": (sw: (0.076, -0.22), ne: (0.676, 1.22)),
+    "figbass-flat": (sw: (0.084, -0.001443), ne: (0.632, 1.236)),
+    "figbass-natural": (sw: (0.08, -0.2), ne: (0.452, 1.052)),
+    "figbass-double-sharp": (sw: (0.08, -0.02), ne: (0.868, 0.788)),
+    "figbass-double-flat": (sw: (0.088, -0.001443), ne: (0.988, 1.236)),
+    "figbass-plus": (sw: (0.0, 0.24), ne: (0.536, 0.776)),
     "sharp": (sw: (0.0, -1.392), ne: (0.996, 1.4)),
     "flat": (sw: (0.0, -0.7), ne: (0.904, 1.756)),
     "natural": (sw: (0.0, -1.34), ne: (0.672, 1.364)),
@@ -180,16 +210,32 @@
   }
 }
 
-#let draw-filled-notehead(x, y, unit: 8pt, scale: 1.0, paint: black) = {
-  _draw-bravura-glyph("notehead-black", x, y, unit: unit, glyph-scale: scale, paint: paint)
-}
+// Glyph, drawing scale, half-width, and stem attachment height of every
+// notehead shape at each duration, from Bravura's SMuFL anchors. The half-note
+// X is drawn at the regular head's width so the stem meets its arm.
+#let notehead-geometry = (
+  "normal": (
+    "black": (glyph: "notehead-black", scale: 1.0, half-width: notehead-half-width, stem-dy: stem-anchor-dy),
+    "half": (glyph: "notehead-half", scale: 1.0, half-width: notehead-half-width, stem-dy: stem-anchor-dy),
+    "whole": (glyph: "notehead-whole", scale: 1.0, half-width: 0.844, stem-dy: stem-anchor-dy),
+  ),
+  "x": (
+    "black": (glyph: "notehead-x-black", scale: 1.0, half-width: 0.58, stem-dy: 0.444),
+    "half": (glyph: "notehead-x-half", scale: 1.18 / 1.336, half-width: notehead-half-width, stem-dy: 0.412 * 1.18 / 1.336),
+    "whole": (glyph: "notehead-x-whole", scale: 1.0, half-width: 0.754, stem-dy: 0.0),
+  ),
+  "circle-x": (
+    "black": (glyph: "notehead-circle-x-black", scale: 1.0, half-width: 0.498, stem-dy: 0.0),
+    "half": (glyph: "notehead-circle-x-half", scale: 1.0, half-width: 0.5, stem-dy: 0.0),
+    "whole": (glyph: "notehead-circle-x-whole", scale: 1.0, half-width: 0.498, stem-dy: 0.0),
+  ),
+)
 
-#let draw-open-notehead(x, y, unit: 8pt, scale: 1.0, paint: black) = {
-  _draw-bravura-glyph("notehead-half", x, y, unit: unit, glyph-scale: scale, paint: paint)
-}
-
-#let draw-whole-notehead(x, y, unit: 8pt, scale: 1.0, paint: black) = {
-  _draw-bravura-glyph("notehead-whole", x, y, unit: unit, glyph-scale: scale, paint: paint)
+// `kind` is the duration's head (black, half, or whole) and `shape` the
+// written notehead shape.
+#let draw-notehead(kind, shape, x, y, unit: 8pt, scale: 1.0, paint: black) = {
+  let geometry = notehead-geometry.at(shape).at(kind)
+  _draw-bravura-glyph(geometry.glyph, x, y, unit: unit, glyph-scale: geometry.scale * scale, paint: paint)
 }
 
 #let draw-augmentation-dot(x, y, unit: 8pt, scale: 1.0, paint: black) = {
@@ -207,10 +253,12 @@
   }
 }
 
-#let draw-stem(x, y, direction: "up", length: 3.5, unit: 8pt, glyph-scale: 1.0, paint: black) = {
+// `attachment-dy` moves only where the stem leaves its notehead, so heads of
+// every shape share the same stem tips and beams.
+#let draw-stem(x, y, direction: "up", length: 3.5, unit: 8pt, glyph-scale: 1.0, attachment-dy: stem-anchor-dy, paint: black) = {
   import cetz.draw: *
   let stem-tip-point = stem-tip(x, y, direction: direction, length: length, glyph-scale: glyph-scale)
-  let attachment-y = if direction == "up" { y + stem-anchor-dy * glyph-scale } else { y - stem-anchor-dy * glyph-scale }
+  let attachment-y = if direction == "up" { y + attachment-dy * glyph-scale } else { y - attachment-dy * glyph-scale }
   line(
     (stem-tip-point.at(0), attachment-y),
     stem-tip-point,

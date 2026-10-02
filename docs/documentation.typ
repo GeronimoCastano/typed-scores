@@ -238,7 +238,7 @@ perform full-measure duration validation.
 #argtable(
   [#c("notes")], [`str`], [required], [One event string.],
   [#c("lyrics")], [`str | array | none`], [`none`], [One lyric verse or an array of verses.],
-  [#c("clef")], [`str`], [#c("\"treble\"")], [Treble, bass, alto, or tenor clef.],
+  [#c("clef")], [`str`], [#c("\"treble\"")], [Treble, bass, alto, tenor, or percussion clef.],
   [#c("key")], [`str`], [#c("\"C\"")], [Major or minor key signature.],
   [#c("time")], [`str | none`], [`none`], [Meter and expected duration, such as #c("\"4/4\"").],
   [#c("theme")], [`str`], [#c("\"auto\"")], [Notation ink: `light` uses black, `dark` uses white, and `auto` follows the surrounding solid text fill.],
@@ -325,7 +325,7 @@ ID.
 
 Staff IDs are Typst dictionary keys, so keep them short and machine-oriented.
 They cannot reuse reserved bar fields such as `notes`, `lyrics`, `key`,
-`time`, `partial`, `tempo`, or `harmony`.
+`time`, `partial`, `tempo`, `harmony`, or `figures`.
 
 == Independent voices
 
@@ -429,6 +429,58 @@ note character. `beat` accepts `whole`, `half`, `quarter`, `eighth`,
 automatically. `text` is optional, so `(beat: "eighth", bpm: 132)` produces
 just the note-and-number mark.
 
+== Percussion staves
+
+#c("clef: \"percussion\"") draws the neutral percussion clef. Its lines and
+spaces read as a treble staff's do, so each instrument is written at the pitch
+of its line or space. Drum legends differ between publishers; in the common
+Weinberg layout the bass drum is F4, the snare C5, the hi-hat G5, the ride F5,
+and the crash A5, while LilyPond's default drum style puts the hi-hat on E5
+and the crash on G5. The notes are unpitched, so they take no
+accidentals, and the staff carries no key signature even in a score whose other
+staves do; its time signatures stay aligned with theirs. Percussion staves
+accept everything else a staff does, including independent voices, beams,
+articulations, and clef changes.
+
+The notehead shape tells the player what kind of instrument is struck: round
+heads for drums, X heads for cymbals and hi-hat, and a circled X for a crash or
+an open hi-hat. Write #c("[x]") or #c("[circle-x]") after a note, or after a
+chord to change every head. Inside a chord, the same block after one pitch
+changes only that head, so a hi-hat struck with the snare is
+#c("(g5[x] c5):q"). A shape written on a note belongs to that event only.
+
+A drum part repeats the same instruments throughout, so a staff can carry a
+drum map instead: #c("heads") pairs written pitches with #c("\"x\"") or
+#c("\"circle-x\""), and every note drawn on that staff at a listed pitch takes
+that head. Give it to a declared staff beside its clef, or to the score itself
+for the single-staff form, as with #c("clef"). A shape written on the note
+still wins, and #c("[normal]") restores a round head at a mapped pitch.
+
+#demo[
+  #example(```typ
+#score(
+  clef: "percussion",
+  heads: (g5: "x", a5: "circle-x"),
+  time: "4/4",
+  beams: true,
+  bars: (
+    (notes: (
+      "g5:e g g g g g g[circle-x] g",
+      "f4:q c5 f4:e f c5:q",
+    )),
+    (notes: (
+      "a5:q g5:e g (g5 c5):q g5",
+      "f4:q c5 (f4 c5):h",
+    )),
+  ),
+)
+```, side: false)
+]
+
+X heads work on any staff, for example for spoken notes. Stems attach where
+each Bravura glyph expects them, while stem tips and beams stay where round
+heads would put them; half and whole notes use their own X glyphs.
+
 == Harmony symbols
 
 Use a bar's #c("harmony") field for chord symbols above the top staff. It is
@@ -453,6 +505,38 @@ so jazz spellings such as #c("Cmaj7"), #c("F#7(b9)"), #c("Bb/D"), and
       notes: "g5:h e5:h",
       harmony: "Dm7:q G7:q Cmaj7:h",
     ),
+  ),
+)
+```, side: false)
+]
+
+== Figured bass
+
+Use a bar's #c("figures") field for continuo figures below the bottom staff. Like
+harmony, it is a duration-bearing sequence that must fill the active bar, and
+each token names what applies from its onset. A token is one figure such as
+#c("6:q"), a stack such as #c("(6 4):q") written top to bottom, or #c("_:q") for
+a stretch without figures. Figures may change during a held bass note; each
+change gets its own onset column.
+
+Each figure is a number with an optional accidental (#c("#"), #c("b"),
+#c("n"), #c("##"), or #c("bb")) or #c("+") before or after it, printed where it
+is written: #c("#6") gives ♯6 and #c("6b") gives 6♭. An accidental alone, such
+as #c("#") or #c("n"), alters the third above the bass, and #c("_") inside a
+stack keeps an empty row. Figures are drawn with Bravura's figured-bass glyphs,
+the number centered on the bass note and its accidentals hanging outside.
+They sit in one band per system under the bottom staff's notes and dynamics;
+lyrics sung on that staff move below the band.
+
+#demo[
+  #example(```typ
+#score(
+  clef: "bass",
+  time: "4/4",
+  bars: (
+    (notes: "c3:h b2", figures: "_:h (6 4):q (5 3):q"),
+    (notes: "a2:q g2 f2:h", figures: "(7 #):q (#6 5):q n:h"),
+    (notes: "g2:w", figures: "(4 _):h (#3 +):h"),
   ),
 )
 ```, side: false)
@@ -693,7 +777,8 @@ pitch to the preceding resolved note, so `g4:e a b c` ends on C5 and all four
 notes are eighths. Accidentals and the active key signature do not affect that
 register choice. The anchor continues across bars independently for each
 staff, and any explicit octave resets it. At the beginning of an unanchored
-staff, treble, alto, and tenor start in octave 4; bass starts in octave 3.
+staff, treble, alto, tenor, and percussion start in octave 4; bass starts in
+octave 3.
 
 == Relative chords
 
@@ -884,9 +969,9 @@ an arrow at the appropriate end.
 Annotations follow an event in square brackets. Supported annotations include
 fingering (`f=4`), staccato, staccatissimo, tenuto, accent, marcato, text
 directions, ornaments (turns, trills, and mordents), fermatas (`fermata`),
-breath marks (`breath`), named slurs, pedal spans, hairpins, and dynamics
-(`dyn=p`, `dyn=pp`, `dyn=mf`, `dyn=sfz`, and the other standard SMuFL
-combinations).
+breath marks (`breath`), named slurs, pedal spans, hairpins, ottava brackets,
+and dynamics (`dyn=p`, `dyn=pp`, `dyn=mf`, `dyn=sfz`, and the other standard
+SMuFL combinations).
 
 Every ornament occupies one script slot above the note, so an event may carry
 at most one of them. The turn family — `turn`, its reverse `inverted-turn`, and
@@ -915,6 +1000,8 @@ stems downward.
   [#c("s1(") … #c("s1)")], [Named slur.],
   [#c("p1(") … #c("p1)")], [Pedal span.],
   [#c("h1<") or #c("h1>") … #c("h1!")], [Crescendo / diminuendo hairpin.],
+  [#c("x") / #c("circle-x") / #c("normal")], [Notehead shape, overriding any drum map; also after one chord pitch.],
+  [#c("8va(") … #c("8va)")], [Ottava bracket; also #c("8vb"), #c("15ma"), and #c("15mb").],
 )
 
 #demo[
@@ -940,6 +1027,44 @@ stack over articulations and under fingerings just as a turn does.
   time: "4/4",
   bars: (
     (notes: "g4:q[trill] a4:q[mordent] b4:q[inverted-mordent] c5:q[inverted-turn]"),
+  ),
+)
+```, side: false)
+]
+
+== Ottava brackets
+
+An ottava span opens with #c("8va(") and closes with #c("8va)") on the event
+that ends it, which may be the same event. Write the notes at the pitch they
+sound, as in LilyPond: under #c("8va") they are drawn an octave lower, under
+#c("15ma") two octaves lower, and #c("8vb") and #c("15mb") draw them one or
+two octaves higher. Relative octaves, ties, and chords therefore keep working
+on the sounding pitches, and accidentals hold for the line or space where a
+note is drawn.
+
+A dashed bracket names the shift, above the staff for #c("8va") and #c("15ma")
+and below it for #c("8vb") and #c("15mb"), and ends in a hook at the last note.
+It spans barlines and continues across system breaks, where the continuation
+shows the bare numeral. Brackets clear the notes, articulations, and slurs
+beneath them; chord names, voltas, and tempo marks rise above an ottava on the
+top staff, and a bracket below the staff hangs under the voice's dynamics. A
+span over a single note shows the sign alone. Each voice holds one ottava at a
+time, and the events of a span stay on the voice's own staff.
+
+#demo[
+  #example(```typ
+#score(
+  staves: (upper: (clef: "treble"), lower: (clef: "bass")),
+  time: "4/4",
+  bars: (
+    (
+      upper: "c6:q[8va(] d e f",
+      lower: "c2:q[8vb(] g1 c2 g1[8vb)]",
+    ),
+    (
+      upper: "g6:q a b c7[8va)]",
+      lower: "c3:w",
+    ),
   ),
 )
 ```, side: false)
@@ -1163,6 +1288,9 @@ instrument whose written pitch has been prepared by the author:
   chord.
 - Pedals and hairpins are event-anchored and do not split automatically at a
   system break.
+- Ottava spans stay on their voice's staff; end one before a staff switch.
+- Figured bass is drawn under the bottom staff, without continuation lines.
+- Percussion staves have five lines; noteheads may be round, X, or circled X.
 - Dense editorial markings or lyric verses may require `staff-gap`,
   `note-spacing`, `lyric-gap`, `verse-gap`, or `scale` adjustments.
 
@@ -1191,6 +1319,11 @@ instrument whose written pitch has been prepared by the author:
   [#c("barline: (left: \"repeat-start\")")], [Repeat sign on a bar edge.],
   [#c("barline: (right: \"final\")")], [Final barline on the right edge.],
   [#c("clef: \"bass\"")], [Persistent single-staff clef change at a bar boundary.],
+  [#c("clef: \"percussion\"")], [Unpitched staff read in treble-clef positions.],
+  [#c("(g5[x] c5):q")], [Chord with an X head on one pitch.],
+  [#c("heads: (g5: \"x\")")], [Staff drum map giving a pitch its notehead shape.],
+  [#c("[8va(]") … #c("[8va)]")], [Ottava span over sounding pitches.],
+  [#c("figures: \"(6 4):q 5:h\"")], [Timed figured bass under the bottom staff.],
   [#c("rehearsal: \"A\"") / #c("navigation: \"segno\"")], [Boundary rehearsal / navigation mark.],
   [#c("ending: (label: \"Final\", start: true)")], [Literal volta label.],
 )

@@ -24,6 +24,12 @@ GLYPHS = [
     ("noteheadBlack", "notehead-black.svg", 0xE0A4),
     ("noteheadHalf", "notehead-half.svg", 0xE0A3),
     ("noteheadWhole", "notehead-whole.svg", 0xE0A2),
+    ("noteheadXBlack", "notehead-x-black.svg", 0xE0A9),
+    ("noteheadXHalf", "notehead-x-half.svg", 0xE0A8),
+    ("noteheadXWhole", "notehead-x-whole.svg", 0xE0A7),
+    ("noteheadCircleX", "notehead-circle-x-black.svg", 0xE0B3),
+    ("noteheadCircleXHalf", "notehead-circle-x-half.svg", 0xE0B2),
+    ("noteheadCircleXWhole", "notehead-circle-x-whole.svg", 0xE0B1),
     ("metNoteWhole", "met-note-whole.svg", 0xECA2),
     ("metNoteHalfUp", "met-note-half.svg", 0xECA3),
     ("metNoteQuarterUp", "met-note-quarter.svg", 0xECA5),
@@ -91,6 +97,29 @@ GLYPHS = [
     ("segno", "segno.svg", 0xE047),
     ("coda", "coda.svg", 0xE048),
     ("wiggleArpeggiatoUp", "arpeggio-wiggle.svg", 0xEAA9),
+    ("unpitchedPercussionClef1", "percussion-clef.svg", 0xE069),
+    ("ottava", "ottava-8.svg", 0xE510),
+    ("ottavaAlta", "ottava-8va.svg", 0xE511),
+    ("ottavaBassaVb", "ottava-8vb.svg", 0xE51C),
+    ("quindicesima", "ottava-15.svg", 0xE514),
+    ("quindicesimaAlta", "ottava-15ma.svg", 0xE515),
+    ("quindicesimaBassaMb", "ottava-15mb.svg", 0xE51D),
+    ("figbass0", "figbass-0.svg", 0xEA50),
+    ("figbass1", "figbass-1.svg", 0xEA51),
+    ("figbass2", "figbass-2.svg", 0xEA52),
+    ("figbass3", "figbass-3.svg", 0xEA54),
+    ("figbass4", "figbass-4.svg", 0xEA55),
+    ("figbass5", "figbass-5.svg", 0xEA57),
+    ("figbass6", "figbass-6.svg", 0xEA5B),
+    ("figbass7", "figbass-7.svg", 0xEA5D),
+    ("figbass8", "figbass-8.svg", 0xEA60),
+    ("figbass9", "figbass-9.svg", 0xEA61),
+    ("figbassSharp", "figbass-sharp.svg", 0xEA66),
+    ("figbassFlat", "figbass-flat.svg", 0xEA64),
+    ("figbassNatural", "figbass-natural.svg", 0xEA65),
+    ("figbassDoubleSharp", "figbass-double-sharp.svg", 0xEA67),
+    ("figbassDoubleFlat", "figbass-double-flat.svg", 0xEA63),
+    ("figbassPlus", "figbass-plus.svg", 0xEA6C),
 ]
 
 
@@ -151,6 +180,9 @@ def main() -> None:
 
     font_path = arguments.bravura_root / "redist" / "otf" / "Bravura.otf"
     metadata_path = arguments.bravura_root / "redist" / "bravura_metadata.json"
+    if not metadata_path.exists():
+        # Newer Bravura releases name the metadata after the font.
+        metadata_path = arguments.bravura_root / "redist" / "Bravura.json"
     font = TTFont(font_path)
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
 

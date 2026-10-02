@@ -8,6 +8,8 @@
 #import "../engraving/markings.typ": _annotation-stem-direction, _collect-hairpins, _collect-pedal-spans, _draw-hairpins, _draw-pedal-spans, _draw-placed-annotations, _draw-tempo, _dynamics-baseline, _event-decoration-top
 #import "../engraving/ties-slurs.typ": _collect-system-slurs, _collect-ties, _draw-slur-bows, _draw-ties, _layout-slurs, _slur-clearance-obstacles
 #import "../engraving/lyrics.typ": _draw-system-lyrics, _lyric-verse-counts, _placed-lyric-items
+#import "../engraving/figured-bass.typ": _draw-figure-stack, _figure-rows
+#import "../engraving/ottava.typ": _collect-ottava-spans, _draw-ottava-spans, _ottava-spans-top, _place-ottava-spans
 #import "staff-stacking.typ": _group-symbol-to-bar-gap, _kneed-beam-gaps, _staff-layouts-for-measures, _staff-stack, _system-clef-after-barline-gap, _system-repeat-start-gap
 #import "system-breaking.typ": _allocate-measure-widths, _measure-prefix-in-system, _minimum-justification-scale
 
@@ -252,6 +254,7 @@
     lyric-size: lyric-size,
     lyric-gap: lyric-gap,
     verse-gap: verse-gap,
+    figure-rows: calc.max(0, ..system-measures.map(measure => _figure-rows(measure.figures))),
   )
   let bottom-map = stack.bottoms
   let staff-note-extents = stack.note-extents
@@ -475,12 +478,44 @@
     ))
   }
 
+  // Ottava brackets clear every event of their staff and their voice's slurs.
+  let staff-items = range(staff-count).map(_ => ())
+  for voice-index in range(lane-count) {
+    for placed in placed-by-voice.at(voice-index) {
+      for item in placed {
+        staff-items.at(_event-staff-index(item.layout)).push((item: item, placed: placed))
+      }
+    }
+  }
+  let ottava-spans-by-voice = range(lane-count).map(voice-index => {
+    let staff-index = system-measures.first().voices.at(voice-index).staff-index
+    _place-ottava-spans(
+      _collect-ottava-spans(placed-by-voice.at(voice-index), continuation-left-x, continuation-right-x),
+      staff-items.at(staff-index),
+      bottom-y: bottom-map.at(str(staff-index)),
+      beams: beams,
+      slur-layouts: slur-layouts-by-voice.at(voice-index),
+      dynamics-baseline: dynamics-baseline-by-voice.at(voice-index),
+    )
+  })
+  // Marks above the system (chord names, voltas, rehearsal marks, tempo)
+  // rise over an ottava bracket on the top staff.
+  let top-ottava = none
+  for voice-index in range(lane-count) {
+    if system-measures.first().voices.at(voice-index).staff-index != 0 { continue }
+    let voice-top = _ottava-spans-top(ottava-spans-by-voice.at(voice-index))
+    if voice-top != none {
+      top-ottava = if top-ottava == none { voice-top } else { calc.max(top-ottava, voice-top) }
+    }
+  }
+  let above-top = if top-ottava == none { system-top } else { calc.max(system-top, top-ottava - 1.0) }
+
   let system-last = system.start + system.widths.len() - 1
   let has-system-ending = ending-spans.any(span =>
     span.stop >= system.start and span.start <= system-last
   )
   let has-harmony = system-measures.any(measure => measure.harmony.len() > 0)
-  let volta-y = system-top + 2.0
+  let volta-y = above-top + 2.0
   if has-system-ending {
     for placed in placed-by-voice.first() {
       for item in placed {
@@ -502,11 +537,11 @@
     }
   }
   let header-y-base = if has-system-ending {
-    calc.max(system-top + 4.6, volta-y + 1.6)
+    calc.max(above-top + 4.6, volta-y + 1.6)
   } else {
-    system-top + 4.6
+    above-top + 4.6
   }
-  let harmony-y = system-top + 2.4
+  let harmony-y = above-top + 2.4
   let header-y = if has-harmony { calc.max(header-y-base, harmony-y + 3.0) } else { header-y-base }
 
   block(width: system-width * unit, {
@@ -586,7 +621,7 @@
       if measure.rehearsal != none {
         import cetz.draw: *
         content(
-          (measure-start + 0.18, system-top + 2.15),
+          (measure-start + 0.18, above-top + 2.15),
           box(
             inset: 0.18em,
             stroke: 0.10 * unit + paint,
@@ -602,14 +637,14 @@
           draw-navigation-symbol(
             measure.navigation,
             measure-start + 1.5,
-            system-top + if measure.rehearsal == none { 3.0 } else { 4.55 },
+            above-top + if measure.rehearsal == none { 3.0 } else { 4.55 },
             unit: unit,
             scale: 0.62,
             paint: paint,
           )
         } else {
           content(
-            (measure-start + 0.18, system-top + if measure.rehearsal == none { 2.0 } else { 3.65 }),
+            (measure-start + 0.18, above-top + if measure.rehearsal == none { 2.0 } else { 3.65 }),
             text(size: unit * 1.02, style: "italic", measure.navigation),
             anchor: "south-west",
             padding: 0pt,
@@ -650,6 +685,18 @@
           text(size: unit * 1.12, weight: "bold", harmony.symbol),
           anchor: "south",
           padding: 0pt,
+        )
+      }
+      // Figures stand under the bottom staff, centered on their onsets.
+      for figure-layout in measure.figures {
+        _draw-figure-stack(
+          figure-layout,
+          note-start
+            + measure.positions.at(str(_onset-key(figure-layout.onset)))
+              * measure-justifications.at(measure-index),
+          bottom-map.at(str(staff-count - 1)) + stack.figure-top - 1.0,
+          unit: unit,
+          paint: paint,
         )
       }
       for voice-index in range(lane-count) {
@@ -748,6 +795,7 @@
         unit: unit,
         paint: paint,
       )
+      _draw-ottava-spans(ottava-spans-by-voice.at(voice-index), unit: unit, paint: paint)
     }
 
     _draw-system-lyrics(

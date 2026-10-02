@@ -1,7 +1,7 @@
 #import "@preview/cetz:0.5.2"
-#import "primitives.typ": beam-spacing, beam-thickness, draw-accidental, draw-arpeggio, draw-augmentation-dot, draw-beam, draw-bow, draw-filled-notehead, draw-flag, draw-ledger-lines, draw-open-notehead, draw-rest, draw-stem, draw-stem-tremolo, draw-whole-notehead, ledger-extension, rest-width, staff-y, stem-anchor-dy, stem-center-offset, stem-tip
+#import "primitives.typ": beam-spacing, beam-thickness, draw-accidental, draw-arpeggio, draw-augmentation-dot, draw-beam, draw-bow, draw-flag, draw-ledger-lines, draw-notehead, draw-rest, draw-stem, draw-stem-tremolo, ledger-extension, notehead-geometry, rest-width, staff-y, stem-anchor-dy, stem-center-offset, stem-tip
 #import "../foundation/diagnostics.typ": _score-error
-#import "event-geometry.typ": _accidental-gap, _alternating-tremolo-strokes, _default-stem-length, _dot-gap-from-head, _dot-step, _dot-y, _draw-dots, _duration-base, _event-bottom-y, _event-notation-scale, _event-pitch-ys, _event-staff-index, _group-notation-scale, _head-half-width, _is-split-chord, _layout-stem-direction, _pitch-bottom-y, _pitch-staff-index, _single-tremolo-strokes, _small-beam-center-step, _small-beam-thickness, _small-notation-scale, _small-stem-length, _small-stem-length-fraction, _stem-direction, _uses-small-notation
+#import "event-geometry.typ": _accidental-gap, _alternating-tremolo-strokes, _default-stem-length, _dot-gap-from-head, _dot-step, _dot-y, _draw-dots, _duration-base, _event-bottom-y, _event-notation-scale, _event-pitch-ys, _event-staff-index, _group-notation-scale, _head-half-width, _is-split-chord, _layout-stem-direction, _pitch-bottom-y, _pitch-head-shape, _pitch-staff-index, _single-tremolo-strokes, _small-beam-center-step, _small-beam-thickness, _small-notation-scale, _small-stem-length, _small-stem-length-fraction, _stem-direction, _uses-small-notation
 #import "signatures.typ": _key-default-accidental
 #import "spacing.typ": _accidental-plan, _cluster-offsets
 
@@ -77,13 +77,15 @@
           paint: paint,
         )
       }
-      if layout.notehead == "whole" {
-        draw-whole-notehead(head-x, notehead-y, unit: unit, scale: notation-scale, paint: paint)
-      } else if layout.notehead == "half" {
-        draw-open-notehead(head-x, notehead-y, unit: unit, scale: notation-scale, paint: paint)
-      } else {
-        draw-filled-notehead(head-x, notehead-y, unit: unit, scale: notation-scale, paint: paint)
-      }
+      draw-notehead(
+        layout.notehead,
+        _pitch-head-shape(positioned-pitch),
+        head-x,
+        notehead-y,
+        unit: unit,
+        scale: notation-scale,
+        paint: paint,
+      )
       let dot-x = x + right-spread + head-half-width + _dot-gap-from-head + 0.2
       for dot-index in range(layout.duration.dots) {
         draw-augmentation-dot(
@@ -107,6 +109,8 @@
       let low-y = calc.min(..y-values)
       let high-y = calc.max(..y-values)
       let stem-start-y = if direction == "up" { low-y } else { high-y }
+      let stem-head = layout.pitches.at(y-values.position(y => y == stem-start-y))
+      let stem-attachment-dy = notehead-geometry.at(_pitch-head-shape(stem-head)).at(layout.notehead).stem-dy
       let stem-length = if stem-length-override == none {
         (high-y - low-y) + if notation-scale < 1 { _small-stem-length } else { _default-stem-length }
       } else {
@@ -118,7 +122,16 @@
         // head-side strip retains LilyPond's clearance from the notehead.
         if strokes == 4 { stem-length += 0.82 }
       }
-      draw-stem(x, stem-start-y, direction: direction, length: stem-length, unit: unit, glyph-scale: notation-scale, paint: paint)
+      draw-stem(
+        x,
+        stem-start-y,
+        direction: direction,
+        length: stem-length,
+        unit: unit,
+        glyph-scale: notation-scale,
+        attachment-dy: stem-attachment-dy,
+        paint: paint,
+      )
       if tremolo != none {
         let strokes = _single-tremolo-strokes(layout, tremolo)
         let sign = if direction == "up" { 1 } else { -1 }
@@ -752,10 +765,16 @@
     let visible = ()
     for positioned-pitch in item.layout.pitches {
       let pitch = positioned-pitch.pitch
-      let state-key = str(_pitch-staff-index(positioned-pitch)) + ":" + pitch.letter + str(pitch.octave)
+      // Accidentals hold for a drawn line or space, so a pitch under an
+      // ottava and one outside it that share a position share the state.
+      let state-key = str(_pitch-staff-index(positioned-pitch)) + ":" + str(positioned-pitch.staff_position)
       let current = accidental-states.at(
         state-key,
-        default: _key-default-accidental(pitch.letter, key),
+        default: _key-default-accidental(
+          pitch.letter,
+          key,
+          percussion: positioned-pitch.at("percussion", default: false),
+        ),
       )
       if continues-tie {
         visible.push(none)

@@ -1,4 +1,4 @@
-#import "primitives.typ": draw-augmentation-dot, notehead-half-width, staff-y, stem-anchor-dy
+#import "primitives.typ": draw-augmentation-dot, notehead-geometry, notehead-half-width, staff-y, stem-anchor-dy
 
 // Shared note-event geometry and duration-derived engraving decisions.
 
@@ -83,11 +83,19 @@
   else if clef == "bass" { staff-y(8, bottom-y: bottom-y, line-gap: line-gap) }
   else if clef == "alto" { staff-y(6, bottom-y: bottom-y, line-gap: line-gap) }
   else if clef == "tenor" { staff-y(8, bottom-y: bottom-y, line-gap: line-gap) }
+  else if clef == "percussion" { staff-y(6, bottom-y: bottom-y, line-gap: line-gap) }
   else { panic("unknown clef " + clef) }
 }
 
+#let _pitch-head-shape(positioned-pitch) = positioned-pitch.at("head", default: "normal")
+
+// The widest notehead of the event, so chords that mix shapes keep their
+// ledger lines, dots, and neighbors clear of every head.
 #let _head-half-width(layout) = {
-  if layout.notehead == "whole" { 0.844 } else { notehead-half-width }
+  let kind = layout.at("notehead", default: "black")
+  let shapes = layout.at("pitches", default: ()).map(_pitch-head-shape).dedup()
+  if shapes.len() == 0 { shapes = ("normal",) }
+  calc.max(..shapes.map(shape => notehead-geometry.at(shape).at(kind).half-width))
 }
 
 // ---------------------------------------------------------------------------

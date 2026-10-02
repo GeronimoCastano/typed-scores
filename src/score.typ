@@ -27,6 +27,7 @@
 
 #let score(
   clef: "treble",
+  heads: none,
   staves: none,
   bars: (),
   key: "C",
@@ -204,6 +205,7 @@
       beams: beams,
       lyric-size: lyric-size,
       lyric-font: lyric-font,
+      heads: heads,
     )
     let lane-count = measures.first().voices.len()
     let staff-count = measures.first().staff-count
@@ -330,6 +332,7 @@
   key: "C",
   time: none,
   clef: "treble",
+  heads: none,
   theme: "auto",
   lyric-size: 0.9,
   lyric-font: none,
@@ -338,6 +341,7 @@
 ) = {
   score(
     clef: clef,
+    heads: heads,
     bars: ((notes: notes, lyrics: lyrics),),
     key: key,
     time: time,

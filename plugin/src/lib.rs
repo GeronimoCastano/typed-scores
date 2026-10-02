@@ -67,13 +67,18 @@ pub enum Clef {
     Bass,
     Alto,
     Tenor,
+    /// Unpitched percussion: each line and space names an instrument, and
+    /// written pitches place noteheads exactly as a treble clef would.
+    Percussion,
 }
 
 impl Clef {
     fn position_zero_diatonic_index(self) -> i32 {
         match self {
-            // C4 is the first ledger line below treble staff.
-            Self::Treble => 4 * 7 + Letter::C.diatonic_index(),
+            // C4 is the first ledger line below treble staff. Percussion
+            // staves follow the same positions, so a snare written C5 sits in
+            // the third space as it does in a drum-kit legend.
+            Self::Treble | Self::Percussion => 4 * 7 + Letter::C.diatonic_index(),
             // E2 is the first ledger line below bass staff.
             Self::Bass => 2 * 7 + Letter::E.diatonic_index(),
             // D3 is the first ledger line below alto staff.
@@ -85,7 +90,7 @@ impl Clef {
 
     fn default_relative_octave(self) -> i32 {
         match self {
-            Self::Treble | Self::Alto | Self::Tenor => 4,
+            Self::Treble | Self::Alto | Self::Tenor | Self::Percussion => 4,
             Self::Bass => 3,
         }
     }
@@ -97,8 +102,9 @@ pub fn parse_clef(input: &str) -> Result<Clef, String> {
         "bass" => Ok(Clef::Bass),
         "alto" => Ok(Clef::Alto),
         "tenor" => Ok(Clef::Tenor),
+        "percussion" => Ok(Clef::Percussion),
         other => Err(format!(
-            "unknown clef {other:?}; expected treble, bass, alto, or tenor"
+            "unknown clef {other:?}; expected treble, bass, alto, tenor, or percussion"
         )),
     }
 }
@@ -211,6 +217,20 @@ fn pitch_anchor_string(pitch: &Pitch) -> String {
         Letter::B => 'B',
     };
     format!("{letter}{}", pitch.octave)
+}
+
+/// The pitch as an author would write it, accidental included.
+fn written_pitch_name(pitch: &Pitch) -> String {
+    let anchor = pitch_anchor_string(pitch);
+    let (letter, octave) = anchor.split_at(1);
+    let accidental = match pitch.accidental {
+        Accidental::Natural => "",
+        Accidental::Sharp => "#",
+        Accidental::Flat => "b",
+        Accidental::DoubleSharp => "##",
+        Accidental::DoubleFlat => "bb",
+    };
+    format!("{letter}{accidental}{octave}")
 }
 
 pub fn pitch_to_staff_position(pitch: &Pitch, clef: Clef) -> i32 {
@@ -477,12 +497,40 @@ fn distribute_auto_rests(remaining: Rational, count: usize) -> Option<Vec<Durati
     find_rest_durations(remaining, count, &supported_durations_descending())
 }
 
+/// The shape of a notehead. Percussion parts draw cymbals with X heads and
+/// open or accented cymbals with circled X heads; spoken notes use X heads
+/// on pitched staves too.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum HeadShape {
+    #[default]
+    Normal,
+    X,
+    CircleX,
+}
+
+impl HeadShape {
+    /// `normal` restores a round head where a staff's drum map would
+    /// otherwise change it.
+    fn from_annotation(annotation: &str) -> Option<Self> {
+        match annotation {
+            "normal" => Some(Self::Normal),
+            "x" => Some(Self::X),
+            "circle-x" => Some(Self::CircleX),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Note {
     pub pitch: Pitch,
     pub duration: Duration,
     pub tie_to_next: bool,
     pub annotations: Vec<String>,
+    /// Set by `[x]` after the note, after a chord for every pitch, or after
+    /// one pitch inside a chord. Unset heads follow the drawing staff's map.
+    pub head: Option<HeadShape>,
     /// Staff that draws this chord note when a split chord places it away
     /// from the staff of the chord's event.
     #[serde(skip)]
@@ -577,6 +625,9 @@ impl ParsedEvent {
 pub struct StaffContext {
     staff_ids: Vec<String>,
     clefs: Vec<Clef>,
+    /// Each staff's drum map: the notehead shape of every listed pitch drawn
+    /// there, unless the note names its own.
+    heads: Vec<Vec<(Pitch, HeadShape)>>,
     home_staff: usize,
 }
 
@@ -585,6 +636,7 @@ impl StaffContext {
         Self {
             staff_ids: vec!["staff".to_string()],
             clefs: vec![clef],
+            heads: vec![Vec::new()],
             home_staff: 0,
         }
     }
@@ -594,29 +646,69 @@ impl StaffContext {
             .iter()
             .position(|(staff_id, _)| staff_id == home_staff_id)
             .ok_or_else(|| format!("home staff {home_staff_id:?} is not a declared staff"))?;
-        let (staff_ids, clefs) = staves.into_iter().unzip();
+        let (staff_ids, clefs): (Vec<_>, Vec<_>) = staves.into_iter().unzip();
         Ok(Self {
+            heads: vec![Vec::new(); staff_ids.len()],
             staff_ids,
             clefs,
             home_staff,
         })
     }
 
-    /// Decodes `home␞id␟clef␞id␟clef…`, listing the staves top to bottom
+    /// Gives the staff at `staff` a drum map written as `pitch=shape` pairs
+    /// separated by spaces, such as `g5=x a5=circle-x`.
+    pub fn with_heads(mut self, staff: usize, drum_map: &str) -> Result<Self, String> {
+        self.heads[staff] = drum_map
+            .split_whitespace()
+            .map(|entry| {
+                let (pitch, shape) = entry
+                    .split_once('=')
+                    .ok_or_else(|| format!("malformed drum-map entry {entry:?}"))?;
+                let shape = HeadShape::from_annotation(shape)
+                    .ok_or_else(|| format!("unknown notehead shape {shape:?} in the drum map"))?;
+                Ok((parse_pitch(pitch)?, shape))
+            })
+            .collect::<Result<_, String>>()?;
+        Ok(self)
+    }
+
+    /// Decodes `home␞id␟clef␟heads␞…`, listing the staves top to bottom
     /// after the home staff ID, with ␞ (U+001E) between records and ␟
-    /// (U+001F) between a staff ID and its clef.
+    /// (U+001F) between a staff ID, its clef, and its drum map.
     fn from_request(request: &str) -> Result<Self, String> {
         let mut records = request.split('\u{1e}');
         let home_staff_id = records.next().unwrap_or("");
-        let staves = records
+        let records = records
             .map(|record| {
-                let (staff_id, clef) = record
-                    .split_once('\u{1f}')
-                    .ok_or_else(|| format!("malformed staff record {record:?}"))?;
-                Ok((staff_id.to_string(), parse_clef(clef)?))
+                let mut fields = record.split('\u{1f}');
+                match (fields.next(), fields.next(), fields.next(), fields.next()) {
+                    (Some(staff_id), Some(clef), drum_map, None) => Ok((
+                        staff_id.to_string(),
+                        parse_clef(clef)?,
+                        drum_map.unwrap_or(""),
+                    )),
+                    _ => Err(format!("malformed staff record {record:?}")),
+                }
             })
             .collect::<Result<Vec<_>, String>>()?;
-        Self::new(staves, home_staff_id)
+        let mut context = Self::new(
+            records
+                .iter()
+                .map(|(staff_id, clef, _)| (staff_id.clone(), *clef))
+                .collect(),
+            home_staff_id,
+        )?;
+        for (staff, (_, _, drum_map)) in records.iter().enumerate() {
+            context = context.with_heads(staff, drum_map)?;
+        }
+        Ok(context)
+    }
+
+    fn mapped_head(&self, staff: usize, pitch: &Pitch) -> HeadShape {
+        self.heads[staff]
+            .iter()
+            .find(|(mapped, _)| mapped == pitch)
+            .map_or(HeadShape::Normal, |(_, shape)| *shape)
     }
 
     fn home_clef(&self) -> Clef {
@@ -809,6 +901,101 @@ pub fn parse_chord(input: &str) -> Result<Vec<Note>, String> {
     }
 }
 
+/// Moves an event-level `x` or `circle-x` annotation onto the notehead of a
+/// note, or onto every chord pitch that names no shape of its own.
+fn apply_event_head_shape(mut event: ParsedEvent) -> ParsedEvent {
+    let take_shape = |annotations: &mut Vec<String>| {
+        let shape = annotations
+            .iter()
+            .find_map(|annotation| HeadShape::from_annotation(annotation));
+        annotations.retain(|annotation| HeadShape::from_annotation(annotation).is_none());
+        shape
+    };
+    match &mut event {
+        ParsedEvent::Note(note) => {
+            if let Some(shape) = take_shape(&mut note.annotations) {
+                note.head = Some(shape);
+            }
+        }
+        ParsedEvent::Chord {
+            notes, annotations, ..
+        } => {
+            if let Some(shape) = take_shape(annotations) {
+                for note in notes.iter_mut() {
+                    take_shape(&mut note.annotations);
+                    note.head.get_or_insert(shape);
+                }
+            }
+        }
+        ParsedEvent::Rest(_) | ParsedEvent::Spacer { .. } => {}
+    }
+    event
+}
+
+/// A chord pitch may carry its own notehead shape, as in `(g5[x] c5)`.
+fn split_chord_pitch_head<'a>(
+    pitch_text: &'a str,
+    input: &str,
+) -> Result<(&'a str, Option<HeadShape>), String> {
+    let Some((pitch, annotation_block)) = pitch_text.split_once('[') else {
+        return Ok((pitch_text, None));
+    };
+    let shapes = annotation_block
+        .strip_suffix(']')
+        .ok_or_else(|| format!("missing ']' after chord pitch {pitch_text:?} in {input:?}"))?;
+    let mut shapes = shapes.split_whitespace();
+    let (Some(shape), None) = (shapes.next(), shapes.next()) else {
+        return Err(format!(
+            "chord pitch {pitch_text:?} in {input:?} must name exactly one notehead shape"
+        ));
+    };
+    let head = HeadShape::from_annotation(shape).ok_or_else(|| {
+        format!(
+            "chord pitch {pitch_text:?} in {input:?} carries {shape:?}; only the notehead shapes x, circle-x, and normal may follow a chord pitch, so move other annotations after the chord"
+        )
+    })?;
+    Ok((pitch, Some(head)))
+}
+
+/// The pitches of a chord, keeping each pitch's annotation block whole.
+fn chord_pitch_tokens(pitch_list: &str) -> Vec<&str> {
+    let mut tokens = Vec::new();
+    let mut start = None;
+    let mut in_annotations = false;
+    for (index, ch) in pitch_list.char_indices() {
+        match ch {
+            '[' => in_annotations = true,
+            ']' => in_annotations = false,
+            ch if ch.is_whitespace() && !in_annotations => {
+                if let Some(token_start) = start.take() {
+                    tokens.push(&pitch_list[token_start..index]);
+                }
+                continue;
+            }
+            _ => {}
+        }
+        start.get_or_insert(index);
+    }
+    if let Some(token_start) = start {
+        tokens.push(&pitch_list[token_start..]);
+    }
+    tokens
+}
+
+/// The ')' that closes a chord, skipping pitch annotation blocks.
+fn chord_closing_parenthesis(input: &str) -> Option<usize> {
+    let mut in_annotations = false;
+    for (index, ch) in input.char_indices() {
+        match ch {
+            '[' => in_annotations = true,
+            ']' => in_annotations = false,
+            ')' if !in_annotations => return Some(index),
+            _ => {}
+        }
+    }
+    None
+}
+
 pub fn parse_event(input: &str) -> Result<ParsedEvent, String> {
     let input = input.trim();
     if input.is_empty() {
@@ -816,7 +1003,7 @@ pub fn parse_event(input: &str) -> Result<ParsedEvent, String> {
     }
 
     if input.starts_with('(') {
-        parse_chord_event(input)
+        parse_chord_event(input).map(apply_event_head_shape)
     } else if let Some(rest_duration) = input.strip_prefix("r:") {
         let (duration, annotations) = parse_duration_and_annotations(rest_duration)?;
         Ok(ParsedEvent::Rest(Rest {
@@ -827,13 +1014,14 @@ pub fn parse_event(input: &str) -> Result<ParsedEvent, String> {
         let (pitch_part, rest) = split_note_pitch_and_duration(input)?;
         let pitch = parse_pitch(pitch_part)?;
         let (duration, annotations) = parse_duration_and_annotations(rest)?;
-        Ok(ParsedEvent::Note(Note {
+        Ok(apply_event_head_shape(ParsedEvent::Note(Note {
             pitch,
             duration,
             tie_to_next: false,
             annotations,
             split_staff: None,
-        }))
+            head: None,
+        })))
     }
 }
 
@@ -888,6 +1076,7 @@ fn parse_event_relative(
             tie_to_next: false,
             annotations,
             split_staff: None,
+            head: None,
         }))
     }
 }
@@ -906,6 +1095,7 @@ fn parse_sequence_event_relative(
         staves.context,
         display_staff,
     )
+    .map(apply_event_head_shape)
     .map_err(|error| format!("invalid event {event_text:?}: {error}"))
 }
 
@@ -970,8 +1160,7 @@ fn split_note_pitch_and_duration(input: &str) -> Result<(&str, &str), String> {
 }
 
 fn parse_chord_event(input: &str) -> Result<ParsedEvent, String> {
-    let closing_parenthesis = input
-        .find(')')
+    let closing_parenthesis = chord_closing_parenthesis(input)
         .ok_or_else(|| format!("missing ')' in chord event {input:?}"))?;
     let pitch_list = &input[1..closing_parenthesis];
     let chord_suffix = input[closing_parenthesis + 1..].trim_start();
@@ -990,8 +1179,7 @@ fn parse_chord_event_relative(
     staves: &StaffContext,
     display_staff: usize,
 ) -> Result<ParsedEvent, String> {
-    let closing_parenthesis = input
-        .find(')')
+    let closing_parenthesis = chord_closing_parenthesis(input)
         .ok_or_else(|| format!("missing ')' in chord event {input:?}"))?;
     let pitch_list = &input[1..closing_parenthesis];
     let chord_suffix = input[closing_parenthesis + 1..].trim_start();
@@ -1016,7 +1204,7 @@ fn parse_chord_event_relative(
     let mut notes = Vec::new();
     let mut chord_pitch_anchor = external_pitch_anchor.cloned();
     let mut split_staff: Option<usize> = None;
-    for pitch_text in pitch_list.split_whitespace() {
+    for pitch_text in chord_pitch_tokens(pitch_list) {
         if let Some(staff_id) = pitch_text.strip_prefix('@') {
             split_staff = Some(resolve_split_chord_staff(
                 staff_id,
@@ -1028,6 +1216,7 @@ fn parse_chord_event_relative(
             )?);
             continue;
         }
+        let (pitch_text, head) = split_chord_pitch_head(pitch_text, input)?;
         let pitch = resolve_pitch(
             parse_pitch_spec(pitch_text)?,
             chord_pitch_anchor.as_ref(),
@@ -1040,6 +1229,7 @@ fn parse_chord_event_relative(
             tie_to_next: false,
             annotations: annotations.clone(),
             split_staff,
+            head,
         });
     }
     if notes.is_empty() {
@@ -1139,13 +1329,15 @@ fn build_chord_event(
     input: &str,
 ) -> Result<ParsedEvent, String> {
     let mut notes = Vec::new();
-    for pitch_text in pitch_list.split_whitespace() {
+    for pitch_text in chord_pitch_tokens(pitch_list) {
+        let (pitch_text, head) = split_chord_pitch_head(pitch_text, input)?;
         notes.push(Note {
             pitch: parse_pitch(pitch_text)?,
             duration,
             tie_to_next: false,
             annotations: annotations.clone(),
             split_staff: None,
+            head,
         });
     }
     if notes.is_empty() {
@@ -1304,6 +1496,14 @@ fn is_turn_ornament(annotation: &str) -> bool {
     matches!(annotation, "turn" | "chromatic-turn" | "inverted-turn")
 }
 
+/// Ottava spans open with `8va(` and close with `8va)`, and likewise for
+/// `8vb`, `15ma`, and `15mb`.
+fn is_ottava_marker(annotation: &str) -> bool {
+    annotation
+        .strip_suffix(['(', ')'])
+        .is_some_and(|kind| matches!(kind, "8va" | "8vb" | "15ma" | "15mb"))
+}
+
 fn is_ornament(annotation: &str) -> bool {
     is_turn_ornament(annotation) || matches!(annotation, "trill" | "mordent" | "inverted-mordent")
 }
@@ -1360,13 +1560,15 @@ fn validate_annotation(annotation: &str) -> Result<(), String> {
         || is_valid_span_id(annotation, 'p', ')')
         || is_valid_span_id(annotation, 'h', '<')
         || is_valid_span_id(annotation, 'h', '>')
-        || is_valid_span_id(annotation, 'h', '!');
+        || is_valid_span_id(annotation, 'h', '!')
+        || is_ottava_marker(annotation)
+        || HeadShape::from_annotation(annotation).is_some();
 
     if annotation_is_supported {
         Ok(())
     } else {
         Err(format!(
-            "unknown annotation {annotation:?}; expected a documented mark, span marker, text=..., or dyn=..."
+            "unknown annotation {annotation:?}; expected a documented mark, span marker, ottava marker such as 8va( or 8va), text=..., or dyn=..."
         ))
     }
 }
@@ -1402,6 +1604,30 @@ fn validate_annotation_combinations(annotations: &[String]) -> Result<(), String
         if count > 1 {
             return Err(format!(
                 "event has more than one {label} annotation; keep exactly one"
+            ));
+        }
+    }
+
+    if annotations
+        .iter()
+        .filter(|annotation| HeadShape::from_annotation(annotation).is_some())
+        .count()
+        > 1
+    {
+        return Err(
+            "event has more than one notehead shape; choose one of x, circle-x, or normal"
+                .to_string(),
+        );
+    }
+
+    for (label, suffix) in [("opening", '('), ("closing", ')')] {
+        let markers = annotations
+            .iter()
+            .filter(|annotation| is_ottava_marker(annotation) && annotation.ends_with(suffix))
+            .count();
+        if markers > 1 {
+            return Err(format!(
+                "event has more than one ottava {label} marker; an event may open and close at most one ottava"
             ));
         }
     }
@@ -2002,6 +2228,14 @@ fn tokenize_sequence_with_depth(input: &str, nesting_depth: usize) -> Result<Vec
                 let event_start = cursor;
                 cursor += 1;
                 while cursor < chars.len() && chars[cursor] != ')' {
+                    if chars[cursor] == '[' {
+                        while cursor < chars.len() && chars[cursor] != ']' {
+                            cursor += 1;
+                        }
+                        if cursor == chars.len() {
+                            return Err("unterminated annotation block in chord".to_string());
+                        }
+                    }
                     cursor += 1;
                 }
                 if cursor == chars.len() {
@@ -2729,6 +2963,9 @@ pub struct PositionedPitch {
     pub staff_position: i32,
     /// Top-to-bottom index of the staff that draws this pitch.
     pub staff_index: usize,
+    /// Drawn on a percussion staff, where no key signature applies.
+    pub percussion: bool,
+    pub head: HeadShape,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -2823,15 +3060,35 @@ fn layout_event(
 
     let position_on_staff = |note: &Note| {
         let staff_index = note.split_staff.unwrap_or(display_staff);
-        PositionedPitch {
-            pitch: note.pitch.clone(),
-            staff_position: pitch_to_staff_position(&note.pitch, staves.clef_of(staff_index)),
-            staff_index,
+        let clef = staves.clef_of(staff_index);
+        let percussion = clef == Clef::Percussion;
+        if percussion && note.pitch.accidental != Accidental::Natural {
+            let staff = if staves.staff_ids.len() == 1 {
+                "a percussion staff".to_string()
+            } else {
+                format!("percussion staff {}", staves.staff_id(staff_index))
+            };
+            return Err(format!(
+                "pitch {} is drawn on {staff}, where a notehead's line or space names an instrument; remove the accidental",
+                written_pitch_name(&note.pitch),
+            ));
         }
+        Ok(PositionedPitch {
+            pitch: note.pitch.clone(),
+            staff_position: pitch_to_staff_position(&note.pitch, clef),
+            staff_index,
+            percussion,
+            head: note
+                .head
+                .unwrap_or_else(|| staves.mapped_head(staff_index, &note.pitch)),
+        })
     };
     let pitches = match &event {
-        ParsedEvent::Note(note) => vec![position_on_staff(note)],
-        ParsedEvent::Chord { notes, .. } => notes.iter().map(position_on_staff).collect(),
+        ParsedEvent::Note(note) => vec![position_on_staff(note)?],
+        ParsedEvent::Chord { notes, .. } => notes
+            .iter()
+            .map(position_on_staff)
+            .collect::<Result<Vec<_>, String>>()?,
         ParsedEvent::Rest(_) | ParsedEvent::Spacer { .. } => Vec::new(),
     };
 
@@ -2886,6 +3143,8 @@ fn layout_event(
                 || mark.starts_with("turn-f=")
                 || mark.starts_with("arpeggio=")
                 || mark.starts_with("tremolo=")
+                || is_ottava_marker(mark)
+                || HeadShape::from_annotation(mark).is_some()
                 || (mark.starts_with('s') && (mark.ends_with('(') || mark.ends_with(')')))
         });
         if let Some(annotation) = invalid_annotation {
@@ -3845,6 +4104,28 @@ mod tests {
         assert!(parse_note("C4:q[unknown]").is_err());
         assert!(parse_note("C4:q[dyn=quiet]").is_err());
         assert!(parse_note("C4:q[s(]").is_err());
+        assert!(parse_note("C6:q[8va(]").is_ok());
+        assert!(parse_note("C2:q[8vb( 8vb)]").is_ok());
+        assert!(parse_note("C7:q[15ma)]").is_ok());
+        assert!(parse_note("C1:q[15mb(]").is_ok());
+        assert!(parse_note("C6:q[8ve(]").is_err());
+        assert!(parse_note("C6:q[8va]").is_err());
+    }
+
+    #[test]
+    fn ottava_markers_need_a_pitched_event_and_one_marker_per_side() {
+        let error = layout_sequence_native("C6:q[8va( 15ma(]", Clef::Treble).unwrap_err();
+        assert!(
+            error.contains("more than one ottava opening marker"),
+            "{error}"
+        );
+        let error = layout_sequence_native("C6:q[8va) 8vb)]", Clef::Treble).unwrap_err();
+        assert!(
+            error.contains("more than one ottava closing marker"),
+            "{error}"
+        );
+        let error = layout_sequence_native("r:q[8va(]", Clef::Treble).unwrap_err();
+        assert!(error.contains("cannot be attached to a rest"), "{error}");
     }
 
     #[test]
@@ -4479,5 +4760,155 @@ mod tests {
         assert_eq!(staves.resolve_staff_id("upper"), Ok(0));
         assert!(StaffContext::from_request("x").is_err());
         assert!(StaffContext::from_request("upper\u{1e}upper").is_err());
+    }
+
+    #[test]
+    fn percussion_staves_place_unpitched_notes_like_a_treble_clef() {
+        assert_eq!(parse_clef("percussion"), Ok(Clef::Percussion));
+        assert_eq!(staff_position("C5", Clef::Percussion), 7);
+        assert_eq!(staff_position("F4", Clef::Percussion), 3);
+        let layouts = layout_sequence_relative_native("C:q F4 (C5 G5)", Clef::Percussion, None)
+            .unwrap()
+            .layouts;
+        assert_eq!(layouts[0].pitches[0].pitch.octave, 4);
+        assert!(layouts[0].pitches[0].percussion);
+        assert_eq!(layouts[1].pitches[0].staff_position, 3);
+        assert_eq!(layouts[2].pitches[1].staff_position, 11);
+        assert!(!layout_sequence_native("C5:q", Clef::Treble).unwrap()[0].pitches[0].percussion);
+    }
+
+    #[test]
+    fn percussion_staves_reject_accidentals() {
+        let error = layout_sequence_native("F#4:q", Clef::Percussion).unwrap_err();
+        assert!(
+            error.contains("pitch F#4 is drawn on a percussion staff"),
+            "{error}"
+        );
+        let drums = StaffContext::new(
+            vec![
+                ("melody".to_string(), Clef::Treble),
+                ("drums".to_string(), Clef::Percussion),
+            ],
+            "melody",
+        )
+        .unwrap();
+        let error =
+            layout_staff_sequence_native("Bb4:h @drums Eb4:h", &drums, Some("4/4"), None, None)
+                .unwrap_err();
+        assert!(
+            error.contains("pitch Eb4 is drawn on percussion staff drums"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn notehead_shapes_apply_to_notes_chords_and_single_chord_pitches() {
+        let heads = |input: &str| {
+            layout_sequence_relative_native(input, Clef::Percussion, None)
+                .unwrap()
+                .layouts
+                .iter()
+                .map(|layout| {
+                    layout
+                        .pitches
+                        .iter()
+                        .map(|pitch| pitch.head)
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            heads("g5:e[x] f4 (g5[x] c5):q (a5[circle-x] f4)"),
+            vec![
+                vec![HeadShape::X],
+                vec![HeadShape::Normal],
+                vec![HeadShape::X, HeadShape::Normal],
+                vec![HeadShape::CircleX, HeadShape::Normal],
+            ]
+        );
+        // An event-level shape fills every chord pitch that names none.
+        assert_eq!(
+            heads("(g5 a5[circle-x] c5):q[x accent]"),
+            vec![vec![HeadShape::X, HeadShape::CircleX, HeadShape::X]]
+        );
+        let layouts = layout_sequence_native("G5:q[x accent]", Clef::Treble).unwrap();
+        assert_eq!(layouts[0].annotations, vec!["accent".to_string()]);
+    }
+
+    #[test]
+    fn notehead_shapes_reject_ambiguous_or_misplaced_forms() {
+        let error = layout_sequence_native("G5:q[x circle-x]", Clef::Treble).unwrap_err();
+        assert!(error.contains("more than one notehead shape"), "{error}");
+        let error = layout_sequence_native("r:q[x]", Clef::Treble).unwrap_err();
+        assert!(error.contains("cannot be attached to a rest"), "{error}");
+        let error = layout_sequence_native("(G5[accent] C5):q", Clef::Treble).unwrap_err();
+        assert!(
+            error.contains("only the notehead shapes x, circle-x, and normal"),
+            "{error}"
+        );
+        let error = layout_sequence_native("(G5[x circle-x] C5):q", Clef::Treble).unwrap_err();
+        assert!(error.contains("exactly one notehead shape"), "{error}");
+    }
+
+    #[test]
+    fn drum_maps_shape_listed_pitches_unless_a_note_names_its_own() {
+        let drums = StaffContext::new(vec![("drums".to_string(), Clef::Percussion)], "drums")
+            .unwrap()
+            .with_heads(0, "e5=x g5=circle-x")
+            .unwrap();
+        let layouts = layout_staff_sequence_native(
+            "e5:q (e5 c5) g5[x] (e5[normal] c5):q[circle-x] e5:h[normal] f4",
+            &drums,
+            None,
+            None,
+            None,
+        )
+        .unwrap()
+        .layouts;
+        let heads = layouts
+            .iter()
+            .map(|layout| {
+                layout
+                    .pitches
+                    .iter()
+                    .map(|pitch| pitch.head)
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            heads,
+            vec![
+                vec![HeadShape::X],
+                vec![HeadShape::X, HeadShape::Normal],
+                vec![HeadShape::X],
+                vec![HeadShape::Normal, HeadShape::CircleX],
+                vec![HeadShape::Normal],
+                vec![HeadShape::Normal],
+            ]
+        );
+        assert!(StaffContext::single(Clef::Percussion)
+            .with_heads(0, "e5=square")
+            .is_err());
+    }
+
+    #[test]
+    fn staff_context_requests_carry_each_staffs_drum_map() {
+        let staves = StaffContext::from_request(
+            "drums\u{1e}melody\u{1f}treble\u{1e}drums\u{1f}percussion\u{1f}g5=x a5=circle-x",
+        )
+        .unwrap();
+        assert_eq!(
+            staves.mapped_head(1, &parse_pitch("A5").unwrap()),
+            HeadShape::CircleX
+        );
+        assert_eq!(
+            staves.mapped_head(1, &parse_pitch("C5").unwrap()),
+            HeadShape::Normal
+        );
+        assert_eq!(
+            staves.mapped_head(0, &parse_pitch("G5").unwrap()),
+            HeadShape::Normal
+        );
+        assert!(StaffContext::from_request("a\u{1e}a\u{1f}treble\u{1f}\u{1f}x").is_err());
     }
 }

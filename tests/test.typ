@@ -1715,3 +1715,247 @@ and limits the slant to one staff space.
   ),
 )
 
+
+#pagebreak()
+
+= Percussion clef
+
+== Drum-kit staff
+
+A percussion staff reads its lines and spaces as a treble staff does. This
+drum kit follows the common Weinberg legend: bass drum on F4, snare on C5,
+hi-hat above the staff on G5, and crash cymbal on the A5 ledger line. Two voices
+keep the cymbals apart from the drums: the hi-hat takes X heads, the crash a
+circled X, and a chord marks only its hi-hat pitch. The first staff marks every
+head by hand; the second gives the staff a drum map and writes plain pitches,
+with `[circle-x]` for an open hi-hat and `[normal]` for one round head at a
+mapped pitch.
+
+#score(
+  clef: "percussion",
+  time: "4/4",
+  beams: true,
+  bars: (
+    (notes: ("G5:e[x] G[x] G[x] G[x] G[x] G[x] G[x] G[x]", "F4:q C5 F4:e F C5:q")),
+    (notes: ("A5:q[circle-x] G5:e[x] G[x] (G5[x] C5):q G5[x]", "F4:q C5 (F4 C5):h")),
+  ),
+)
+
+#score(
+  clef: "percussion",
+  heads: (g5: "x", a5: "circle-x"),
+  time: "4/4",
+  beams: true,
+  bars: (
+    (notes: ("G5:e G G G G G G[circle-x] G", "F4:q C5 F4:e F C5:q")),
+    (notes: ("A5:q G5:e G (G5 C5):q G5:q[normal]", "F4:q C5 (F4 C5):h")),
+  ),
+)
+
+== Notehead shapes
+
+`x` after a note or chord changes its noteheads; inside a chord, `[x]` or
+`[circle-x]` after one pitch changes only that head. Stems attach at each
+glyph's SMuFL anchor while tips and beams stay where round heads put them.
+Half and whole notes take their own X glyphs, heads keep their ledger lines,
+dots, and ties, and X heads also serve spoken notes on a pitched staff. An X
+unison between voices does not merge with a round head.
+
+#score(
+  time: "4/4",
+  beams: true,
+  bars: (
+    (notes: ("C5:q[x] E5:e[x] F5:s[x] G5 A4:h[x]", "C4:w")),
+    (notes: ("B4:q[x] C5 D5:h[circle-x]", "G4:q G4[x] G4:h")),
+    (notes: ("(C5 E5[x] G5):q. A5:e[circle-x] B5:h[x] ~", "C4:w[x]")),
+    (notes: ("B5:h[x] (A5[x] C6[x]):h", "D4:h (A3 C4[circle-x]):h")),
+  ),
+)
+
+== Percussion staff in an ensemble
+
+The percussion staff carries no key signature, not even at a key change, while
+its time signatures stay aligned with the pitched staff. Its unpitched notes
+never take the key's accidentals.
+
+#score(
+  staves: (
+    melody: (clef: "treble", label: "Flute"),
+    drums: (clef: "percussion", label: "Drums"),
+  ),
+  key: "D",
+  time: "3/4",
+  bars: (
+    (melody: "F#5:q E5 D5", drums: "C5:q F4 C5"),
+    (key: "Bb", melody: "F5:q D5 Bb4", drums: "F4:q E4 F4"),
+    (clef: (drums: "bass"), melody: "Bb4:h.", drums: "D3:h."),
+  ),
+)
+
+= Ottava brackets
+
+== Spans across barlines and system breaks
+
+Notes are written at sounding pitch and drawn an octave lower under `8va`.
+The span continues through a barline and across a system break, where the
+continuation shows the bare numeral; slurs and chord names stay clear.
+
+#score(
+  time: "4/4",
+  width: 40,
+  bars: (
+    (notes: "C6:q[8va(] D6 E6 F6", harmony: "C:w"),
+    (notes: "G6:q[s1(] A6 B6 C7[s1)]", harmony: "G7:w"),
+    (notes: "D7:q C7 B6 A6[8va)]", rehearsal: "A"),
+    (notes: "G5:w"),
+  ),
+)
+
+== Below the staff and two octaves
+
+`8vb` and `15mb` brackets hang below the staff under the voice's dynamics,
+with their hooks turned toward the notes; `15ma` shifts two octaves. A span
+over a single note shows the sign alone.
+
+#score(
+  staves: (upper: (clef: "treble"), lower: (clef: "bass")),
+  time: "4/4",
+  bars: (
+    (upper: "C7:q[15ma(] E7 G7 C8[15ma)]", lower: "C2:q[8vb( dyn=f] G1 C2 G1[8vb)]"),
+    (upper: "C5:w", lower: "(C1 C2):w[15mb( 15mb)]"),
+  ),
+)
+
+== Accidentals under and after a bracket
+
+Accidentals belong to the drawn line or space, so the F natural after the span
+cancels the F sharp drawn on the same line inside it.
+
+#score(
+  time: "2/4",
+  bars: (
+    (notes: "F#6:q[8va( 8va)] F5:q"),
+  ),
+)
+
+= Figured bass
+
+== Continuo figures
+
+Figures stack below the bass staff, centered on the note that carries them.
+Accidentals print before or after the numeral as written, an accidental alone
+alters the third, `+` raises a figure, and `_` holds an empty row.
+
+#score(
+  clef: "bass",
+  time: "4/4",
+  bars: (
+    (notes: "C3:h B2", figures: "_:h (6 4):q (5 3):q"),
+    (notes: "A2:q G2 F2:h", figures: "(7 #):q (#6 5):q n:h"),
+    (notes: "G2:w", figures: "(4 _):h (#3 +):h"),
+    (notes: "C3:w", figures: "(9 7 b5):h (8 6b 4+):h"),
+  ),
+)
+
+== Figures under a continuo staff with dynamics and lyrics
+
+The figure band lies below the continuo staff's dynamics, and lyrics sung on
+that staff move below the figures. Figures that change during a held note get
+their own onset column.
+
+#score(
+  staves: (
+    violin: (clef: "treble", label: "Violin"),
+    continuo: (clef: "bass", label: "Continuo"),
+  ),
+  key: "D",
+  time: "3/4",
+  bars: (
+    (violin: "A5:q F#5 D5", continuo: "D3:q F#3 D3", figures: "_:q 6:q _:q"),
+    (
+      violin: "E5:q C#5 A4",
+      continuo: "A2:h[dyn=p] G2:q",
+      figures: "(6 #4):q (5 #):q (4+ 2):q",
+      lyrics: (continuo: "A -- men"),
+    ),
+    (violin: "D5:h.", continuo: "F#2:h.", figures: "(b7 5 3):h 6b:q", lyrics: (continuo: "Ah")),
+  ),
+)
+
+#pagebreak()
+
+= LilyPond A/B: ottava brackets
+
+Both engravers draw the notes under `8va` an octave lower and under `15ma` two
+octaves lower, with dashed brackets that end in a hook at the last note.
+LilyPond's ordinal markups use the same text as Bravura's glyphs.
+
+#lilypond-ab(
+  "lilypond-ab/reference/ottava-brackets.svg",
+  60.5671,
+  score(
+    time: "4/4",
+    scale: 1.0,
+    width: 60,
+    ragged-right: false,
+    bars: (
+      (notes: "C6:q[8va(] D6 E6 F6"),
+      (notes: "G6:q A6 B6 C7[8va)]"),
+      (notes: "C5:w"),
+      (notes: "C7:h[15ma(] E7:h[15ma)]"),
+      (notes: "G5:w", barline: (right: "final")),
+    ),
+  ),
+)
+
+= LilyPond A/B: figured bass
+
+The same figures under the same bass line: stacks, accidentals before a
+numeral, an accidental alone, and a three-figure stack.
+
+#lilypond-ab(
+  "lilypond-ab/reference/figured-bass.svg",
+  48.7900,
+  score(
+    clef: "bass",
+    time: "4/4",
+    scale: 1.0,
+    width: 48,
+    ragged-right: false,
+    bars: (
+      (notes: "C3:h B2", figures: "_:h (6 4):q (5 3):q"),
+      (notes: "A2:q G2 F2:h", figures: "(7 #):q (#6 5):q n:h"),
+      (notes: "G2:w", figures: "4:h 3:h"),
+      (notes: "C3:w", figures: "(9 7 5):w", barline: (right: "final")),
+    ),
+  ),
+)
+
+= LilyPond A/B: percussion clef
+
+LilyPond's default drum style places the bass drum on F4, the snare on C5, the
+hi-hat's X heads in the top space (E5), and the crash cymbal's circled X on G5
+above the staff. The percussion staff reproduces that legend with the same
+treble positions and a drum map, `heads: (e5: "x", g5: "circle-x")`, much as
+LilyPond's drum style table pairs each instrument with a position and head.
+
+#lilypond-ab(
+  "lilypond-ab/reference/percussion-clef.svg",
+  45.5595,
+  score(
+    clef: "percussion",
+    heads: (e5: "x", g5: "circle-x"),
+    time: "4/4",
+    beams: true,
+    scale: 1.0,
+    width: 52,
+    ragged-right: false,
+    bars: (
+      (notes: ("E5:e E - E E E E - E E", "F4:q C5 F4:e F C5:q")),
+      (
+        notes: ("G5:q E5:e E (E5 C5):q E5", "F4:h F4:q r:q"),
+        barline: (right: "final"),
+      ),
+    ),
+  ),
+)

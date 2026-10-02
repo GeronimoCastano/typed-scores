@@ -16,6 +16,9 @@ features are deliberately excluded.
 | `arpeggio-directions` | [Arpeggio directions](https://lilypond.org/doc/v2.26/Documentation/notation/expressive-marks-as-lines) |
 | `single-tremolos` | [Single-note tremolo values](https://lilypond.org/doc/v2.26/Documentation/notation/short-repeats) |
 | `cross-staff-beams` | [Changing staff manually](https://lilypond.org/doc/v2.26/Documentation/notation/common-notation-for-keyboards), with automatic beams across the staves |
+| `ottava-brackets` | [Ottava brackets](https://lilypond.org/doc/v2.26/Documentation/notation/displaying-pitches), with the ordinal `8va` and `15ma` markups that match Bravura's glyphs |
+| `figured-bass` | [Figured bass](https://lilypond.org/doc/v2.26/Documentation/notation/figured-bass), including stacks, accidentals before a numeral, and an accidental alone |
+| `percussion-clef` | [Percussion staves](https://lilypond.org/doc/v2.26/Documentation/notation/common-notation-for-percussion), in LilyPond's default drum style: bass drum, snare, X-headed hi-hat on E5, and a circled-X crash cymbal on G5 |
 
 Regenerate and verify the references with an installed LilyPond 2.26.0:
 

@@ -91,9 +91,9 @@
   }
 }
 
-#let _key-default-accidental(letter, key) = {
+#let _key-default-accidental(letter, key, percussion: false) = {
   let signature-accidentals = _key-accidentals(key)
-  if signature-accidentals.count == 0 {
+  if signature-accidentals.count == 0 or percussion {
     "Natural"
   } else {
     let flat-letters = ("B", "E", "A", "D", "G", "C", "F")
@@ -119,9 +119,11 @@
   }
 }
 
+// A percussion staff never carries a key signature; its column stays empty
+// so the time signatures of every staff still align.
 #let _draw-key-signature(clef, key, x, bottom-y: 0, unit: 8pt, paint: black) = {
   let signature-accidentals = _key-accidentals(key)
-  if signature-accidentals.count > 0 {
+  if signature-accidentals.count > 0 and clef != "percussion" {
     let positions = if signature-accidentals.kind == "Flat" {
       _flat-order-positions.at(clef)
     } else {
@@ -177,7 +179,7 @@
 #let _draw-key-change(clef, previous-key, key, x, bottom-y: 0, unit: 8pt, paint: black) = {
   let cancellation-indices = _key-cancellation-indices(previous-key, key)
   let cursor = x
-  if cancellation-indices.len() > 0 {
+  if cancellation-indices.len() > 0 and clef != "percussion" {
     let previous = _key-accidentals(previous-key)
     let positions = if previous.kind == "Flat" {
       _flat-order-positions.at(clef)
@@ -302,7 +304,7 @@
 // Clef and key validation
 // ---------------------------------------------------------------------------
 
-#let _valid-clefs = ("treble", "bass", "alto", "tenor")
+#let _valid-clefs = ("treble", "bass", "alto", "tenor", "percussion")
 
 #let _validate-clef(value, label) = {
   if type(value) != str or value not in _valid-clefs {
@@ -310,7 +312,7 @@
       label,
       "unknown clef",
       value: value,
-      expected: "treble, bass, alto, or tenor",
+      expected: "treble, bass, alto, tenor, or percussion",
       fix: "choose one of the supported clef names",
     )
   }
