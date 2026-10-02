@@ -65,14 +65,21 @@ pub fn read(bytes: &[u8], entry: &Entry) -> ImportResult<Vec<u8>> {
     if u32_at(bytes, header)? != 0x0403_4b50 {
         return Err(format!("the .mxl archive entry {} is damaged", entry.name));
     }
-    let start = header + 30 + u16_at(bytes, header + 26)? as usize + u16_at(bytes, header + 28)? as usize;
+    let start =
+        header + 30 + u16_at(bytes, header + 26)? as usize + u16_at(bytes, header + 28)? as usize;
     let data = bytes
         .get(start..start + entry.compressed_size)
         .ok_or("the .mxl archive is truncated")?;
     match entry.method {
         0 => Ok(data.to_vec()),
-        8 => miniz_oxide::inflate::decompress_to_vec(data)
-            .map_err(|_| format!("the .mxl archive entry {} could not be decompressed", entry.name)),
-        method => Err(format!("the .mxl archive uses unsupported compression method {method}")),
+        8 => miniz_oxide::inflate::decompress_to_vec(data).map_err(|_| {
+            format!(
+                "the .mxl archive entry {} could not be decompressed",
+                entry.name
+            )
+        }),
+        method => Err(format!(
+            "the .mxl archive uses unsupported compression method {method}"
+        )),
     }
 }

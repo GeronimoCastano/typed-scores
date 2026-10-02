@@ -31,7 +31,9 @@ impl<'a> Request<'a> {
             scale: "0.7",
         };
         for line in options.lines() {
-            let Some((name, value)) = line.split_once('=') else { continue };
+            let Some((name, value)) = line.split_once('=') else {
+                continue;
+            };
             match name {
                 "format" => request.format = value,
                 "tune" if !value.is_empty() => request.tune = Some(value),
@@ -48,7 +50,11 @@ impl<'a> Request<'a> {
 fn detect_format(bytes: &[u8]) -> &'static str {
     let text = bytes.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(bytes);
     let first = text.iter().find(|byte| !byte.is_ascii_whitespace());
-    if bytes.starts_with(b"PK") || bytes.starts_with(&[0xFF, 0xFE]) || bytes.starts_with(&[0xFE, 0xFF]) || first == Some(&b'<') {
+    if bytes.starts_with(b"PK")
+        || bytes.starts_with(&[0xFF, 0xFE])
+        || bytes.starts_with(&[0xFE, 0xFF])
+        || first == Some(&b'<')
+    {
         "musicxml"
     } else {
         "abc"
@@ -59,7 +65,12 @@ fn detect_format(bytes: &[u8]) -> &'static str {
 pub fn import(bytes: &[u8], options: &str) -> Result<String, String> {
     let request = Request::parse(options);
     let (emitted, numbers) = convert(bytes, &request)?;
-    let source = emitted.source(request.package, request.source_name, request.scale, &numbers);
+    let source = emitted.source(
+        request.package,
+        request.source_name,
+        request.scale,
+        &numbers,
+    );
     Ok(emitted.json(&source))
 }
 
@@ -69,11 +80,28 @@ pub fn convert(bytes: &[u8], request: &Request<'_>) -> Result<(Emitted, Vec<Stri
         "auto" => detect_format(bytes),
         "musicxml" | "mxl" | "xml" => "musicxml",
         "abc" => "abc",
-        other => return Err(format!("unsupported import format {other:?}; expected auto, musicxml, or abc")),
+        other => {
+            return Err(format!(
+                "unsupported import format {other:?}; expected auto, musicxml, or abc"
+            ))
+        }
     };
-    let mut score = if format == "abc" { abc::read(bytes, request.tune)? } else { musicxml::read(bytes)? };
+    if format == "musicxml" && request.tune.is_some() {
+        return Err(
+            "tune selection applies only to ABC; remove the tune option for MusicXML".into(),
+        );
+    }
+    let mut score = if format == "abc" {
+        abc::read(bytes, request.tune)?
+    } else {
+        musicxml::read(bytes)?
+    };
     normalize::normalize(&mut score)?;
-    let numbers = score.measures.iter().map(|measure| measure.number.clone()).collect();
+    let numbers = score
+        .measures
+        .iter()
+        .map(|measure| measure.number.clone())
+        .collect();
     let emitted = emit::emit(&mut score)?;
     Ok((emitted, numbers))
 }
@@ -83,9 +111,20 @@ mod tests {
     use super::*;
 
     fn source_of(bytes: &[u8], name: &str) -> Result<String, String> {
-        let request = Request { format: "auto", tune: None, package: "../../src/lib.typ", source_name: name, scale: "0.7" };
+        let request = Request {
+            format: "auto",
+            tune: None,
+            package: "../../src/lib.typ",
+            source_name: name,
+            scale: "0.7",
+        };
         let (emitted, numbers) = convert(bytes, &request)?;
-        Ok(emitted.source(request.package, request.source_name, request.scale, &numbers))
+        Ok(emitted.source(
+            request.package,
+            request.source_name,
+            request.scale,
+            &numbers,
+        ))
     }
 
     fn without_first_line(text: &str) -> &str {
@@ -95,17 +134,37 @@ mod tests {
     #[test]
     fn fixtures_match_their_committed_typst() {
         for (name, source, expected) in [
-            ("song-with-piano.musicxml", &include_bytes!("../../../tests/import/song-with-piano.musicxml")[..], include_str!("../../../tests/import/song-with-piano.typ")),
-            ("export-quirks.musicxml", &include_bytes!("../../../tests/import/export-quirks.musicxml")[..], include_str!("../../../tests/import/export-quirks.typ")),
-            ("folk-duet.abc", &include_bytes!("../../../tests/import/folk-duet.abc")[..], include_str!("../../../tests/import/folk-duet.typ")),
+            (
+                "song-with-piano.musicxml",
+                &include_bytes!("../../../tests/import/song-with-piano.musicxml")[..],
+                include_str!("../../../tests/import/song-with-piano.typ"),
+            ),
+            (
+                "export-quirks.musicxml",
+                &include_bytes!("../../../tests/import/export-quirks.musicxml")[..],
+                include_str!("../../../tests/import/export-quirks.typ"),
+            ),
+            (
+                "folk-duet.abc",
+                &include_bytes!("../../../tests/import/folk-duet.abc")[..],
+                include_str!("../../../tests/import/folk-duet.typ"),
+            ),
         ] {
-            assert_eq!(source_of(source, name).unwrap(), expected, "{name} no longer imports to its committed .typ");
+            assert_eq!(
+                source_of(source, name).unwrap(),
+                expected,
+                "{name} no longer imports to its committed .typ"
+            );
         }
     }
 
     #[test]
     fn compressed_musicxml_imports_like_the_plain_score() {
-        let compressed = source_of(include_bytes!("../../../tests/import/song-with-piano.mxl"), "x").unwrap();
+        let compressed = source_of(
+            include_bytes!("../../../tests/import/song-with-piano.mxl"),
+            "x",
+        )
+        .unwrap();
         let plain = include_str!("../../../tests/import/song-with-piano.typ");
         assert_eq!(without_first_line(&compressed), without_first_line(plain));
     }
@@ -126,23 +185,45 @@ mod tests {
     #[test]
     fn reports_unrepresentable_music() {
         let overfull = source_of(b"X:1\nM:3/4\nL:1/4\nK:C\nC D E F | G3 |]\n", "x").unwrap_err();
-        assert!(overfull.contains("bar 1 holds 4/4 of music, more than its 3/4 meter allows"), "{overfull}");
+        assert!(
+            overfull.contains("bar 1 holds 4/4 of music, more than its 3/4 meter allows"),
+            "{overfull}"
+        );
         let breve = r#"<score-partwise><part-list><score-part id="P1"/></part-list><part id="P1"><measure number="7">
             <attributes><divisions>1</divisions></attributes>
             <note><pitch><step>C</step><octave>5</octave></pitch><duration>8</duration><type>breve</type></note></measure></part></score-partwise>"#;
-        assert_eq!(source_of(breve.as_bytes(), "x").unwrap_err(), "bar 7: breve notes cannot be written in typed-scores");
-        assert!(source_of(b"<score-partwise><part>", "x").unwrap_err().contains("not well-formed XML"));
-        assert!(source_of(b"X:1\nT:Only a title\n", "x").unwrap_err().contains("no music"));
+        assert_eq!(
+            source_of(breve.as_bytes(), "x").unwrap_err(),
+            "bar 7: breve notes cannot be written in typed-scores"
+        );
+        assert!(source_of(b"<score-partwise><part>", "x")
+            .unwrap_err()
+            .contains("not well-formed XML"));
+        assert!(source_of(b"X:1\nT:Only a title\n", "x")
+            .unwrap_err()
+            .contains("no music"));
     }
 
     #[test]
     fn selects_abc_tunes_by_number() {
         let book = b"X:1\nK:C\nC4|]\n\nX:7\nT:Seventh\nK:G\nG4|]\n";
-        let request = Request { format: "abc", tune: Some("7"), package: "p", source_name: "", scale: "0.7" };
+        let request = Request {
+            format: "abc",
+            tune: Some("7"),
+            package: "p",
+            source_name: "",
+            scale: "0.7",
+        };
         let (emitted, _) = convert(book, &request).unwrap();
         assert_eq!(emitted.title.as_deref(), Some("Seventh"));
-        let missing = Request { tune: Some("3"), ..request };
-        assert_eq!(convert(book, &missing).err().as_deref(), Some("no tune with X:3"));
+        let missing = Request {
+            tune: Some("3"),
+            ..request
+        };
+        assert_eq!(
+            convert(book, &missing).err().as_deref(),
+            Some("no tune with X:3")
+        );
     }
 
     #[test]
@@ -154,8 +235,60 @@ mod tests {
         assert_eq!(root.name(), "root");
         assert_eq!(root.attribute("kind"), Some("x & y"));
         assert_eq!(root.text(), "A <AB><raw>");
-        assert_eq!(root.elements().map(|node| node.name()).collect::<Vec<_>>(), ["child"]);
+        assert_eq!(
+            root.elements().map(|node| node.name()).collect::<Vec<_>>(),
+            ["child"]
+        );
         assert!(xml::parse("<a><b></a>").is_err());
         assert!(xml::parse("<a></a><b/>").is_err());
+    }
+    #[test]
+    fn abc_rejects_invalid_durations_and_meter_values() {
+        for (field, music) in [
+            ("L:1/0", "C D E F"),
+            ("L:0/4", "C D E F"),
+            ("L:oops", "C D E F"),
+            ("M:4/0", "C D E F"),
+            ("M:0/4", "C D E F"),
+            ("M:4/4garbage", "C D E F"),
+            ("L:1/4", "C/0 D E F"),
+            ("L:1/4", "C0 D E F"),
+            ("L:1/4", "(0 C D E F"),
+            ("L:1/4", "(3:0:3 C D E F"),
+            ("L:1/4", "(3:2:0 C D E F"),
+            ("L:1/4", "C999999999999999999 D E F"),
+        ] {
+            let abc = format!("X:1\nM:4/4\nL:1/4\n{field}\nK:C\n{music}|]\n");
+            assert!(source_of(abc.as_bytes(), "x").is_err(), "{abc}");
+        }
+        assert!(source_of(b"X:1\nK:C\n\xff", "x")
+            .unwrap_err()
+            .contains("UTF-8"));
+    }
+
+    #[test]
+    fn musicxml_rejects_malformed_numeric_and_pitch_values() {
+        for fragment in [
+            "<attributes><divisions>0</divisions></attributes>",
+            "<attributes><divisions>1.5</divisions></attributes>",
+            "<attributes><time><beats>4</beats><beat-type>0</beat-type></time></attributes>",
+            "<attributes><time><beats>4294967295+1</beats><beat-type>4</beat-type></time></attributes>",
+            "<note><pitch><step>H</step><octave>5</octave></pitch><duration>1</duration></note>",
+            "<note><pitch><step>C</step></pitch><duration>1</duration></note>",
+            "<note><pitch><step>C</step><octave>5</octave></pitch><duration>-1</duration></note>",
+            "<note><pitch><step>C</step><octave>5</octave></pitch><duration>bad</duration></note>",
+            "<note><pitch><step>C</step><octave>5</octave></pitch><duration>1</duration><dot/><dot/><dot/></note>",
+        ] {
+            let xml = format!("<score-partwise><part-list><score-part id=\"P1\"/></part-list><part id=\"P1\"><measure number=\"1\">{fragment}</measure></part></score-partwise>");
+            assert!(source_of(xml.as_bytes(), "x").is_err(), "{fragment}");
+        }
+        assert!(source_of(&[0xff, 0xfe, 0x43], "x")
+            .unwrap_err()
+            .contains("UTF-16"));
+    }
+
+    #[test]
+    fn imported_staff_names_avoid_all_score_metadata_fields() {
+        assert_eq!(model::slug("Figures"), "figures-staff");
     }
 }

@@ -1,4 +1,5 @@
 #import "foundation/diagnostics.typ": _score-error
+#import "score-input.typ": _normalize-score-measures
 
 // Part extraction: one staff of a multi-staff score as its own score.
 
@@ -49,6 +50,25 @@
       fix: "use one of the declared staff IDs",
     )
   }
+  let selected = staves.at(staff-id)
+  if type(selected) == dictionary and selected.at("source", default: none) != none {
+    _score-error(
+      "part",
+      "a mirrored tab staff cannot be extracted without its source staff",
+      value: staff-id,
+      fix: "extract the notation source staff, or give the tab staff independent note strings before extraction",
+    )
+  }
+  let _ = _normalize-score-measures(
+    staves,
+    arguments.at("bars", default: ()),
+    arguments.at("clef", default: "treble"),
+    arguments.at("key", default: "C"),
+    arguments.at("time", default: "4/4"),
+    arguments.at("tempo", default: none),
+    none,
+    heads: arguments.at("heads", default: none),
+  )
   let other-staves = staves.keys().filter(id => id != staff-id)
   let bars = arguments.at("bars", default: ())
   if type(bars) == array {

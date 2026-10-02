@@ -29,19 +29,41 @@ const ORNAMENTS: &[(&str, &str)] = &[
     ("inverted-mordent", "inverted-mordent"),
 ];
 const HARMONY_KINDS: &[(&str, &str)] = &[
-    ("major", ""), ("minor", "m"), ("augmented", "+"), ("diminished", "dim"),
-    ("dominant", "7"), ("major-seventh", "maj7"), ("minor-seventh", "m7"),
-    ("diminished-seventh", "dim7"), ("augmented-seventh", "+7"),
-    ("half-diminished", "m7b5"), ("major-minor", "m(maj7)"), ("major-sixth", "6"),
-    ("minor-sixth", "m6"), ("dominant-ninth", "9"), ("major-ninth", "maj9"),
-    ("minor-ninth", "m9"), ("dominant-11th", "11"), ("major-11th", "maj11"),
-    ("minor-11th", "m11"), ("dominant-13th", "13"), ("major-13th", "maj13"),
-    ("minor-13th", "m13"), ("suspended-second", "sus2"), ("suspended-fourth", "sus4"),
-    ("power", "5"), ("pedal", "ped"), ("none", "N.C."), ("other", ""),
+    ("major", ""),
+    ("minor", "m"),
+    ("augmented", "+"),
+    ("diminished", "dim"),
+    ("dominant", "7"),
+    ("major-seventh", "maj7"),
+    ("minor-seventh", "m7"),
+    ("diminished-seventh", "dim7"),
+    ("augmented-seventh", "+7"),
+    ("half-diminished", "m7b5"),
+    ("major-minor", "m(maj7)"),
+    ("major-sixth", "6"),
+    ("minor-sixth", "m6"),
+    ("dominant-ninth", "9"),
+    ("major-ninth", "maj9"),
+    ("minor-ninth", "m9"),
+    ("dominant-11th", "11"),
+    ("major-11th", "maj11"),
+    ("minor-11th", "m11"),
+    ("dominant-13th", "13"),
+    ("major-13th", "maj13"),
+    ("minor-13th", "m13"),
+    ("suspended-second", "sus2"),
+    ("suspended-fourth", "sus4"),
+    ("power", "5"),
+    ("pedal", "ped"),
+    ("none", "N.C."),
+    ("other", ""),
 ];
 
 fn note_type(name: &str) -> Option<Frac> {
-    NOTE_TYPES.iter().find(|(type_name, _)| *type_name == name).map(|(_, value)| *value)
+    NOTE_TYPES
+        .iter()
+        .find(|(type_name, _)| *type_name == name)
+        .map(|(_, value)| *value)
 }
 
 // -- XML helpers -----------------------------------------------------------
@@ -86,17 +108,32 @@ fn round_half_even(value: Frac) -> i32 {
     let floor = value.n.div_euclid(value.d);
     let remainder = value - Frac::int(floor);
     let half = Frac::new(1, 2);
-    let rounded = if remainder > half || (remainder == half && floor % 2 != 0) { floor + 1 } else { floor };
+    let rounded = if remainder > half || (remainder == half && floor % 2 != 0) {
+        floor + 1
+    } else {
+        floor
+    };
     rounded as i32
 }
 
 fn parse_number(text: &str) -> Option<Frac> {
     let text = text.trim();
     if let Some((whole, fraction)) = text.split_once('.') {
-        let whole: i64 = if whole.is_empty() || whole == "-" { 0 } else { whole.parse().ok()? };
-        let digits: String = fraction.chars().take_while(|c| c.is_ascii_digit()).collect();
+        let whole: i64 = if whole.is_empty() || whole == "-" {
+            0
+        } else {
+            whole.parse().ok()?
+        };
+        if fraction.is_empty() || !fraction.chars().all(|c| c.is_ascii_digit()) {
+            return None;
+        }
+        let digits = fraction.to_string();
         let scale = 10_i64.checked_pow(digits.len() as u32)?;
-        let fraction_value: i64 = if digits.is_empty() { 0 } else { digits.parse().ok()? };
+        let fraction_value: i64 = if digits.is_empty() {
+            0
+        } else {
+            digits.parse().ok()?
+        };
         let sign = if text.starts_with('-') { -1 } else { 1 };
         Some(Frac::int(whole) + Frac::new(sign * fraction_value, scale))
     } else {
@@ -108,22 +145,36 @@ fn parse_number(text: &str) -> Option<Frac> {
 
 fn decode_text(bytes: &[u8]) -> ImportResult<String> {
     if bytes.starts_with(&[0xFF, 0xFE]) || bytes.starts_with(&[0xFE, 0xFF]) {
+        if (bytes.len() - 2) % 2 != 0 {
+            return Err("the MusicXML file has an incomplete UTF-16 code unit".into());
+        }
         let little = bytes[0] == 0xFF;
         let units: Vec<u16> = bytes[2..]
             .chunks_exact(2)
-            .map(|pair| if little { u16::from_le_bytes([pair[0], pair[1]]) } else { u16::from_be_bytes([pair[0], pair[1]]) })
+            .map(|pair| {
+                if little {
+                    u16::from_le_bytes([pair[0], pair[1]])
+                } else {
+                    u16::from_be_bytes([pair[0], pair[1]])
+                }
+            })
             .collect();
-        return String::from_utf16(&units).map_err(|_| "the MusicXML file is not valid UTF-16".to_string());
+        return String::from_utf16(&units)
+            .map_err(|_| "the MusicXML file is not valid UTF-16".to_string());
     }
     let bytes = bytes.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(bytes);
-    String::from_utf8(bytes.to_vec()).map_err(|_| "the MusicXML file is not valid UTF-8".to_string())
+    String::from_utf8(bytes.to_vec())
+        .map_err(|_| "the MusicXML file is not valid UTF-8".to_string())
 }
 
 /// Extract the score document from a compressed .mxl archive.
 fn unpack_mxl(bytes: &[u8]) -> ImportResult<Vec<u8>> {
     let entries = zip::entries(bytes)?;
     let mut rootfile = None;
-    if let Some(container) = entries.iter().find(|entry| entry.name == "META-INF/container.xml") {
+    if let Some(container) = entries
+        .iter()
+        .find(|entry| entry.name == "META-INF/container.xml")
+    {
         let text = decode_text(&zip::read(bytes, container)?)?;
         let document = parse_document(&text)?;
         rootfile = document
@@ -140,7 +191,8 @@ fn unpack_mxl(bytes: &[u8]) -> ImportResult<Vec<u8>> {
             .iter()
             .find(|entry| {
                 let lower = entry.name.to_ascii_lowercase();
-                (lower.ends_with(".xml") || lower.ends_with(".musicxml")) && !entry.name.starts_with("META-INF")
+                (lower.ends_with(".xml") || lower.ends_with(".musicxml"))
+                    && !entry.name.starts_with("META-INF")
             })
             .map(|entry| entry.name.clone())
             .ok_or("the .mxl archive contains no MusicXML score")?,
@@ -153,7 +205,98 @@ fn unpack_mxl(bytes: &[u8]) -> ImportResult<Vec<u8>> {
 }
 
 fn parse_document(text: &str) -> ImportResult<xml::Document> {
-    xml::parse(text)
+    let document = xml::parse(text)?;
+    for node in document.root().descendants() {
+        let value = element_text(node);
+        let value = value.trim();
+        let invalid = || {
+            format!(
+                "MusicXML <{}> has invalid value {value:?}; correct it in the source score",
+                node.name()
+            )
+        };
+        match node.name() {
+            "divisions" | "duration" | "actual-notes" | "normal-notes" | "beat-type" | "staff"
+            | "staves" => {
+                let number = value.parse::<i64>().map_err(|_| invalid())?;
+                let maximum = if node.name() == "divisions" {
+                    i64::MAX / 4
+                } else {
+                    u32::MAX as i64
+                };
+                if number <= 0 || number > maximum {
+                    return Err(invalid());
+                }
+            }
+            "beats" => {
+                value
+                    .split('+')
+                    .try_fold(0_u32, |total, component| {
+                        let count = component
+                            .trim()
+                            .parse::<u32>()
+                            .ok()
+                            .filter(|count| *count > 0)?;
+                        total.checked_add(count)
+                    })
+                    .ok_or_else(invalid)?;
+            }
+            "step" | "display-step" | "root-step" | "bass-step" => {
+                if value.len() != 1 || !STEPS.contains(value) {
+                    return Err(invalid());
+                }
+            }
+            "octave" | "display-octave" => {
+                if value
+                    .parse::<i32>()
+                    .ok()
+                    .filter(|octave| (-1..=9).contains(octave))
+                    .is_none()
+                {
+                    return Err(invalid());
+                }
+            }
+            "alter" | "root-alter" | "bass-alter" | "offset" => {
+                if parse_number(value).is_none() {
+                    return Err(invalid());
+                }
+            }
+            "fifths" => {
+                if value
+                    .parse::<i32>()
+                    .ok()
+                    .filter(|fifths| (-7..=7).contains(fifths))
+                    .is_none()
+                {
+                    return Err(invalid());
+                }
+            }
+            "note" => {
+                if child(node, "grace").is_none() && child(node, "duration").is_none() {
+                    return Err("MusicXML note is missing <duration>; provide its positive duration in divisions".into());
+                }
+                if child(node, "pitch").is_none()
+                    && child(node, "unpitched").is_none()
+                    && child(node, "rest").is_none()
+                {
+                    return Err("MusicXML note needs <pitch>, <unpitched>, or <rest>; correct the source note".into());
+                }
+                if children(node, "dot").count() > 2 {
+                    return Err("MusicXML notes support at most two augmentation dots; simplify the written duration".into());
+                }
+            }
+            "pitch" => {
+                if child(node, "step").is_none() || child(node, "octave").is_none() {
+                    return Err(
+                        "MusicXML pitch needs <step> and <octave>; complete the source pitch"
+                            .into(),
+                    );
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(document)
 }
 
 struct MeasureSource<'a> {
@@ -175,7 +318,10 @@ fn part_sources<'a>(root: XNode<'a>) -> Vec<PartSource<'a>> {
                 let index = match parts.iter().position(|source| source.id == id) {
                     Some(index) => index,
                     None => {
-                        parts.push(PartSource { id, measures: Vec::new() });
+                        parts.push(PartSource {
+                            id,
+                            measures: Vec::new(),
+                        });
                         parts.len() - 1
                     }
                 };
@@ -293,7 +439,10 @@ impl<'s> PartReader<'s> {
     }
 
     fn number(&self) -> String {
-        self.measures.last().map(|info| info.number.clone()).unwrap_or_default()
+        self.measures
+            .last()
+            .map(|info| info.number.clone())
+            .unwrap_or_default()
     }
 
     fn length(&self, node: XNode<'_>, tag: &str) -> Frac {
@@ -304,10 +453,13 @@ impl<'s> PartReader<'s> {
     }
 
     fn read(&mut self, part: &PartSource<'_>) -> ImportResult<()> {
-        self.has_beams = part
-            .measures
-            .iter()
-            .any(|measure| measure.children.iter().any(|node| node.descendants().into_iter().any(|item| item.name() == "beam")));
+        self.has_beams = part.measures.iter().any(|measure| {
+            measure.children.iter().any(|node| {
+                node.descendants()
+                    .into_iter()
+                    .any(|item| item.name() == "beam")
+            })
+        });
         for (index, measure) in part.measures.iter().enumerate() {
             self.read_measure(index, measure)?;
         }
@@ -316,7 +468,10 @@ impl<'s> PartReader<'s> {
 
     fn read_measure(&mut self, index: usize, measure: &MeasureSource<'_>) -> ImportResult<()> {
         self.measures.push(MeasureInfo {
-            number: measure.number.clone().unwrap_or_else(|| (index + 1).to_string()),
+            number: measure
+                .number
+                .clone()
+                .unwrap_or_else(|| (index + 1).to_string()),
             ..MeasureInfo::default()
         });
         let mut state = MeasureState {
@@ -346,10 +501,19 @@ impl<'s> PartReader<'s> {
             measure_end = measure_end.max(state.cursor);
         }
         let info = self.info();
-        info.clef_mid_bar = info.clef_later.iter().any(|(_, onset, _)| *onset < measure_end);
-        if state.pending_graces.values().any(|graces| !graces.is_empty()) {
+        info.clef_mid_bar = info
+            .clef_later
+            .iter()
+            .any(|(_, onset, _)| *onset < measure_end);
+        if state
+            .pending_graces
+            .values()
+            .any(|graces| !graces.is_empty())
+        {
             let number = self.number();
-            self.score.warn(format!("bar {number}: grace notes with no following note were dropped"));
+            self.score.warn(format!(
+                "bar {number}: grace notes with no following note were dropped"
+            ));
         }
         Ok(())
     }
@@ -366,7 +530,8 @@ impl<'s> PartReader<'s> {
             }
         }
         if let Some(key) = child(node, "key") {
-            if let Some(fifths) = text_at(key, "fifths").and_then(|value| value.parse::<i32>().ok()) {
+            if let Some(fifths) = text_at(key, "fifths").and_then(|value| value.parse::<i32>().ok())
+            {
                 let mode = text_at(key, "mode").unwrap_or_else(|| "major".into());
                 self.info().key = Some(key_name(fifths, mode == "minor" || mode == "aeolian"));
             }
@@ -383,17 +548,26 @@ impl<'s> PartReader<'s> {
                     (Some(numerator), Ok(denominator)) => {
                         self.info().time = Some(format!("{numerator}/{denominator}"));
                     }
-                    _ => self.score.warn(format!("time signature {beats}/{beat_type} is not supported")),
+                    _ => self.score.warn(format!(
+                        "time signature {beats}/{beat_type} is not supported"
+                    )),
                 }
             }
         }
         for clef in children(node, "clef") {
-            let number: usize = clef.attribute("number").and_then(|value| value.parse().ok()).unwrap_or(1);
+            let number: usize = clef
+                .attribute("number")
+                .and_then(|value| value.parse().ok())
+                .unwrap_or(1);
             let sign = text_at(clef, "sign");
             let line = text_at(clef, "line");
             let name = clef_name(sign.as_deref(), line.as_deref(), self.score);
-            if !matches!(text_at(clef, "clef-octave-change").as_deref(), None | Some("0")) {
-                self.score.warn("octave-transposing clefs are drawn without their octave mark");
+            if !matches!(
+                text_at(clef, "clef-octave-change").as_deref(),
+                None | Some("0")
+            ) {
+                self.score
+                    .warn("octave-transposing clefs are drawn without their octave mark");
             }
             let staff_id = self.staff_id(number);
             let info = self.info();
@@ -406,31 +580,62 @@ impl<'s> PartReader<'s> {
         }
     }
 
-    fn read_note(&mut self, node: XNode<'_>, measure: usize, state: &mut MeasureState) -> ImportResult<()> {
+    fn read_note(
+        &mut self,
+        node: XNode<'_>,
+        measure: usize,
+        state: &mut MeasureState,
+    ) -> ImportResult<()> {
         let voice = text_at(node, "voice").unwrap_or_else(|| "1".into());
-        let staff: usize = text_at(node, "staff").and_then(|value| value.parse().ok()).unwrap_or(1);
+        let staff: usize = text_at(node, "staff")
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(1);
         let staff_id = self.staff_id(staff);
+        if let Some(notehead) = text_at(node, "notehead") {
+            if notehead != "normal" {
+                self.score.warn(format!(
+                    "notehead {notehead:?} is imported as a round notehead"
+                ));
+            }
+        }
         let is_chord = child(node, "chord").is_some();
         let is_grace = child(node, "grace").is_some();
-        let duration = if is_grace { Frac::ZERO } else { self.length(node, "duration") };
+        let duration = if is_grace {
+            Frac::ZERO
+        } else {
+            self.length(node, "duration")
+        };
         let pitch = self.read_pitch(node, &staff_id);
         let cursor = state.cursor;
 
         if is_chord {
             if let Some(pitch) = pitch.clone() {
-                let on_grace = is_grace && state.pending_graces.get(&voice).is_some_and(|graces| !graces.is_empty());
-                let head = if on_grace {
-                    state.pending_graces.get_mut(&voice).and_then(|graces| graces.pop())
-                } else {
-                    state
-                        .last_notes
+                let on_grace = is_grace
+                    && state
+                        .pending_graces
                         .get(&voice)
-                        .map(|index| std::mem::replace(&mut self.events[*index], Event::new(Kind::Note, Frac::ZERO)))
+                        .is_some_and(|graces| !graces.is_empty());
+                let head = if on_grace {
+                    state
+                        .pending_graces
+                        .get_mut(&voice)
+                        .and_then(|graces| graces.pop())
+                } else {
+                    state.last_notes.get(&voice).map(|index| {
+                        std::mem::replace(
+                            &mut self.events[*index],
+                            Event::new(Kind::Note, Frac::ZERO),
+                        )
+                    })
                 };
                 if let Some(mut previous) = head {
                     let joined = previous.kind == Kind::Note;
                     if joined {
-                        if previous.pitches.iter().all(|existing| existing.key() != pitch.key()) {
+                        if previous
+                            .pitches
+                            .iter()
+                            .all(|existing| existing.key() != pitch.key())
+                        {
                             previous.pitches.push(pitch);
                         }
                         if !has_tie_start(node) {
@@ -439,7 +644,11 @@ impl<'s> PartReader<'s> {
                         self.read_notations(node, &mut previous);
                     }
                     if on_grace {
-                        state.pending_graces.get_mut(&voice).expect("grace group exists").push(previous);
+                        state
+                            .pending_graces
+                            .get_mut(&voice)
+                            .expect("grace group exists")
+                            .push(previous);
                     } else {
                         self.events[state.last_notes[&voice]] = previous;
                     }
@@ -457,7 +666,11 @@ impl<'s> PartReader<'s> {
         let mut event = if !visible {
             Event::new(Kind::Spacer, duration)
         } else if let Some(rest) = rest {
-            let kind = if rest.attribute("measure") == Some("yes") || base.is_none() { Kind::MeasureRest } else { Kind::Rest };
+            let kind = if rest.attribute("measure") == Some("yes") || base.is_none() {
+                Kind::MeasureRest
+            } else {
+                Kind::Rest
+            };
             let mut event = Event::new(kind, duration);
             event.base = base;
             event.dots = dots;
@@ -470,7 +683,10 @@ impl<'s> PartReader<'s> {
             };
             let Some(base) = base else {
                 let name = text_at(node, "type").unwrap_or_else(|| "?".into());
-                return Err(format!("bar {}: {name} notes cannot be written in typed-scores", self.number()));
+                return Err(format!(
+                    "bar {}: {name} notes cannot be written in typed-scores",
+                    self.number()
+                ));
             };
             let mut event = Event::new(Kind::Note, duration);
             event.base = Some(base);
@@ -491,7 +707,8 @@ impl<'s> PartReader<'s> {
             if event.kind == Kind::Note {
                 let graces = state.pending_graces.or_default(voice.clone());
                 if graces.is_empty() {
-                    let slash = child(node, "grace").and_then(|grace| grace.attribute("slash")) == Some("yes");
+                    let slash = child(node, "grace").and_then(|grace| grace.attribute("slash"))
+                        == Some("yes");
                     state.pending_slash.insert(voice.clone(), slash);
                 }
                 graces.push(event);
@@ -503,11 +720,18 @@ impl<'s> PartReader<'s> {
             if !graces.is_empty() {
                 if event.kind == Kind::Note {
                     event.graces = std::mem::take(graces);
-                    event.grace_kind = if state.pending_slash.get(&voice).copied().unwrap_or(false) { "acciaccatura" } else { "grace" };
+                    event.grace_kind = if state.pending_slash.get(&voice).copied().unwrap_or(false)
+                    {
+                        "acciaccatura"
+                    } else {
+                        "grace"
+                    };
                 } else {
                     graces.clear();
                     let number = self.number();
-                    self.score.warn(format!("bar {number}: grace notes before a rest were dropped"));
+                    self.score.warn(format!(
+                        "bar {number}: grace notes before a rest were dropped"
+                    ));
                 }
             }
         }
@@ -517,14 +741,21 @@ impl<'s> PartReader<'s> {
         if is_note {
             state.last_notes.insert(voice.clone(), index);
         }
-        self.records.push(NoteRecord { voice, staff, measure, event: index });
+        self.records.push(NoteRecord {
+            voice,
+            staff,
+            measure,
+            event: index,
+        });
         state.cursor = cursor + duration;
         Ok(())
     }
 
     fn read_pitch(&mut self, node: XNode<'_>, staff_id: &str) -> Option<Pitch> {
         if let Some(pitch) = child(node, "pitch") {
-            let alter_value = text_at(pitch, "alter").and_then(|value| parse_number(&value)).unwrap_or(Frac::ZERO);
+            let alter_value = text_at(pitch, "alter")
+                .and_then(|value| parse_number(&value))
+                .unwrap_or(Frac::ZERO);
             let mut alter = round_half_even(alter_value);
             if alter_value.d != 1 || !(-2..=2).contains(&alter) {
                 self.score.warn("microtonal alterations were rounded");
@@ -538,11 +769,16 @@ impl<'s> PartReader<'s> {
             });
         }
         if let Some(unpitched) = child(node, "unpitched") {
-            self.score.warn("unpitched notes are placed at their display pitch");
+            self.score
+                .warn("unpitched notes are placed at their display pitch");
             return Some(Pitch {
-                step: text_at(unpitched, "display-step").and_then(|value| value.chars().next()).unwrap_or('B'),
+                step: text_at(unpitched, "display-step")
+                    .and_then(|value| value.chars().next())
+                    .unwrap_or('B'),
                 alter: 0,
-                octave: text_at(unpitched, "display-octave").and_then(|value| value.parse().ok()).unwrap_or(4),
+                octave: text_at(unpitched, "display-octave")
+                    .and_then(|value| value.parse().ok())
+                    .unwrap_or(4),
                 staff: Some(staff_id.to_string()),
             });
         }
@@ -555,14 +791,21 @@ impl<'s> PartReader<'s> {
         if let Some(value) = name.as_deref().and_then(note_type) {
             return (Some(value), dots);
         }
-        if name.as_deref().is_some_and(|value| UNSUPPORTED_TYPES.contains(&value)) {
+        if name
+            .as_deref()
+            .is_some_and(|value| UNSUPPORTED_TYPES.contains(&value))
+        {
             return (None, 0);
         }
         // No <type>: infer the written value from the sounding duration.
         let mut written = duration;
         if let Some(modification) = child(node, "time-modification") {
-            let actual = text_at(modification, "actual-notes").and_then(|value| value.parse().ok()).unwrap_or(1);
-            let normal = text_at(modification, "normal-notes").and_then(|value| value.parse().ok()).unwrap_or(1);
+            let actual = text_at(modification, "actual-notes")
+                .and_then(|value| value.parse().ok())
+                .unwrap_or(1);
+            let normal = text_at(modification, "normal-notes")
+                .and_then(|value| value.parse().ok())
+                .unwrap_or(1);
             written = duration * Frac::new(actual, normal);
         }
         match split_written(written) {
@@ -578,28 +821,51 @@ impl<'s> PartReader<'s> {
         let beam = children(node, "beam")
             .find(|beam| beam.attribute("number") == Some("1"))
             .or_else(|| child(node, "beam"));
-        event.beam_next = Some(beam.is_some_and(|beam| matches!(element_text(beam).trim(), "begin" | "continue")));
+        event.beam_next = Some(
+            beam.is_some_and(|beam| matches!(element_text(beam).trim(), "begin" | "continue")),
+        );
     }
 
-    fn read_tuplet(&mut self, node: XNode<'_>, event: &mut Event, voice: &str, state: &mut MeasureState) {
+    fn read_tuplet(
+        &mut self,
+        node: XNode<'_>,
+        event: &mut Event,
+        voice: &str,
+        state: &mut MeasureState,
+    ) {
         let Some(modification) = child(node, "time-modification") else {
             state.tuplets.remove(voice);
             return;
         };
-        let markers: Vec<XNode<'_>> = children(node, "notations").flat_map(|notations| children(notations, "tuplet")).collect();
-        let starts: Vec<XNode<'_>> = markers.iter().copied().filter(|marker| marker.attribute("type") == Some("start")).collect();
-        let stops = markers.iter().any(|marker| marker.attribute("type") == Some("stop"));
-        let actual: u32 = text_at(modification, "actual-notes").and_then(|value| value.parse().ok()).unwrap_or(1);
-        let normal: u32 = text_at(modification, "normal-notes").and_then(|value| value.parse().ok()).unwrap_or(1);
+        let markers: Vec<XNode<'_>> = children(node, "notations")
+            .flat_map(|notations| children(notations, "tuplet"))
+            .collect();
+        let starts: Vec<XNode<'_>> = markers
+            .iter()
+            .copied()
+            .filter(|marker| marker.attribute("type") == Some("start"))
+            .collect();
+        let stops = markers
+            .iter()
+            .any(|marker| marker.attribute("type") == Some("stop"));
+        let actual: u32 = text_at(modification, "actual-notes")
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(1);
+        let normal: u32 = text_at(modification, "normal-notes")
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(1);
         if actual == normal {
             return;
         }
         if starts.len() > 1 || (child(modification, "normal-type").is_some() && markers.len() > 1) {
-            self.score.warn("nested tuplets are written as one combined tuplet");
+            self.score
+                .warn("nested tuplets are written as one combined tuplet");
         }
         let needs_new = match state.tuplets.get(voice) {
             None => true,
-            Some(open) => !starts.is_empty() || (open.tuplet.actual, open.tuplet.normal) != (actual, normal),
+            Some(open) => {
+                !starts.is_empty() || (open.tuplet.actual, open.tuplet.normal) != (actual, normal)
+            }
         };
         if needs_new {
             self.counters.tuplets += 1;
@@ -623,13 +889,24 @@ impl<'s> PartReader<'s> {
                 .and_then(note_type)
                 .or(event.base)
                 .unwrap_or(Frac::new(1, 8));
-            let dotted = if child(modification, "normal-dot").is_some() { Frac::new(3, 2) } else { Frac::ONE };
+            let dotted = if child(modification, "normal-dot").is_some() {
+                Frac::new(3, 2)
+            } else {
+                Frac::ONE
+            };
             state.tuplets.insert(
                 voice.to_string(),
-                OpenTuplet { tuplet, target: unit * Frac::int(normal as i64) * dotted, accumulated: Frac::ZERO },
+                OpenTuplet {
+                    tuplet,
+                    target: unit * Frac::int(normal as i64) * dotted,
+                    accumulated: Frac::ZERO,
+                },
             );
         }
-        let open = state.tuplets.get_mut(voice).expect("tuplet was just opened");
+        let open = state
+            .tuplets
+            .get_mut(voice)
+            .expect("tuplet was just opened");
         event.tuplet = Some(open.tuplet.clone());
         open.accumulated += event.duration;
         if stops || open.accumulated >= open.target {
@@ -684,13 +961,16 @@ impl<'s> PartReader<'s> {
                     let name = mark.name();
                     if let Some((_, annotation)) = ORNAMENTS.iter().find(|(tag, _)| *tag == name) {
                         event.add(*annotation);
-                    } else if name == "tremolo" && mark.attribute("type").unwrap_or("single") == "single" {
+                    } else if name == "tremolo"
+                        && mark.attribute("type").unwrap_or("single") == "single"
+                    {
                         let strokes: u32 = element_text(mark).trim().parse().unwrap_or(3);
                         if (1..=4).contains(&strokes) {
                             event.add(format!("tremolo={}", 8 * 2_u32.pow(strokes - 1)));
                         }
                     } else if name == "tremolo" {
-                        self.score.warn("two-note tremolos are written as plain notes");
+                        self.score
+                            .warn("two-note tremolos are written as plain notes");
                     }
                 }
             }
@@ -740,12 +1020,17 @@ impl<'s> PartReader<'s> {
             }
             // Elided syllables share one note; join them with an undertie.
             let text = if texts.len() > 1 {
-                texts.iter().map(|part| part.trim()).collect::<Vec<_>>().join("\u{203f}")
+                texts
+                    .iter()
+                    .map(|part| part.trim())
+                    .collect::<Vec<_>>()
+                    .join("\u{203f}")
             } else {
                 texts[0].clone()
             };
             let syllabic = text_at(lyric, "syllabic").unwrap_or_else(|| "single".into());
-            let extend = child(lyric, "extend").is_some_and(|extend| extend.attribute("type").unwrap_or("start") != "stop");
+            let extend = child(lyric, "extend")
+                .is_some_and(|extend| extend.attribute("type").unwrap_or("start") != "stop");
             event.lyrics.insert(
                 verse,
                 Lyric {
@@ -760,7 +1045,9 @@ impl<'s> PartReader<'s> {
     fn read_direction(&mut self, node: XNode<'_>, cursor: Frac) {
         let offset = self.length(node, "offset");
         let onset = (cursor + offset).max(Frac::ZERO);
-        let staff_number: usize = text_at(node, "staff").and_then(|value| value.parse().ok()).unwrap_or(1);
+        let staff_number: usize = text_at(node, "staff")
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(1);
         let staff_id = self.staff_id(staff_number);
         let below = node.attribute("placement") == Some("below");
         let mut words: Vec<String> = Vec::new();
@@ -815,7 +1102,10 @@ impl<'s> PartReader<'s> {
                         }
                     }
                     "words" => {
-                        let text = element_text(item).split_whitespace().collect::<Vec<_>>().join(" ");
+                        let text = element_text(item)
+                            .split_whitespace()
+                            .collect::<Vec<_>>()
+                            .join(" ");
                         if !text.is_empty() {
                             words.push(text);
                         }
@@ -829,26 +1119,41 @@ impl<'s> PartReader<'s> {
                     }
                     tag @ ("segno" | "coda") => self.info().navigation = Some(tag.to_string()),
                     "pedal" => self.read_pedal(item, &staff_id, onset),
-                    _ => {}
+                    unsupported => self
+                        .score
+                        .warn(format!("direction {unsupported:?} could not be reproduced")),
                 }
             }
         }
         let mut tempo = None;
-        if metronome.is_some() || (sound.is_some_and(|sound| sound.attribute("tempo").is_some()) && !words.is_empty()) {
+        if metronome.is_some()
+            || (sound.is_some_and(|sound| sound.attribute("tempo").is_some()) && !words.is_empty())
+        {
             let mut value = Tempo::default();
             if !words.is_empty() {
                 value.text = Some(words.join(" "));
             }
             if let Some(metronome) = metronome {
-                let unit = text_at(metronome, "beat-unit").as_deref().and_then(note_type);
+                let unit = text_at(metronome, "beat-unit")
+                    .as_deref()
+                    .and_then(note_type);
                 let per_minute = text_at(metronome, "per-minute");
                 let beat = unit.and_then(tempo_beat);
-                let digits: String = per_minute.unwrap_or_default().chars().take_while(|c| c.is_ascii_digit()).collect();
-                if let (Some(beat), true, false) = (beat, child(metronome, "beat-unit-dot").is_none(), digits.is_empty()) {
+                let digits: String = per_minute
+                    .unwrap_or_default()
+                    .chars()
+                    .take_while(|c| c.is_ascii_digit())
+                    .collect();
+                if let (Some(beat), true, false) = (
+                    beat,
+                    child(metronome, "beat-unit-dot").is_none(),
+                    digits.is_empty(),
+                ) {
                     value.beat = Some(beat);
                     value.bpm = digits.parse().ok();
                 } else {
-                    self.score.warn("metronome marks with dotted or unusual beats are omitted");
+                    self.score
+                        .warn("metronome marks with dotted or unusual beats are omitted");
                 }
             }
             if value != Tempo::default() {
@@ -938,7 +1243,11 @@ impl<'s> PartReader<'s> {
             } else {
                 text
             };
-            let current = info.ending.get_or_insert(Ending { label: label.clone(), start: false, stop: false });
+            let current = info.ending.get_or_insert(Ending {
+                label: label.clone(),
+                start: false,
+                stop: false,
+            });
             match ending.attribute("type") {
                 Some("start") => {
                     current.start = true;
@@ -971,7 +1280,10 @@ fn is_navigation_word(text: &str) -> bool {
 }
 
 fn accidental_text(alter: Option<String>) -> &'static str {
-    match alter.and_then(|value| parse_number(&value)).map(round_half_even) {
+    match alter
+        .and_then(|value| parse_number(&value))
+        .map(round_half_even)
+    {
         Some(-2) => "bb",
         Some(-1) => "b",
         Some(1) => "#",
@@ -996,7 +1308,13 @@ fn harmony_symbol(node: XNode<'_>) -> Option<String> {
         } else {
             let name = element_text(kind);
             let name = name.trim();
-            symbol.push_str(HARMONY_KINDS.iter().find(|(kind, _)| *kind == name).map(|(_, text)| *text).unwrap_or(""));
+            symbol.push_str(
+                HARMONY_KINDS
+                    .iter()
+                    .find(|(kind, _)| *kind == name)
+                    .map(|(_, text)| *text)
+                    .unwrap_or(""),
+            );
         }
     }
     for degree in children(node, "degree") {
@@ -1021,20 +1339,28 @@ fn harmony_symbol(node: XNode<'_>) -> Option<String> {
 // -- whole score ---------------------------------------------------------------
 
 pub fn read(bytes: &[u8]) -> ImportResult<Score> {
-    let bytes = if bytes.starts_with(b"PK") { unpack_mxl(bytes)? } else { bytes.to_vec() };
+    let bytes = if bytes.starts_with(b"PK") {
+        unpack_mxl(bytes)?
+    } else {
+        bytes.to_vec()
+    };
     let text = decode_text(&bytes)?;
     let document = parse_document(&text)?;
     let root = document.root();
     let root_name = root.name();
     if root_name != "score-partwise" && root_name != "score-timewise" {
-        return Err(format!("the file is not a MusicXML score (root element <{root_name}>)"));
+        return Err(format!(
+            "the file is not a MusicXML score (root element <{root_name}>)"
+        ));
     }
     let mut score = Score {
         title: text_at(root, "work/work-title").or_else(|| text_at(root, "movement-title")),
         ..Score::default()
     };
     if let Some(identification) = child(root, "identification") {
-        if let Some(creator) = children(identification, "creator").find(|creator| creator.attribute("type") == Some("composer")) {
+        if let Some(creator) = children(identification, "creator")
+            .find(|creator| creator.attribute("type") == Some("composer"))
+        {
             let text = element_text(creator).trim().to_string();
             if !text.is_empty() {
                 score.composer = Some(text);
@@ -1063,7 +1389,10 @@ pub fn read(bytes: &[u8]) -> ImportResult<Score> {
         return Err("the MusicXML score has no parts".into());
     }
     let mut used_ids: Set<String> = Set::new();
-    let mut counters = Counters { spans: Map::new(), tuplets: 0 };
+    let mut counters = Counters {
+        spans: Map::new(),
+        tuplets: 0,
+    };
     let mut readers: Vec<(Vec<String>, Vec<MeasureInfo>, Vec<NoteRecord>, Vec<Event>)> = Vec::new();
     for (index, part) in parts.iter().enumerate() {
         let (label, short) = part_names.get(&part.id).cloned().unwrap_or((None, None));
@@ -1081,7 +1410,9 @@ pub fn read(bytes: &[u8]) -> ImportResult<Score> {
         let names: Vec<String> = match staff_count {
             1 => vec![base],
             2 => vec![format!("{base}-upper"), format!("{base}-lower")],
-            _ => (1..=staff_count).map(|number| format!("{base}-{number}")).collect(),
+            _ => (1..=staff_count)
+                .map(|number| format!("{base}-{number}"))
+                .collect(),
         };
         let mut ids = Vec::new();
         for name in names {
@@ -1117,15 +1448,28 @@ pub fn read(bytes: &[u8]) -> ImportResult<Score> {
             verse_numbers: Vec::new(),
         };
         reader.read(part)?;
-        let PartReader { measures, records, events, .. } = reader;
+        let PartReader {
+            measures,
+            records,
+            events,
+            ..
+        } = reader;
         readers.push((ids, measures, records, events));
     }
 
-    let measure_count = readers.iter().map(|(_, measures, _, _)| measures.len()).max().unwrap_or(0);
+    let measure_count = readers
+        .iter()
+        .map(|(_, measures, _, _)| measures.len())
+        .max()
+        .unwrap_or(0);
     score.measures = (0..measure_count)
-        .map(|index| Measure { number: (index + 1).to_string(), ..Measure::default() })
+        .map(|index| Measure {
+            number: (index + 1).to_string(),
+            ..Measure::default()
+        })
         .collect();
-    let first_part_keys: Vec<Option<String>> = readers[0].1.iter().map(|info| info.key.clone()).collect();
+    let first_part_keys: Vec<Option<String>> =
+        readers[0].1.iter().map(|info| info.key.clone()).collect();
     for (part_index, (ids, infos, records, events)) in readers.iter_mut().enumerate() {
         let mut pending_clefs: Vec<(String, String)> = Vec::new();
         for (index, info) in infos.iter_mut().enumerate() {
@@ -1135,7 +1479,9 @@ pub fn read(bytes: &[u8]) -> ImportResult<Score> {
                 measure.time = info.time.clone();
                 measure.key = info.key.clone();
             } else if info.key.is_some()
-                && first_part_keys.get(index).is_some_and(|key| *key != info.key)
+                && first_part_keys
+                    .get(index)
+                    .is_some_and(|key| *key != info.key)
             {
                 score.warn("parts with different key signatures share the first part's key");
             }
@@ -1178,7 +1524,9 @@ pub fn read(bytes: &[u8]) -> ImportResult<Score> {
         assign_voices(ids, infos.len(), records, events, &mut score);
     }
 
-    let moved = readers.iter().any(|(_, infos, _, _)| infos.iter().any(|info| info.clef_mid_bar));
+    let moved = readers
+        .iter()
+        .any(|(_, infos, _, _)| infos.iter().any(|info| info.clef_mid_bar));
     if let Some(first) = score.measures.first_mut() {
         let clefs = std::mem::take(&mut first.clefs);
         let time = first.time.take();
@@ -1209,7 +1557,11 @@ pub fn read(bytes: &[u8]) -> ImportResult<Score> {
 fn drop_redundant_changes(score: &mut Score) {
     let mut key = score.key.clone();
     let mut time = score.time.clone();
-    let mut clefs: Map<String, String> = score.staves.iter().map(|staff| (staff.id.clone(), staff.clef.clone())).collect();
+    let mut clefs: Map<String, String> = score
+        .staves
+        .iter()
+        .map(|staff| (staff.id.clone(), staff.clef.clone()))
+        .collect();
     for measure in &mut score.measures {
         match &measure.key {
             Some(value) if *value == key => measure.key = None,
@@ -1235,11 +1587,19 @@ fn drop_redundant_changes(score: &mut Score) {
 type VoiceKey = (String, Option<usize>);
 
 /// Map MusicXML voices onto a fixed set of per-staff voice slots.
-fn assign_voices(ids: &[String], measure_count: usize, records: &[NoteRecord], events: &mut [Event], score: &mut Score) {
+fn assign_voices(
+    ids: &[String],
+    measure_count: usize,
+    records: &[NoteRecord],
+    events: &mut [Event],
+    score: &mut Score,
+) {
     let staff_id = |number: usize| ids[number.clamp(1, ids.len()) - 1].clone();
     let mut by_measure_voice: Map<(usize, String), Vec<&NoteRecord>> = Map::new();
     for record in records {
-        by_measure_voice.or_default((record.measure, record.voice.clone())).push(record);
+        by_measure_voice
+            .or_default((record.measure, record.voice.clone()))
+            .push(record);
     }
 
     // A voice number reused on two staves at once is two logical voices.
@@ -1255,7 +1615,9 @@ fn assign_voices(ids: &[String], measure_count: usize, records: &[NoteRecord], e
             .collect();
         spans.sort();
         let overlapping = spans.iter().enumerate().any(|(position, earlier)| {
-            spans[position + 1..].iter().any(|later| later.0 < earlier.1 && later.2 != earlier.2)
+            spans[position + 1..]
+                .iter()
+                .any(|later| later.0 < earlier.1 && later.2 != earlier.2)
         });
         if overlapping {
             let mut staves: Vec<usize> = Vec::new();
@@ -1265,7 +1627,11 @@ fn assign_voices(ids: &[String], measure_count: usize, records: &[NoteRecord], e
                 }
             }
             for staff in staves {
-                let members = group.iter().copied().filter(|record| record.staff == staff).collect();
+                let members = group
+                    .iter()
+                    .copied()
+                    .filter(|record| record.staff == staff)
+                    .collect();
                 logical.push((*measure, (voice.clone(), Some(staff)), members));
             }
         } else {
@@ -1296,7 +1662,13 @@ fn assign_voices(ids: &[String], measure_count: usize, records: &[NoteRecord], e
     };
 
     let mut keys: Vec<VoiceKey> = presence.keys().cloned().collect();
-    keys.sort_by_key(|key| (key.0.parse::<u32>().unwrap_or(999), key.0.clone(), key.1.unwrap_or(0)));
+    keys.sort_by_key(|key| {
+        (
+            key.0.parse::<u32>().unwrap_or(999),
+            key.0.clone(),
+            key.1.unwrap_or(0),
+        )
+    });
     let mut slots: Map<VoiceKey, (usize, usize)> = Map::new();
     let mut occupied: Map<usize, Vec<Set<usize>>> = Map::new();
     for key in keys {
@@ -1307,7 +1679,10 @@ fn assign_voices(ids: &[String], measure_count: usize, records: &[NoteRecord], e
             staff_slots[index].extend_from(here);
             slots.insert(key, (staff, index));
         } else if staff_slots.len() >= 4 {
-            score.warn(format!("staff {} has more than four voices; extra voices were dropped", staff_id(staff)));
+            score.warn(format!(
+                "staff {} has more than four voices; extra voices were dropped",
+                staff_id(staff)
+            ));
         } else {
             staff_slots.push(here.clone());
             slots.insert(key, (staff, staff_slots.len() - 1));
@@ -1316,19 +1691,31 @@ fn assign_voices(ids: &[String], measure_count: usize, records: &[NoteRecord], e
 
     for measure in score.measures.iter_mut().take(measure_count) {
         for (number, id) in ids.iter().enumerate() {
-            let count = occupied.get(&(number + 1)).map(Vec::len).unwrap_or(0).max(1);
+            let count = occupied
+                .get(&(number + 1))
+                .map(Vec::len)
+                .unwrap_or(0)
+                .max(1);
             measure.voices.insert(id.clone(), vec![Vec::new(); count]);
         }
     }
     for (measure_index, key, members) in logical {
-        let Some((staff, slot)) = slots.get(&key) else { continue };
+        let Some((staff, slot)) = slots.get(&key) else {
+            continue;
+        };
         let id = staff_id(*staff);
         for record in members {
             let mut event = events[record.event].clone();
-            if matches!(event.kind, Kind::Rest | Kind::MeasureRest) && event.staff.as_deref() == Some(id.as_str()) {
+            if matches!(event.kind, Kind::Rest | Kind::MeasureRest)
+                && event.staff.as_deref() == Some(id.as_str())
+            {
                 event.staff = None;
             }
-            score.measures[measure_index].voices.get_mut(&id).expect("staff slots exist")[*slot].push(event);
+            score.measures[measure_index]
+                .voices
+                .get_mut(&id)
+                .expect("staff slots exist")[*slot]
+                .push(event);
         }
     }
 }

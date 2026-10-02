@@ -56,7 +56,11 @@ fn decode(text: &str) -> String {
                 .strip_prefix("#x")
                 .or_else(|| entity.strip_prefix("#X"))
                 .and_then(|hex| u32::from_str_radix(hex, 16).ok())
-                .or_else(|| entity.strip_prefix('#').and_then(|digits| digits.parse().ok()))
+                .or_else(|| {
+                    entity
+                        .strip_prefix('#')
+                        .and_then(|digits| digits.parse().ok())
+                })
                 .and_then(char::from_u32),
         };
         match character {
@@ -79,7 +83,9 @@ fn error(message: &str) -> String {
 }
 
 pub fn parse(text: &str) -> ImportResult<Document> {
-    let mut document = Document { elements: Vec::new() };
+    let mut document = Document {
+        elements: Vec::new(),
+    };
     let mut stack: Vec<usize> = Vec::new();
     let mut root = None;
     let mut rest = text;
@@ -92,40 +98,65 @@ pub fn parse(text: &str) -> ImportResult<Document> {
         };
         if open > 0 {
             if let Some(parent) = stack.last() {
-                document.elements[*parent].children.push(Content::Text(decode(&rest[..open])));
+                document.elements[*parent]
+                    .children
+                    .push(Content::Text(decode(&rest[..open])));
             }
         }
         rest = &rest[open..];
         if let Some(after) = rest.strip_prefix("<!--") {
-            let end = after.find("-->").ok_or_else(|| error("a comment is not closed"))?;
+            let end = after
+                .find("-->")
+                .ok_or_else(|| error("a comment is not closed"))?;
             rest = &after[end + 3..];
         } else if let Some(after) = rest.strip_prefix("<![CDATA[") {
-            let end = after.find("]]>").ok_or_else(|| error("a CDATA section is not closed"))?;
+            let end = after
+                .find("]]>")
+                .ok_or_else(|| error("a CDATA section is not closed"))?;
             if let Some(parent) = stack.last() {
-                document.elements[*parent].children.push(Content::Text(after[..end].to_string()));
+                document.elements[*parent]
+                    .children
+                    .push(Content::Text(after[..end].to_string()));
             }
             rest = &after[end + 3..];
         } else if rest.starts_with("<?") {
-            let end = rest.find("?>").ok_or_else(|| error("a processing instruction is not closed"))?;
+            let end = rest
+                .find("?>")
+                .ok_or_else(|| error("a processing instruction is not closed"))?;
             rest = &rest[end + 2..];
         } else if rest.starts_with("<!") {
             // DOCTYPE, possibly with an internal subset in brackets.
             let bracket = rest.find('[');
-            let close = rest.find('>').ok_or_else(|| error("a declaration is not closed"))?;
+            let close = rest
+                .find('>')
+                .ok_or_else(|| error("a declaration is not closed"))?;
             let end = match bracket {
                 Some(bracket) if bracket < close => {
-                    let subset_end = rest[bracket..].find("]").map(|offset| bracket + offset).ok_or_else(|| error("a DOCTYPE subset is not closed"))?;
-                    rest[subset_end..].find('>').map(|offset| subset_end + offset).ok_or_else(|| error("a declaration is not closed"))?
+                    let subset_end = rest[bracket..]
+                        .find("]")
+                        .map(|offset| bracket + offset)
+                        .ok_or_else(|| error("a DOCTYPE subset is not closed"))?;
+                    rest[subset_end..]
+                        .find('>')
+                        .map(|offset| subset_end + offset)
+                        .ok_or_else(|| error("a declaration is not closed"))?
                 }
                 _ => close,
             };
             rest = &rest[end + 1..];
         } else if let Some(after) = rest.strip_prefix("</") {
-            let end = after.find('>').ok_or_else(|| error("a closing tag is not finished"))?;
+            let end = after
+                .find('>')
+                .ok_or_else(|| error("a closing tag is not finished"))?;
             let name = local_name(after[..end].trim());
-            let open = stack.pop().ok_or_else(|| error(&format!("</{name}> closes nothing")))?;
+            let open = stack
+                .pop()
+                .ok_or_else(|| error(&format!("</{name}> closes nothing")))?;
             if document.elements[open].name != name {
-                return Err(error(&format!("<{}> is closed by </{name}>", document.elements[open].name)));
+                return Err(error(&format!(
+                    "<{}> is closed by </{name}>",
+                    document.elements[open].name
+                )));
             }
             rest = &after[end + 1..];
         } else {
@@ -152,18 +183,33 @@ pub fn parse(text: &str) -> ImportResult<Document> {
                     position = next;
                     break;
                 }
-                let equals = position.find('=').ok_or_else(|| error(&format!("an attribute of <{name}> has no value")))?;
+                let equals = position
+                    .find('=')
+                    .ok_or_else(|| error(&format!("an attribute of <{name}> has no value")))?;
                 let key = local_name(position[..equals].trim()).to_string();
-                let value_start = position[equals + 1..].trim_start_matches(|c: char| c.is_ascii_whitespace());
-                let quote = value_start.chars().next().filter(|c| *c == '"' || *c == '\'').ok_or_else(|| error(&format!("attribute {key} is not quoted")))?;
-                let value_end = value_start[1..].find(quote).ok_or_else(|| error(&format!("attribute {key} is not closed")))?;
+                let value_start =
+                    position[equals + 1..].trim_start_matches(|c: char| c.is_ascii_whitespace());
+                let quote = value_start
+                    .chars()
+                    .next()
+                    .filter(|c| *c == '"' || *c == '\'')
+                    .ok_or_else(|| error(&format!("attribute {key} is not quoted")))?;
+                let value_end = value_start[1..]
+                    .find(quote)
+                    .ok_or_else(|| error(&format!("attribute {key} is not closed")))?;
                 attributes.push((key, decode(&value_start[1..1 + value_end])));
                 position = &value_start[value_end + 2..];
             }
-            document.elements.push(Element { name, attributes, children: Vec::new() });
+            document.elements.push(Element {
+                name,
+                attributes,
+                children: Vec::new(),
+            });
             let index = document.elements.len() - 1;
             match stack.last() {
-                Some(parent) => document.elements[*parent].children.push(Content::Element(index)),
+                Some(parent) => document.elements[*parent]
+                    .children
+                    .push(Content::Element(index)),
                 None if root.is_none() => root = Some(index),
                 None => return Err(error("the document has more than one root element")),
             }
@@ -184,7 +230,10 @@ pub fn parse(text: &str) -> ImportResult<Document> {
 
 impl Document {
     pub fn root(&self) -> Node<'_> {
-        Node { document: self, index: 0 }
+        Node {
+            document: self,
+            index: 0,
+        }
     }
 }
 
@@ -198,16 +247,26 @@ impl<'a> Node<'a> {
     }
 
     pub fn attribute(&self, name: &str) -> Option<&'a str> {
-        self.element().attributes.iter().find(|(key, _)| key == name).map(|(_, value)| value.as_str())
+        self.element()
+            .attributes
+            .iter()
+            .find(|(key, _)| key == name)
+            .map(|(_, value)| value.as_str())
     }
 
     /// Child elements, in document order.
     pub fn elements(self) -> impl Iterator<Item = Node<'a>> {
         let document = self.document;
-        self.element().children.iter().filter_map(move |child| match child {
-            Content::Element(index) => Some(Node { document, index: *index }),
-            Content::Text(_) => None,
-        })
+        self.element()
+            .children
+            .iter()
+            .filter_map(move |child| match child {
+                Content::Element(index) => Some(Node {
+                    document,
+                    index: *index,
+                }),
+                Content::Text(_) => None,
+            })
     }
 
     /// The element's own text, excluding text inside child elements.

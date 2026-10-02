@@ -99,14 +99,20 @@ impl Sub for Frac {
 impl Mul for Frac {
     type Output = Frac;
     fn mul(self, other: Frac) -> Frac {
-        Frac::reduce(self.n as i128 * other.n as i128, self.d as i128 * other.d as i128)
+        Frac::reduce(
+            self.n as i128 * other.n as i128,
+            self.d as i128 * other.d as i128,
+        )
     }
 }
 
 impl Div for Frac {
     type Output = Frac;
     fn div(self, other: Frac) -> Frac {
-        Frac::reduce(self.n as i128 * other.d as i128, self.d as i128 * other.n as i128)
+        Frac::reduce(
+            self.n as i128 * other.d as i128,
+            self.d as i128 * other.n as i128,
+        )
     }
 }
 

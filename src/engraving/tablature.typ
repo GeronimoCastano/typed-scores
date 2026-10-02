@@ -62,6 +62,9 @@
     else if accidental == "##" { "DoubleSharp" }
     else if accidental == "b" { "Flat" }
     else { "DoubleFlat" }
+  if int(octave) < -1 or int(octave) > 9 {
+    _score-error(label, "tuning octave is outside the supported range -1 through 9", value: value, fix: "write an open-string pitch in the supported octave range")
+  }
   let pitch = (letter: upper(letter), accidental: accidental-name, octave: int(octave))
   (pitch: pitch, midi: _pitch-midi(pitch))
 }

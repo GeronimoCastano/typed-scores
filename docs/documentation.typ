@@ -192,7 +192,7 @@ should remain readable and versionable as text.
 
 #note-box[The public API is intentionally small: #c("score") for complete
 scores, #c("bar") for a quick one-staff measure, and #c("chord-diagram") for a
-standalone fretboard diagram, with the #c("guitar-chords") shape library.]
+standalone fretboard diagram, with the #c("guitar-chords") shape library. #c("part") extracts a staff; #c("import-score") and #c("read-score") import existing music.]
 
 #demo[
   #example(```typ
@@ -689,8 +689,8 @@ matching LilyPond's usual sparse numbering; `"all"` prints every bar number.
   [#c("wrap")], [`bool`], [`true`], [Wrap complete bars into systems.],
   [#c("indent")], [`number`], [`0`], [First-system indentation in staff spaces. The system still ends at the normal right edge.],
   [#c("short-indent")], [`number`], [`0`], [Indentation for every system after the first.],
-  [#c("ragged-right")], [`auto | bool`], [`auto`], [Leave every system at natural width. Auto is ragged only for a one-system score.],
-  [#c("ragged-last")], [`bool`], [`false`], [Leave only the final system at its natural width.],
+  [#c("ragged-right")], [`auto | bool`], [`auto`], [Leave every system at natural width within the wrapping width. Auto is ragged only for a one-system score.],
+  [#c("ragged-last")], [`bool`], [`false`], [Leave only the final system at natural width within the wrapping width.],
   [#c("system-gap")], [`length`], [`1.2em`], [Vertical gap between systems.],
   [#c("bar-numbers")], [`false | str`], [`false`], [Use `systems` for later system starts or `all` for every bar.],
   [#c("first-bar-number")], [`int`], [`1`], [Positive number assigned to the first bar.],
@@ -702,7 +702,7 @@ Multi-system scores fill #c("width") by default: note spacing stretches or
 compresses so each system's bars fill the line, and adjacent systems keep a
 similar density rather than alternating cramped and loose lines. There is no
 fixed bar count per line. A one-system score stays at natural width with the
-default #c("ragged-right: auto").
+default #c("ragged-right: auto"), bounded by the wrapping width. Clefs and keys repeat at each system start; a time signature appears only where the meter is first set or changes.
 
 Use #c("indent") for the first system and #c("short-indent") for every later
 one; both reduce the usable line width while retaining a shared right edge.
@@ -769,12 +769,14 @@ concert F-sharp major for alto saxophone is written in E-flat major rather
 than D-sharp major. A note that would need a triple sharp or flat is respelled
 on a neighboring letter.
 
+Percussion pitches and their drum-map entries retain their original positions during transposition.
+
 To write a part from an ensemble score, keep the score's arguments in a
 dictionary and pass them through #c("part") with a declared staff ID. It
 returns arguments for a one-staff score: the chosen staff's content, clef
 changes, and lyrics, with every bar's key, meter, tempo, harmony, barlines,
 endings, and marks. The ensemble-only #c("staff-gap") and #c("group") are
-dropped. The same dictionary engraves the concert score with
+dropped. A mirrored tab staff cannot be extracted without its source: extract the notation staff or supply independent tab content. The same dictionary engraves the concert score with
 #c("score(..duet)"), and the extracted part spreads into #c("score") beside any
 argument for the part itself:
 
@@ -1399,7 +1401,7 @@ pitches sets the number of lines. The default is `"guitar"`.
 
 A tab staff draws its clef, fret numbers, and barlines. Rests, stems, beams,
 tuplet brackets, articulations, dynamics, slurs, and ties stay on the notation
-staff it repeats. A tied note is not restated in the tab, except where it
+staff it repeats. Independent tab accepts string choices and ties but rejects notation annotations it cannot draw; put markings on a notation source staff. A tied note is not restated in the tab, except where it
 continues onto a new system, where its fret appears in parentheses. Tab lines
 break around each number instead of being painted over, so the tab reads on
 any page color. A tab staff keeps its clef for the whole score, and cross-staff
@@ -1555,12 +1557,12 @@ beams.
   [Hidden rests, voice gaps], [Spacers #c("s"), which draw nothing.],
 )
 
-Anything typed-scores cannot draw is simplified instead of rejected: a tie
+When #c("read-score") cannot reproduce a construct, its conversion lists the loss: a tie
 joining only part of a chord or crossing staves is dropped, lyrics under a
 second voice are dropped, and grace notes inside a tuplet are dropped. Every
 staff shares the first part's key, so transposing parts lose their own key
 signature. Each kind of loss is listed in #c("warnings") and in the header of
-#c("source"). Breves, notes shorter than a thirty-second, and a bar holding
+#c("source"). #c("import-score") reports conversion losses as an error. Use #c("read-score") to inspect the warnings and emitted source before explicitly engraving the reviewed arguments with #c("score"). Invalid numeric fields, zero durations or denominators, malformed pitches, and more than two dots produce actionable errors. A duration may expand into at most 256 tied note values; divide longer values across shorter measures. Breves, notes shorter than a thirty-second, and a bar holding
 more music than its meter stop the import with an error naming the bar.
 Imported scores are written at #c("scale: 0.7"); if a dense bar does not fit
 the line, lower #c("scale") or #c("note-spacing").
@@ -1656,9 +1658,11 @@ instrument written from concert pitch:
   chord.
 - Pedals and hairpins are event-anchored and do not split automatically at a
   system break.
-- Ottava spans stay on their voice's staff; end one before a staff switch.
+- Ottava spans require pitched notation and stay on their voice's staff; end one before a staff switch. Put octave markers on the notation source when mirroring tab.
+- Tablature cannot show notehead maps or mirror unpitched percussion.
 - Figured bass is drawn under the bottom staff, without continuation lines.
 - Percussion staves have five lines; noteheads may be round, X, or circled X.
+- Independent tab rejects notation annotations it cannot draw; place markings on its notation source staff. Open-string pitches must use octaves -1 through 9.
 - Tab staves draw fret numbers only: no rhythm stems, bends, slides,
   hammer-ons, or harmonics yet. Automatic fretting takes the lowest position
   for each onset rather than planning hand positions across a phrase; use
@@ -1701,6 +1705,11 @@ instrument written from concert pitch:
   [#c("clef: \"treble-8\"")], [Guitar clef: treble, sounding an octave lower.],
   [#c("tab: (clef: \"tab\", source: \"guitar\")")], [Tab staff repeating the guitar staff's music.],
   [#c("(c3 e3 g3):h[string=5,4,3]")], [Choose tab strings, in written pitch order.],
+  [#c("transpose: \"M2\"")], [Transpose pitched notation, keys, and harmony up a major second.],
+  [#c("part(arguments, \"viola\")")], [Extract one independent staff's score arguments.],
+  [#c("chord-diagram(\"x32010\")")], [Standalone chord diagram; #c("guitar-chords") supplies standard shapes.],
+  [#c("import-score(read(\"song.mxl\", encoding: none))")], [Engrave an import with no conversion losses.],
+  [#c("read-score(read(\"song.abc\"))")], [Inspect score arguments, title, conversion warnings, and editable source.],
   [#c("rehearsal: \"A\"") / #c("navigation: \"segno\"")], [Boundary rehearsal / navigation mark.],
   [#c("ending: (label: \"Final\", start: true)")], [Literal volta label.],
 )

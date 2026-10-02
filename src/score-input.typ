@@ -197,6 +197,9 @@
 #let _normalize-staves(staves, clef, heads) = {
   if staves == none {
     let clef = _validate-clef(clef, "score clef")
+    if clef == "tab" and heads != none {
+      _score-error("score heads", "notehead maps cannot be drawn on tablature", fix: "remove heads or place the map on a notation staff")
+    }
     return ((
       id: "staff",
       field: "notes",
@@ -317,6 +320,9 @@
         )
       }
     }
+    if staff-clef == "tab" and staff-config.at("heads", default: none) != none {
+      _score-error("staff " + staff-id + " heads", "notehead maps cannot be drawn on tablature", fix: "remove heads or place the map on a notation staff")
+    }
     normalized-staves.push((
       id: staff-id,
       field: staff-id,
@@ -344,6 +350,9 @@
         expected: normalized-staves.filter(other => other.tab == none).map(other => repr(other.id)).join(", "),
         fix: "name the notation staff whose notes this tab repeats",
       )
+    }
+    if source.clef == "percussion" {
+      _score-error("staff " + staff.id + " source", "tablature cannot mirror an unpitched percussion staff", fix: "choose a pitched notation source staff")
     }
     if source.tab != none {
       _score-error(
@@ -712,6 +721,27 @@
         transposition: normalized-measure.transposition,
         location: voice-location,
       )
+      if voice.clef in ("tab", "percussion") and layout-response.layouts.any(layout => (
+        layout.annotations.any(annotation => str(annotation).match(regex("^(8va|8vb|15ma|15mb)[()]$")) != none)
+      )) {
+        _score-error(
+          voice-location,
+          "ottava requires a pitched notation staff",
+          value: voice.clef,
+          fix: "place the ottava on the notation source staff or remove the octave markers",
+        )
+      }
+      if voice.clef == "tab" {
+        for layout in layout-response.layouts {
+          if layout.annotations.any(annotation => not str(annotation).starts-with("string=")) or layout.pitches.any(pitch => pitch.at("head", default: "normal") != "normal") {
+            _score-error(
+              voice-location,
+              "tablature draws fret numbers and cannot show this notation annotation",
+              fix: "place markings on a notation source staff, or remove unsupported annotations from independent tab",
+            )
+          }
+        }
+      }
       let ottava = _apply-ottava(
         layout-response.layouts,
         ottava-states.at(voice.id, default: none),

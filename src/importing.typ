@@ -44,12 +44,18 @@
       fix: "pass the number that follows X: in the ABC file",
     )
   }
+  if tune != none and (type(tune) == int and tune < 1 or type(tune) == str and tune.match(regex("^[0-9]+$")) == none) {
+    _score-error("read-score tune", "tune must be a positive ABC X: number", value: tune, fix: "write a positive integer or its digits as a string")
+  }
+  if tune != none and format == "musicxml" {
+    _score-error("read-score tune", "tune selection applies only to ABC", fix: "remove tune for a MusicXML score")
+  }
   if name != none and type(name) != str {
     _score-error("read-score name", "name must be a string", value: name, fix: "pass the file name as text")
   }
   let options = (
     "format=" + format,
-    "tune=" + if tune == none { "" } else { str(tune) },
+    "tune=" + if tune == none { "" } else if type(tune) == int { repr(tune) } else { tune },
     "package=@preview/typed-scores:" + _package-version,
     "source=" + if name == none { "" } else { name.replace("\n", " ") },
     "scale=0.7",
@@ -78,7 +84,17 @@
     )
   }
   let imported = read-score(source, format: format, tune: tune)
+  if imported.warnings.len() > 0 {
+    _score-error(
+      "import-score",
+      "the source needs conversion changes: " + imported.warnings.join("; "),
+      fix: "use read-score to inspect warnings and source, then explicitly render the reviewed arguments with score",
+    )
+  }
   let title = if title == auto { imported.title } else { title }
+  if title != none and type(title) not in (str, content) {
+    _score-error("import-score title", "title must be text, content, auto, or none", value: title, fix: "quote the title or use title: none")
+  }
   if title != none {
     align(center, text(size: 1.6em, weight: "bold", title))
   }

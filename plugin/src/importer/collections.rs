@@ -14,7 +14,9 @@ pub struct Map<K, V> {
 
 impl<K, V> Default for Map<K, V> {
     fn default() -> Self {
-        Map { entries: Vec::new() }
+        Map {
+            entries: Vec::new(),
+        }
     }
 }
 
@@ -27,7 +29,9 @@ impl<K: PartialEq, V> Map<K, V> {
     where
         K: Borrow<Q>,
     {
-        self.entries.iter().position(|(existing, _)| existing.borrow() == key)
+        self.entries
+            .iter()
+            .position(|(existing, _)| existing.borrow() == key)
     }
 
     pub fn get<Q: PartialEq + ?Sized>(&self, key: &Q) -> Option<&V>

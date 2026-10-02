@@ -21,12 +21,18 @@ scripts/package-preview.sh "$version" "$tmp_dir/packages-repo"
 
 smoke="$tmp_dir/smoke.typ"
 printf '%s\n' \
-  '#import "packages-repo/packages/preview/typed-scores/'"$version"'/src/lib.typ": score, bar, import-score' \
+  '#import "packages-repo/packages/preview/typed-scores/'"$version"'/src/lib.typ": score, bar, part, chord-diagram, guitar-chords, import-score' \
   '#bar("C5:q[dyn=mf fermata]", time: "1/4")' \
   '#score(time: "2/4", bars: ((notes: "F#5:h ~"), (notes: "F#5:h")))' \
   '#score(time: "4/4", bar-numbers: "all", bars: ((rehearsal: "A", notes: ("acciaccatura { D5:s } C5:q F5:q G5:h", "C4:w"), barline: (right: "final")),))' \
   '#score(time: "4/4", bars: ((notes: "C5:h[tremolo=16] (E5 G5 C6):h[arpeggio=up]"), (clef: "bass", notes: "tremolo 16 { C3:h G3:h }")))' \
   '#import-score("X:1\nT:Smoke\nM:2/4\nL:1/8\nK:G\n|: \"G\"B2 AG | \"D\"A4 :|")' \
+  '#score(transpose: "M2", time: "2/4", bars: ((notes: "C5:h", harmony: "C:h"),))' \
+  '#score(clef: "percussion", heads: (g5: "x"), time: "2/4", bars: ((notes: "g5:q c5"),))' \
+  '#score(clef: "bass", time: "2/4", bars: ((notes: "c2:h[8vb( 8vb)]", figures: "(6 4):h"),))' \
+  '#score(staves: (guitar: (clef: "treble-8"), tab: (clef: "tab", source: "guitar")), time: "2/4", bars: ((guitar: "e3:q g3"),))' \
+  '#chord-diagram(guitar-chords.at("C").frets, name: "C")' \
+  '#score(..part((staves: (melody: (clef: "treble"), bass: (clef: "bass")), time: "2/4", bars: ((melody: "c5:h", bass: "c3:h"),)), "melody"))' \
   >"$smoke"
 typst compile --root "$tmp_dir" "$smoke" "$tmp_dir/smoke.pdf"
 

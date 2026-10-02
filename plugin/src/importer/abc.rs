@@ -5,37 +5,101 @@ use super::collections::{Map, Set};
 use super::frac::Frac;
 use super::model::*;
 
-const TONIC_FIFTHS: [(char, i32); 7] = [('F', -1), ('C', 0), ('G', 1), ('D', 2), ('A', 3), ('E', 4), ('B', 5)];
+const TONIC_FIFTHS: [(char, i32); 7] = [
+    ('F', -1),
+    ('C', 0),
+    ('G', 1),
+    ('D', 2),
+    ('A', 3),
+    ('E', 4),
+    ('B', 5),
+];
 const MODE_OFFSETS: [(&str, i32); 11] = [
-    ("maj", 0), ("ion", 0), ("mix", -1), ("dor", -2), ("min", -3), ("aeo", -3), ("m", -3),
-    ("phr", -4), ("loc", -5), ("lyd", 1), ("", 0),
+    ("maj", 0),
+    ("ion", 0),
+    ("mix", -1),
+    ("dor", -2),
+    ("min", -3),
+    ("aeo", -3),
+    ("m", -3),
+    ("phr", -4),
+    ("loc", -5),
+    ("lyd", 1),
+    ("", 0),
 ];
 const LONG_DECORATIONS: &[(&str, &str)] = &[
-    ("staccato", "stacc"), ("tenuto", "tenuto"), ("accent", "accent"), (">", "accent"),
-    ("emphasis", "accent"), ("marcato", "marcato"), ("^", "marcato"), ("wedge", "staccatissimo"),
-    ("fermata", "fermata"), ("invertedfermata", "fermata"), ("trill", "trill"),
-    ("mordent", "mordent"), ("lowermordent", "mordent"), ("pralltriller", "inverted-mordent"),
-    ("uppermordent", "inverted-mordent"), ("turn", "turn"), ("roll", "turn"),
-    ("invertedturn", "inverted-turn"), ("turnx", "inverted-turn"), ("breath", "breath"),
+    ("staccato", "stacc"),
+    ("tenuto", "tenuto"),
+    ("accent", "accent"),
+    (">", "accent"),
+    ("emphasis", "accent"),
+    ("marcato", "marcato"),
+    ("^", "marcato"),
+    ("wedge", "staccatissimo"),
+    ("fermata", "fermata"),
+    ("invertedfermata", "fermata"),
+    ("trill", "trill"),
+    ("mordent", "mordent"),
+    ("lowermordent", "mordent"),
+    ("pralltriller", "inverted-mordent"),
+    ("uppermordent", "inverted-mordent"),
+    ("turn", "turn"),
+    ("roll", "turn"),
+    ("invertedturn", "inverted-turn"),
+    ("turnx", "inverted-turn"),
+    ("breath", "breath"),
     ("arpeggio", "arpeggio"),
 ];
 const IGNORED_DECORATIONS: &[&str] = &[
-    "upbow", "downbow", "open", "thumb", "snap", "slide", "plus", "+", "trill(", "trill)",
-    "shortphrase", "mediumphrase", "longphrase", "editorial", "courtesy", "dot",
-    "invisible", "xstem", "beambr1", "beambr2", "beamon", "8va(", "8va)", "8vb(", "8vb)",
+    "upbow",
+    "downbow",
+    "open",
+    "thumb",
+    "snap",
+    "slide",
+    "plus",
+    "+",
+    "trill(",
+    "trill)",
+    "shortphrase",
+    "mediumphrase",
+    "longphrase",
+    "editorial",
+    "courtesy",
+    "dot",
+    "invisible",
+    "xstem",
+    "beambr1",
+    "beambr2",
+    "beamon",
+    "8va(",
+    "8va)",
+    "8vb(",
+    "8vb)",
 ];
 const NAVIGATION_DECORATIONS: &[(&str, &str)] = &[
-    ("segno", "segno"), ("coda", "coda"), ("D.S.", "D.S."), ("D.C.", "D.C."), ("dacapo", "D.C."),
-    ("dacoda", "Da Coda"), ("fine", "Fine"),
+    ("segno", "segno"),
+    ("coda", "coda"),
+    ("D.S.", "D.S."),
+    ("D.C.", "D.C."),
+    ("dacapo", "D.C."),
+    ("dacoda", "Da Coda"),
+    ("fine", "Fine"),
 ];
 const BODY_FIELDS: &str = "IKLMmNPQRrsTUVWw";
 
 fn lookup<'a>(table: &'a [(&str, &str)], key: &str) -> Option<&'a str> {
-    table.iter().find(|(name, _)| *name == key).map(|(_, value)| *value)
+    table
+        .iter()
+        .find(|(name, _)| *name == key)
+        .map(|(_, value)| *value)
 }
 
 fn mode_offset(mode: &str) -> Option<i32> {
-    MODE_OFFSETS.iter().find(|(name, _)| !name.is_empty() && *name == mode).map(|(_, offset)| *offset)
+    MODE_OFFSETS
+        .iter()
+        .find(|(name, _)| !name.is_empty() && *name == mode)
+        .map(|(_, offset)| *offset)
 }
 
 fn digits_at(chars: &[char], start: usize) -> usize {
@@ -100,7 +164,12 @@ struct NoteToken {
 }
 
 /// Match `(accidental)?letter[',]*` plus an optional length (and tie) at `start`.
-fn note_token_at(chars: &[char], start: usize, with_length: bool, with_tie: bool) -> Option<NoteToken> {
+fn note_token_at(
+    chars: &[char],
+    start: usize,
+    with_length: bool,
+    with_tie: bool,
+) -> Option<NoteToken> {
     let (accidental, accidental_length) = accidental_at(chars, start);
     let letter_at = start + accidental_length;
     let letter = *chars.get(letter_at)?;
@@ -123,7 +192,14 @@ fn note_token_at(chars: &[char], start: usize, with_length: bool, with_tie: bool
         tie = true;
         end += 1;
     }
-    Some(NoteToken { accidental, letter, octave_marks, length_text, tie, end })
+    Some(NoteToken {
+        accidental,
+        letter,
+        octave_marks,
+        length_text,
+        tie,
+        end,
+    })
 }
 
 /// All note tokens in a text, skipping anything else (like a regex findall).
@@ -142,9 +218,9 @@ fn find_note_tokens(chars: &[char], with_length: bool) -> Vec<NoteToken> {
     tokens
 }
 
-pub fn parse_length(text: &str) -> Frac {
+pub fn parse_length(text: &str) -> ImportResult<Frac> {
     if text.is_empty() {
-        return Frac::ONE;
+        return Ok(Frac::ONE);
     }
     let chars: Vec<char> = text.chars().collect();
     let first = digits_at(&chars, 0);
@@ -153,22 +229,43 @@ pub fn parse_length(text: &str) -> Frac {
         slashes_end += 1;
     }
     let last = digits_at(&chars, slashes_end);
-    if last != chars.len() {
-        return Frac::ONE;
-    }
-    let numerator: i64 = if first > 0 { text[..first].parse().unwrap_or(1) } else { 1 };
-    let slashes = (slashes_end - first) as u32;
-    let denominator: i64 = if last > slashes_end {
-        text[slashes_end..].parse().unwrap_or(1)
-    } else {
-        2_i64.pow(slashes.min(30))
+    let invalid = || {
+        format!(
+            "invalid ABC duration {text:?}; use positive whole numbers and a nonzero denominator"
+        )
     };
-    Frac::new(numerator, denominator)
+    if last != chars.len() {
+        return Err(invalid());
+    }
+    let numerator = if first > 0 {
+        text[..first].parse::<i64>().map_err(|_| invalid())?
+    } else {
+        1
+    };
+    let slashes = slashes_end - first;
+    let denominator = if last > slashes_end {
+        text[slashes_end..].parse::<i64>().map_err(|_| invalid())?
+    } else {
+        1_i64
+            .checked_shl(slashes as u32)
+            .filter(|value| *value > 0)
+            .ok_or_else(invalid)?
+    };
+    if numerator <= 0 || denominator <= 0 {
+        return Err(invalid());
+    }
+    Ok(Frac::new(numerator, denominator))
 }
 
 fn clef_from_token(token: &str) -> Option<String> {
-    let value = token.strip_prefix("clef=").unwrap_or(token).to_ascii_lowercase();
-    let value = if let Some(stripped) = value.strip_suffix("-8").or_else(|| value.strip_suffix("+8")) {
+    let value = token
+        .strip_prefix("clef=")
+        .unwrap_or(token)
+        .to_ascii_lowercase();
+    let value = if let Some(stripped) = value
+        .strip_suffix("-8")
+        .or_else(|| value.strip_suffix("+8"))
+    {
         stripped.to_string()
     } else if value.ends_with(|c: char| c.is_ascii_digit()) {
         value[..value.len() - 1].to_string()
@@ -197,7 +294,12 @@ fn split_quoted(value: &str) -> (Vec<String>, String) {
 pub fn parse_tempo(value: &str, unit: Frac) -> Option<Tempo> {
     let mut tempo = Tempo::default();
     let (words, rest) = split_quoted(value);
-    let text = words.iter().map(|word| word.trim()).filter(|word| !word.is_empty()).collect::<Vec<_>>().join(" ");
+    let text = words
+        .iter()
+        .map(|word| word.trim())
+        .filter(|word| !word.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
     if !text.is_empty() {
         tempo.text = Some(text);
     }
@@ -221,11 +323,19 @@ pub fn parse_tempo(value: &str, unit: Frac) -> Option<Tempo> {
                 matched = true;
                 let beat = Frac::new(
                     rest[..numerator_end].parse().unwrap_or(1),
-                    chars[numerator_end + 1..denominator_end].iter().collect::<String>().parse().unwrap_or(4),
+                    chars[numerator_end + 1..denominator_end]
+                        .iter()
+                        .collect::<String>()
+                        .parse()
+                        .unwrap_or(4),
                 );
                 if let Some(name) = tempo_beat(beat) {
                     tempo.beat = Some(name);
-                    tempo.bpm = chars[position..bpm_end].iter().collect::<String>().parse().ok();
+                    tempo.bpm = chars[position..bpm_end]
+                        .iter()
+                        .collect::<String>()
+                        .parse()
+                        .ok();
                 }
             }
         }
@@ -347,7 +457,11 @@ struct Voice {
 }
 
 fn stopped(ending: Option<Ending>, label: &str) -> Option<Ending> {
-    let mut ending = ending.unwrap_or(Ending { label: label.to_string(), start: false, stop: false });
+    let mut ending = ending.unwrap_or(Ending {
+        label: label.to_string(),
+        start: false,
+        stop: false,
+    });
     ending.stop = true;
     Some(ending)
 }
@@ -388,7 +502,11 @@ impl<'s> AbcReader<'s> {
         }
         match (&ctx.meter, ctx.free_meter) {
             (Some(meter), false) => {
-                if meter_length(meter) < Frac::new(3, 4) { Frac::new(1, 16) } else { Frac::new(1, 8) }
+                if meter_length(meter) < Frac::new(3, 4) {
+                    Frac::new(1, 16)
+                } else {
+                    Frac::new(1, 8)
+                }
             }
             _ => Frac::new(1, 8),
         }
@@ -411,7 +529,11 @@ impl<'s> AbcReader<'s> {
         if let Some(index) = self.voice {
             return index;
         }
-        let index = if self.voices.is_empty() { self.get_voice("1") } else { 0 };
+        let index = if self.voices.is_empty() {
+            self.get_voice("1")
+        } else {
+            0
+        };
         self.voice = Some(index);
         index
     }
@@ -463,36 +585,36 @@ impl<'s> AbcReader<'s> {
 
     // -- fields ----------------------------------------------------------
 
-    fn field(&mut self, letter: char, value: &str) {
+    fn field(&mut self, letter: char, value: &str) -> ImportResult<()> {
         let value = value.trim();
         match letter {
-            'T' if self.header && self.score.title.is_none() => self.score.title = Some(value.to_string()),
+            'T' if self.header && self.score.title.is_none() => {
+                self.score.title = Some(value.to_string())
+            }
             'C' if self.header => {
                 self.score.composer = Some(match &self.score.composer {
                     Some(existing) => format!("{existing}, {value}"),
                     None => value.to_string(),
                 });
             }
-            'M' => self.set_meter(value),
+            'M' => self.set_meter(value)?,
             'L' => {
-                let chars: Vec<char> = value.chars().collect();
-                let numerator_end = digits_at(&chars, 0);
-                let mut position = numerator_end;
-                while chars.get(position).is_some_and(|c| c.is_whitespace()) {
-                    position += 1;
+                let compact: String = value.chars().filter(|c| !c.is_whitespace()).collect();
+                let Some((numerator, denominator)) = compact.split_once('/') else {
+                    return Err(format!(
+                        "invalid ABC L: field {value:?}; use a positive fraction such as 1/8"
+                    ));
+                };
+                if numerator.is_empty()
+                    || denominator.is_empty()
+                    || !numerator.chars().all(|c| c.is_ascii_digit())
+                    || !denominator.chars().all(|c| c.is_ascii_digit())
+                {
+                    return Err(format!(
+                        "invalid ABC L: field {value:?}; use a positive fraction such as 1/8"
+                    ));
                 }
-                if numerator_end > 0 && chars.get(position) == Some(&'/') {
-                    position += 1;
-                    while chars.get(position).is_some_and(|c| c.is_whitespace()) {
-                        position += 1;
-                    }
-                    let denominator_end = digits_at(&chars, position);
-                    if denominator_end > position {
-                        let numerator: i64 = value[..numerator_end].parse().unwrap_or(1);
-                        let denominator: i64 = chars[position..denominator_end].iter().collect::<String>().parse().unwrap_or(8);
-                        self.ctx().unit = Some(Frac::new(numerator, denominator));
-                    }
-                }
+                self.ctx().unit = Some(parse_length(&compact)?);
             }
             'Q' => {
                 let unit = self.unit_length();
@@ -500,7 +622,10 @@ impl<'s> AbcReader<'s> {
                     if self.header {
                         self.score.tempo = Some(tempo);
                     } else {
-                        self.change(Changes { tempo: Some(tempo), ..Changes::default() });
+                        self.change(Changes {
+                            tempo: Some(tempo),
+                            ..Changes::default()
+                        });
                     }
                 }
             }
@@ -523,12 +648,15 @@ impl<'s> AbcReader<'s> {
                     voice.pending.rehearsal = Some(value.to_string());
                 }
             }
-            'I' if value.starts_with("score") || value.starts_with("staves") => self.directive(&format!("%%{value}")),
+            'I' if value.starts_with("score") || value.starts_with("staves") => {
+                self.directive(&format!("%%{value}"))
+            }
             _ => {}
         }
+        Ok(())
     }
 
-    fn set_meter(&mut self, value: &str) {
+    fn set_meter(&mut self, value: &str) -> ImportResult<()> {
         let value = value.trim();
         let meter = if value == "C" {
             "4/4".to_string()
@@ -537,14 +665,18 @@ impl<'s> AbcReader<'s> {
         } else if value.eq_ignore_ascii_case("none") || value.is_empty() {
             self.ctx().free_meter = true;
             if !self.header {
-                self.score.warn("free meter sections are barred against the previous meter");
+                self.score
+                    .warn("free meter sections are barred against the previous meter");
             }
-            return;
+            return Ok(());
         } else {
             let chars: Vec<char> = value.chars().collect();
             let mut position = usize::from(chars.first() == Some(&'('));
             let start = position;
-            while chars.get(position).is_some_and(|c| c.is_ascii_digit() || *c == '+') {
+            while chars
+                .get(position)
+                .is_some_and(|c| c.is_ascii_digit() || *c == '+')
+            {
                 position += 1;
             }
             let numerator_text: String = chars[start..position].iter().collect();
@@ -562,16 +694,37 @@ impl<'s> AbcReader<'s> {
                 }
                 let denominator_end = digits_at(&chars, position);
                 if denominator_end > position {
-                    let numerator: i64 = numerator_text.split('+').filter_map(|part| part.parse::<i64>().ok()).sum();
+                    let numerator = numerator_text
+                        .split('+')
+                        .try_fold(0_i64, |total, part| {
+                            let beat = part.parse::<i64>().ok()?;
+                            if beat <= 0 {
+                                return None;
+                            }
+                            total.checked_add(beat)
+                        })
+                        .ok_or_else(|| {
+                            format!("invalid ABC M: field {value:?}; use positive meter values")
+                        })?;
                     let denominator: String = chars[position..denominator_end].iter().collect();
+                    if denominator
+                        .parse::<i64>()
+                        .ok()
+                        .filter(|value| *value > 0)
+                        .is_none()
+                        || denominator_end != chars.len()
+                    {
+                        return Err(format!("invalid ABC M: field {value:?}; use a positive numerator and nonzero denominator"));
+                    }
                     parsed = Some(format!("{numerator}/{denominator}"));
                 }
             }
             match parsed {
                 Some(meter) => meter,
                 None => {
-                    self.score.warn(format!("meter '{value}' is not supported"));
-                    return;
+                    return Err(format!(
+                        "invalid ABC M: field {value:?}; use a meter such as 4/4"
+                    ));
                 }
             }
         };
@@ -580,8 +733,12 @@ impl<'s> AbcReader<'s> {
         if self.header {
             self.score.time = meter;
         } else {
-            self.change(Changes { time: Some(meter), ..Changes::default() });
+            self.change(Changes {
+                time: Some(meter),
+                ..Changes::default()
+            });
         }
+        Ok(())
     }
 
     fn set_key(&mut self, value: &str) {
@@ -603,21 +760,47 @@ impl<'s> AbcReader<'s> {
                 Some('b') => (-7, remainder[1..].to_string()),
                 _ => (0, remainder.clone()),
             };
-            let mut fifths = TONIC_FIFTHS.iter().find(|(letter, _)| *letter == tonic).map(|(_, value)| *value).unwrap_or(0) + accidental;
-            if mode.is_empty() && tokens.len() > 1 && tokens[1].chars().all(|c| c.is_ascii_alphabetic()) {
-                let candidate: String = tokens[1].chars().take(3).collect::<String>().to_ascii_lowercase();
+            let mut fifths = TONIC_FIFTHS
+                .iter()
+                .find(|(letter, _)| *letter == tonic)
+                .map(|(_, value)| *value)
+                .unwrap_or(0)
+                + accidental;
+            if mode.is_empty()
+                && tokens.len() > 1
+                && tokens[1].chars().all(|c| c.is_ascii_alphabetic())
+            {
+                let candidate: String = tokens[1]
+                    .chars()
+                    .take(3)
+                    .collect::<String>()
+                    .to_ascii_lowercase();
                 if mode_offset(&candidate).is_some() {
                     mode = tokens[1].to_string();
                     tokens.remove(0);
                 }
             }
-            let mut mode_key = if mode.is_empty() { "maj".to_string() } else { mode.chars().take(3).collect::<String>().to_ascii_lowercase() };
+            let mut mode_key = if mode.is_empty() {
+                "maj".to_string()
+            } else {
+                mode.chars()
+                    .take(3)
+                    .collect::<String>()
+                    .to_ascii_lowercase()
+            };
             if mode_offset(&mode_key).is_none() {
-                mode_key = if mode.eq_ignore_ascii_case("m") { "m".into() } else { "maj".into() };
+                mode_key = if mode.eq_ignore_ascii_case("m") {
+                    "m".into()
+                } else {
+                    "maj".into()
+                };
             }
             fifths += mode_offset(&mode_key).unwrap_or(0);
             if fifths.abs() > 7 {
-                self.score.warn(format!("key {} needs more than seven accidentals; its enharmonic key is used", tokens[0]));
+                self.score.warn(format!(
+                    "key {} needs more than seven accidentals; its enharmonic key is used",
+                    tokens[0]
+                ));
                 fifths = if fifths > 0 { fifths - 12 } else { fifths + 12 };
             }
             let ctx = self.ctx();
@@ -651,7 +834,8 @@ impl<'s> AbcReader<'s> {
             }
         }
         if !extra.is_empty() {
-            self.score.warn("explicit key-signature accidentals are written as accidentals on the notes");
+            self.score
+                .warn("explicit key-signature accidentals are written as accidentals on the notes");
         }
         self.ctx().key_extra = extra;
         if let Some(clef) = clef {
@@ -661,12 +845,18 @@ impl<'s> AbcReader<'s> {
                     voice.clef = clef.clone();
                 }
             } else {
-                self.change(Changes { clef: Some(clef), ..Changes::default() });
+                self.change(Changes {
+                    clef: Some(clef),
+                    ..Changes::default()
+                });
             }
         }
         if !self.header {
             let ctx = self.ctx().clone();
-            self.change(Changes { key: Some(key_name(ctx.key_fifths, ctx.key_minor)), ..Changes::default() });
+            self.change(Changes {
+                key: Some(key_name(ctx.key_fifths, ctx.key_minor)),
+                ..Changes::default()
+            });
         }
     }
 
@@ -685,7 +875,11 @@ impl<'s> AbcReader<'s> {
         let mut rest = options;
         while let Some(equals) = rest.find('=') {
             let before = &rest[..equals];
-            let name_start = before.trim_end().rfind(|c: char| !(c.is_alphanumeric() || c == '_')).map(|i| i + 1).unwrap_or(0);
+            let name_start = before
+                .trim_end()
+                .rfind(|c: char| !(c.is_alphanumeric() || c == '_'))
+                .map(|i| i + 1)
+                .unwrap_or(0);
             let name = before.trim_end()[name_start..].to_string();
             let after = rest[equals + 1..].trim_start();
             if !name.is_empty() && after.starts_with('"') {
@@ -695,7 +889,9 @@ impl<'s> AbcReader<'s> {
                     let voice = &mut self.voices[index];
                     match name.as_str() {
                         "name" | "nm" => voice.name = (!text.is_empty()).then_some(text),
-                        "subname" | "sname" | "snm" => voice.short_name = (!text.is_empty()).then_some(text),
+                        "subname" | "sname" | "snm" => {
+                            voice.short_name = (!text.is_empty()).then_some(text)
+                        }
                         _ => {}
                     }
                     rest = &after[close + 2..];
@@ -713,7 +909,10 @@ impl<'s> AbcReader<'s> {
                     voice.clef = found;
                 } else {
                     self.voice = Some(index);
-                    self.change(Changes { clef: Some(found), ..Changes::default() });
+                    self.change(Changes {
+                        clef: Some(found),
+                        ..Changes::default()
+                    });
                 }
             }
         }
@@ -723,20 +922,30 @@ impl<'s> AbcReader<'s> {
     }
 
     fn change(&mut self, changes: Changes) {
-        let moves_layout = changes.key.is_some() || changes.time.is_some() || changes.clef.is_some();
+        let moves_layout =
+            changes.key.is_some() || changes.time.is_some() || changes.clef.is_some();
         let voice = self.voice();
         if voice.bar.empty() {
             voice.bar.changes.update(changes);
         } else {
             voice.pending.changes.update(changes);
             if moves_layout {
-                self.warn_once("mid-bar", "mid-bar key, meter, or clef changes were moved to the following barline".into());
+                self.warn_once(
+                    "mid-bar",
+                    "mid-bar key, meter, or clef changes were moved to the following barline"
+                        .into(),
+                );
             }
         }
     }
 
     fn directive(&mut self, line: &str) {
-        let Some(rest) = line.strip_prefix("%%score").or_else(|| line.strip_prefix("%%staves")) else { return };
+        let Some(rest) = line
+            .strip_prefix("%%score")
+            .or_else(|| line.strip_prefix("%%staves"))
+        else {
+            return;
+        };
         if !rest.starts_with(char::is_whitespace) {
             return;
         }
@@ -745,7 +954,12 @@ impl<'s> AbcReader<'s> {
         while let Some(open) = remaining.find('(') {
             let after = &remaining[open + 1..];
             let Some(close) = after.find(')') else { break };
-            groups.push(after[..close].split_whitespace().map(str::to_string).collect());
+            groups.push(
+                after[..close]
+                    .split_whitespace()
+                    .map(str::to_string)
+                    .collect(),
+            );
             remaining = &after[close + 1..];
         }
         self.staff_groups = groups;
@@ -775,7 +989,9 @@ impl<'s> AbcReader<'s> {
                 '%' => break,
                 '\\' if chars[position..].iter().collect::<String>().trim() == "\\" => break,
                 '"' => {
-                    let Some(end) = chars[position + 1..].iter().position(|c| *c == '"') else { break };
+                    let Some(end) = chars[position + 1..].iter().position(|c| *c == '"') else {
+                        break;
+                    };
                     let text: String = chars[position + 1..position + 1 + end].iter().collect();
                     self.quoted(&text);
                     position += end + 2;
@@ -783,8 +999,12 @@ impl<'s> AbcReader<'s> {
                 '!' | '+' => {
                     let end = chars[position + 1..].iter().position(|c| *c == character);
                     match end {
-                        Some(end) if !(character == '!' && chars[position + 1..position + 1 + end].contains(&' ')) => {
-                            let name: String = chars[position + 1..position + 1 + end].iter().collect();
+                        Some(end)
+                            if !(character == '!'
+                                && chars[position + 1..position + 1 + end].contains(&' ')) =>
+                        {
+                            let name: String =
+                                chars[position + 1..position + 1 + end].iter().collect();
                             self.decoration(&name);
                             position += end + 2;
                         }
@@ -792,10 +1012,14 @@ impl<'s> AbcReader<'s> {
                         _ => position += 1,
                     }
                 }
-                '[' if next(position).is_some_and(|c| c.is_ascii_alphabetic()) && chars.get(position + 2) == Some(&':') => {
-                    let Some(end) = chars[position..].iter().position(|c| *c == ']') else { break };
+                '[' if next(position).is_some_and(|c| c.is_ascii_alphabetic())
+                    && chars.get(position + 2) == Some(&':') =>
+                {
+                    let Some(end) = chars[position..].iter().position(|c| *c == ']') else {
+                        break;
+                    };
                     let value: String = chars[position + 3..position + end].iter().collect();
-                    self.field(chars[position + 1], &value);
+                    self.field(chars[position + 1], &value)?;
                     position += end + 1;
                 }
                 '[' if next(position).is_some_and(|c| c.is_ascii_digit()) => {
@@ -804,7 +1028,9 @@ impl<'s> AbcReader<'s> {
                 '|' | ':' => position = self.barline(&chars, position),
                 '[' if next(position) == Some('|') => position = self.barline(&chars, position),
                 '.' if next(position) == Some('|') => position = self.barline(&chars, position),
-                '(' if next(position).is_some_and(|c| c.is_ascii_digit()) => position = self.tuplet(&chars, position + 1),
+                '(' if next(position).is_some_and(|c| c.is_ascii_digit()) => {
+                    position = self.tuplet(&chars, position + 1)?
+                }
                 '(' => {
                     self.voice().pending.slurs += 1;
                     position += 1;
@@ -818,7 +1044,9 @@ impl<'s> AbcReader<'s> {
                     position += 1;
                 }
                 '{' => {
-                    let Some(end) = chars[position..].iter().position(|c| *c == '}') else { break };
+                    let Some(end) = chars[position..].iter().position(|c| *c == '}') else {
+                        break;
+                    };
                     let inner: Vec<char> = chars[position + 1..position + end].to_vec();
                     self.grace(&inner);
                     position += end + 1;
@@ -882,14 +1110,29 @@ impl<'s> AbcReader<'s> {
     }
 
     fn quoted(&mut self, text: &str) {
-        let Some(first) = text.chars().next() else { return };
+        let Some(first) = text.chars().next() else {
+            return;
+        };
         let voice = self.voice();
         if matches!(first, '^' | '<' | '>' | '@') {
-            voice.pending.marks.push(format!("text={}", &text[first.len_utf8()..]));
+            voice
+                .pending
+                .marks
+                .push(format!("text={}", &text[first.len_utf8()..]));
         } else if first == '_' {
-            voice.pending.marks.push(format!("text-below={}", &text[1..]));
+            voice
+                .pending
+                .marks
+                .push(format!("text-below={}", &text[1..]));
         } else {
-            let symbol = text.split(';').next().unwrap_or("").split('\n').next().unwrap_or("").trim();
+            let symbol = text
+                .split(';')
+                .next()
+                .unwrap_or("")
+                .split('\n')
+                .next()
+                .unwrap_or("")
+                .trim();
             if !symbol.is_empty() {
                 voice.pending.chord = Some(symbol.to_string());
             }
@@ -905,7 +1148,11 @@ impl<'s> AbcReader<'s> {
             self.voice().pending.marks.push(format!("f={name}"));
         } else if matches!(name, "crescendo(" | "<(" | "diminuendo(" | ">(") {
             let hairpin = self.span('h');
-            let symbol = if name.starts_with('c') || name.starts_with('<') { '<' } else { '>' };
+            let symbol = if name.starts_with('c') || name.starts_with('<') {
+                '<'
+            } else {
+                '>'
+            };
             let voice = self.voice();
             voice.hairpins.push(hairpin.clone());
             voice.pending.marks.push(format!("{hairpin}{symbol}"));
@@ -935,7 +1182,10 @@ impl<'s> AbcReader<'s> {
                 self.voice().pending.marks.push(format!("text={mark}"));
             }
         } else if !IGNORED_DECORATIONS.contains(&name) {
-            self.warn_once(&format!("decoration {name}"), format!("decoration !{name}! is not supported and was ignored"));
+            self.warn_once(
+                &format!("decoration {name}"),
+                format!("decoration !{name}! is not supported and was ignored"),
+            );
         }
     }
 
@@ -948,12 +1198,21 @@ impl<'s> AbcReader<'s> {
 
     fn ending(&mut self, chars: &[char], position: usize) -> usize {
         let length = ending_numbers_at(chars, position);
-        let label = format!("{}.", chars[position..position + length].iter().collect::<String>());
+        let label = format!(
+            "{}.",
+            chars[position..position + length]
+                .iter()
+                .collect::<String>()
+        );
         let voice_index = self.current();
         self.close_ending(voice_index);
         let voice = &mut self.voices[voice_index];
         if voice.bar.empty() {
-            voice.bar.ending = Some(Ending { label: label.clone(), start: true, stop: false });
+            voice.bar.ending = Some(Ending {
+                label: label.clone(),
+                start: true,
+                stop: false,
+            });
             voice.ending_open = true;
             voice.ending_label = label;
         } else {
@@ -968,7 +1227,11 @@ impl<'s> AbcReader<'s> {
             return;
         }
         let label = voice.ending_label.clone();
-        let target = if !voice.bar.empty() || voice.bars.is_empty() { &mut voice.bar } else { voice.bars.last_mut().expect("a bar exists") };
+        let target = if !voice.bar.empty() || voice.bars.is_empty() {
+            &mut voice.bar
+        } else {
+            voice.bars.last_mut().expect("a bar exists")
+        };
         target.ending = stopped(target.ending.take(), &label);
         voice.ending_open = false;
     }
@@ -1010,7 +1273,12 @@ impl<'s> AbcReader<'s> {
         let numbers = ending_numbers_at(chars, end + bracket);
         let mut new_ending = None;
         if numbers > 0 && (bracket == 1 || text.ends_with('|')) {
-            new_ending = Some(format!("{}.", chars[end + bracket..end + bracket + numbers].iter().collect::<String>()));
+            new_ending = Some(format!(
+                "{}.",
+                chars[end + bracket..end + bracket + numbers]
+                    .iter()
+                    .collect::<String>()
+            ));
             end += bracket + numbers;
         }
         let index = self.current();
@@ -1042,7 +1310,11 @@ impl<'s> AbcReader<'s> {
         if let Some(label) = new_ending {
             self.close_ending(index);
             let voice = &mut self.voices[index];
-            voice.bar.ending = Some(Ending { label: label.clone(), start: true, stop: false });
+            voice.bar.ending = Some(Ending {
+                label: label.clone(),
+                start: true,
+                stop: false,
+            });
             voice.ending_open = true;
             voice.ending_label = label;
         }
@@ -1064,28 +1336,47 @@ impl<'s> AbcReader<'s> {
             voice.bar.rehearsal = Some(rehearsal);
         }
         if let Some(label) = voice.pending_ending.take() {
-            voice.bar.ending = Some(Ending { label: label.clone(), start: true, stop: false });
+            voice.bar.ending = Some(Ending {
+                label: label.clone(),
+                start: true,
+                stop: false,
+            });
             voice.ending_open = true;
             voice.ending_label = label;
         }
     }
 
-    fn tuplet(&mut self, chars: &[char], position: usize) -> usize {
+    fn tuplet(&mut self, chars: &[char], position: usize) -> ImportResult<usize> {
         let p_end = digits_at(chars, position);
-        let p: i64 = chars[position..p_end].iter().collect::<String>().parse().unwrap_or(3);
+        let invalid = || "invalid ABC tuplet; use positive counts such as (3 or (3:2:3".to_string();
+        let p: i64 = chars[position..p_end]
+            .iter()
+            .collect::<String>()
+            .parse()
+            .map_err(|_| invalid())?;
         let mut end = p_end;
         let mut q = None;
         let mut r = p;
         if chars.get(end) == Some(&':') {
             let q_end = digits_at(chars, end + 1);
             if q_end > end + 1 {
-                q = chars[end + 1..q_end].iter().collect::<String>().parse().ok();
+                q = Some(
+                    chars[end + 1..q_end]
+                        .iter()
+                        .collect::<String>()
+                        .parse::<i64>()
+                        .map_err(|_| invalid())?,
+                );
             }
             end = q_end;
             if chars.get(end) == Some(&':') {
                 let r_end = digits_at(chars, end + 1);
                 if r_end > end + 1 {
-                    r = chars[end + 1..r_end].iter().collect::<String>().parse().unwrap_or(p);
+                    r = chars[end + 1..r_end]
+                        .iter()
+                        .collect::<String>()
+                        .parse()
+                        .map_err(|_| invalid())?;
                 }
                 end = r_end;
             }
@@ -1105,15 +1396,36 @@ impl<'s> AbcReader<'s> {
                 4 => 3,
                 6 => 2,
                 8 => 3,
-                _ => if compound { 3 } else { 2 },
+                _ => {
+                    if compound {
+                        3
+                    } else {
+                        2
+                    }
+                }
             }
         });
+        if p < 2
+            || q <= 0
+            || r <= 0
+            || p > u32::MAX as i64
+            || q > u32::MAX as i64
+            || r > u32::MAX as i64
+        {
+            return Err(invalid());
+        }
         if p > 1 && q > 0 {
             self.tuplets += 1;
-            let tuplet = Tuplet { id: self.tuplets, actual: p as u32, normal: q as u32, bracket: None, number: None };
+            let tuplet = Tuplet {
+                id: self.tuplets,
+                actual: p as u32,
+                normal: q as u32,
+                bracket: None,
+                number: None,
+            };
             self.voice().tuplet = Some((tuplet, r, q, p));
         }
-        end
+        Ok(end)
     }
 
     fn broken(&mut self, character: char, count: u32) {
@@ -1125,7 +1437,11 @@ impl<'s> AbcReader<'s> {
         }
         let shorter = Frac::new(1, 1 << count.min(30));
         let longer = Frac::int(2) - shorter;
-        let (first, second) = if character == '>' { (longer, shorter) } else { (shorter, longer) };
+        let (first, second) = if character == '>' {
+            (longer, shorter)
+        } else {
+            (shorter, longer)
+        };
         let event = &mut voice.events[last];
         let new_duration = event.duration * first;
         match split_written(new_duration) {
@@ -1135,7 +1451,9 @@ impl<'s> AbcReader<'s> {
                 event.base = Some(base);
                 event.dots = dots;
             }
-            None => self.score.warn("broken rhythms that produce unwritable durations were ignored"),
+            None => self
+                .score
+                .warn("broken rhythms that produce unwritable durations were ignored"),
         }
         self.voices[voice_index].broken = Some(second);
     }
@@ -1143,7 +1461,11 @@ impl<'s> AbcReader<'s> {
     fn grace(&mut self, chars: &[char]) {
         let slash = chars.first() == Some(&'/');
         let tokens = find_note_tokens(chars, false);
-        let base = if tokens.len() == 1 { Frac::new(1, 8) } else { Frac::new(1, 16) };
+        let base = if tokens.len() == 1 {
+            Frac::new(1, 8)
+        } else {
+            Frac::new(1, 16)
+        };
         let mut graces = Vec::new();
         for token in tokens {
             let pitch = self.pitch(token.accidental, token.letter, &token.octave_marks);
@@ -1153,14 +1475,16 @@ impl<'s> AbcReader<'s> {
             graces.push(event);
         }
         if !graces.is_empty() {
-            self.voice().pending.graces = Some((graces, if slash { "acciaccatura" } else { "grace" }));
+            self.voice().pending.graces =
+                Some((graces, if slash { "acciaccatura" } else { "grace" }));
         }
     }
 
     fn pitch(&mut self, accidental: &str, letter: char, octave_marks: &str) -> Pitch {
         let step = letter.to_ascii_uppercase();
         let mut octave = if letter.is_ascii_uppercase() { 4 } else { 5 };
-        octave += octave_marks.matches('\'').count() as i32 - octave_marks.matches(',').count() as i32;
+        octave +=
+            octave_marks.matches('\'').count() as i32 - octave_marks.matches(',').count() as i32;
         let key_alter = self.key_alter(step);
         let voice = self.voice();
         let alter = if !accidental.is_empty() {
@@ -1179,13 +1503,23 @@ impl<'s> AbcReader<'s> {
             .last_note
             .map(|index| &voice.events[index])
             .filter(|event| event.tie)
-            .and_then(|event| event.pitches.iter().find(|pitch| pitch.step == step && pitch.octave == octave))
+            .and_then(|event| {
+                event
+                    .pitches
+                    .iter()
+                    .find(|pitch| pitch.step == step && pitch.octave == octave)
+            })
         {
             tied.alter
         } else {
             key_alter
         };
-        Pitch { step, alter, octave, staff: None }
+        Pitch {
+            step,
+            alter,
+            octave,
+            staff: None,
+        }
     }
 
     fn note(&mut self, chars: &[char], position: usize) -> ImportResult<usize> {
@@ -1197,7 +1531,11 @@ impl<'s> AbcReader<'s> {
         let multiplier;
         let mut position = position;
         if character == '[' {
-            let Some(end) = chars[position..].iter().position(|c| *c == ']').map(|offset| position + offset) else {
+            let Some(end) = chars[position..]
+                .iter()
+                .position(|c| *c == ']')
+                .map(|offset| position + offset)
+            else {
                 return Ok(chars.len());
             };
             let members = find_note_tokens(&chars[position + 1..end], true);
@@ -1209,13 +1547,13 @@ impl<'s> AbcReader<'s> {
                     pitches.push(pitch);
                 }
                 if inner_length.is_none() {
-                    inner_length = Some(parse_length(&member.length_text));
+                    inner_length = Some(parse_length(&member.length_text)?);
                 }
             }
             position = end + 1;
             let length = length_text_at(chars, position);
             let text: String = chars[position..position + length].iter().collect();
-            multiplier = inner_length.unwrap_or(Frac::ONE) * parse_length(&text);
+            multiplier = inner_length.unwrap_or(Frac::ONE) * parse_length(&text)?;
             position += length;
             if pitches.is_empty() {
                 return Ok(position);
@@ -1225,18 +1563,26 @@ impl<'s> AbcReader<'s> {
             let text: String = chars[position + 1..position + 1 + length].iter().collect();
             position += 1 + length;
             if matches!(character, 'Z' | 'X') {
-                multi_bars = if !text.is_empty() && text.chars().all(|c| c.is_ascii_digit()) { text.parse().unwrap_or(1) } else { 1 };
+                multi_bars = if !text.is_empty() && text.chars().all(|c| c.is_ascii_digit()) {
+                    text.parse().unwrap_or(1)
+                } else {
+                    1
+                };
                 multiplier = Frac::ONE;
             } else {
-                multiplier = parse_length(&text);
+                multiplier = parse_length(&text)?;
             }
-            kind = if matches!(character, 'z' | 'Z') { Kind::Rest } else { Kind::Spacer };
+            kind = if matches!(character, 'z' | 'Z') {
+                Kind::Rest
+            } else {
+                Kind::Spacer
+            };
         } else {
             let Some(token) = note_token_at(chars, position, true, false) else {
                 return Ok(position + 1);
             };
             pitches.push(self.pitch(token.accidental, token.letter, &token.octave_marks));
-            multiplier = parse_length(&token.length_text);
+            multiplier = parse_length(&token.length_text)?;
             position = token.end;
         }
 
@@ -1272,6 +1618,11 @@ impl<'s> AbcReader<'s> {
         tuplet: Option<Tuplet>,
         tied: bool,
     ) -> ImportResult<()> {
+        if !written.is_positive() || !sounding.is_positive() {
+            return Err(
+                "ABC note durations must be positive; check the L: field and note lengths".into(),
+            );
+        }
         let pieces = match split_written(written) {
             Some(piece) => vec![piece],
             None if written.is_binary() => binary_pieces(written)?,
@@ -1285,7 +1636,11 @@ impl<'s> AbcReader<'s> {
                 slurs.push(());
             }
         }
-        let slur_names: Vec<String> = if kind == Kind::Note { slurs.iter().map(|_| self.span('s')).collect() } else { Vec::new() };
+        let slur_names: Vec<String> = if kind == Kind::Note {
+            slurs.iter().map(|_| self.span('s')).collect()
+        } else {
+            Vec::new()
+        };
         let voice = self.voice();
         let pending = std::mem::take(&mut voice.pending);
         voice.pending.changes = pending.changes.clone();
@@ -1322,7 +1677,9 @@ impl<'s> AbcReader<'s> {
                 voice.events[first].graces = graces;
                 voice.events[first].grace_kind = grace_kind;
             }
-            let continuation = voice.last_note.is_some_and(|previous| voice.events[previous].tie);
+            let continuation = voice
+                .last_note
+                .is_some_and(|previous| voice.events[previous].tie);
             if let Some(previous) = voice.last_note {
                 if voice.events[first].flagged() {
                     let previous_flagged = voice.events[previous].flagged();
@@ -1342,7 +1699,10 @@ impl<'s> AbcReader<'s> {
         } else {
             if kind == Kind::Rest {
                 for mark in &pending.marks {
-                    if ["dyn=", "text=", "text-below=", "h", "p"].iter().any(|prefix| mark.starts_with(prefix)) {
+                    if ["dyn=", "text=", "text-below=", "h", "p"]
+                        .iter()
+                        .any(|prefix| mark.starts_with(prefix))
+                    {
                         voice.events[first].add(mark.clone());
                     }
                 }
@@ -1374,7 +1734,14 @@ impl<'s> AbcReader<'s> {
                 self.close_bar(index);
             }
             let voice = &mut self.voices[index];
-            let event = Event::new(if kind == Kind::Rest { Kind::MeasureRest } else { Kind::Spacer }, length);
+            let event = Event::new(
+                if kind == Kind::Rest {
+                    Kind::MeasureRest
+                } else {
+                    Kind::Spacer
+                },
+                length,
+            );
             voice.events.push(event);
             let event_index = voice.events.len() - 1;
             voice.bar.slots[0].push(event_index);
@@ -1400,13 +1767,21 @@ impl<'s> AbcReader<'s> {
         let mut previous: Option<usize> = None;
         let mut syllable = String::new();
         let chars: Vec<char> = text.chars().collect();
-        let flush = |hyphen: bool, index: &mut usize, previous: &mut Option<usize>, syllable: &mut String, voice: &mut Voice| {
+        let flush = |hyphen: bool,
+                     index: &mut usize,
+                     previous: &mut Option<usize>,
+                     syllable: &mut String,
+                     voice: &mut Voice| {
             if !syllable.is_empty() {
                 if *index < notes.len() {
                     let event = notes[*index].1;
                     voice.events[event].lyrics.insert(
                         verse,
-                        Lyric { text: syllable.replace('~', " "), hyphen_after: hyphen, extend: false },
+                        Lyric {
+                            text: syllable.replace('~', " "),
+                            hyphen_after: hyphen,
+                            extend: false,
+                        },
                     );
                     *previous = Some(event);
                 }
@@ -1447,7 +1822,11 @@ impl<'s> AbcReader<'s> {
                 '|' => {
                     flush(false, &mut index, &mut previous, &mut syllable, voice);
                     if index < notes.len() {
-                        let bar = if index > 0 { notes[index - 1].0 as i64 } else { notes[0].0 as i64 - 1 };
+                        let bar = if index > 0 {
+                            notes[index - 1].0 as i64
+                        } else {
+                            notes[0].0 as i64 - 1
+                        };
                         while index < notes.len() && notes[index].0 as i64 <= bar {
                             index += 1;
                         }
@@ -1503,12 +1882,16 @@ fn select_tune(text: &str, tune: Option<&str>) -> ImportResult<String> {
 }
 
 pub fn read(bytes: &[u8], tune: Option<&str>) -> ImportResult<Score> {
-    let text = String::from_utf8_lossy(bytes.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(bytes)).into_owned();
-    let source = select_tune(&text, tune)?;
+    let text = std::str::from_utf8(bytes.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(bytes))
+        .map_err(|_| "the ABC file is not valid UTF-8".to_string())?;
+    let source = select_tune(text, tune)?;
     let mut score = Score::default();
     let mut reader = AbcReader {
         score: &mut score,
-        defaults: Context { meter: Some("4/4".into()), ..Context::default() },
+        defaults: Context {
+            meter: Some("4/4".into()),
+            ..Context::default()
+        },
         voices: Vec::new(),
         voice: None,
         default_clef: "treble".into(),
@@ -1539,7 +1922,7 @@ pub fn read(bytes: &[u8], tune: Option<&str>) -> ImportResult<Score> {
                 }
                 continue;
             }
-            reader.field(letter, value);
+            reader.field(letter, value)?;
             continue;
         }
         if reader.header {
@@ -1548,12 +1931,23 @@ pub fn read(bytes: &[u8], tune: Option<&str>) -> ImportResult<Score> {
         reader.music_line(line)?;
     }
     reader.finish();
-    let AbcReader { voices, staff_groups, .. } = reader;
+    let AbcReader {
+        voices,
+        staff_groups,
+        ..
+    } = reader;
     build_score(voices, staff_groups, score)
 }
 
-fn build_score(voices: Vec<Voice>, staff_groups: Vec<Vec<String>>, mut score: Score) -> ImportResult<Score> {
-    let voices: Vec<Voice> = voices.into_iter().filter(|voice| !voice.bars.is_empty()).collect();
+fn build_score(
+    voices: Vec<Voice>,
+    staff_groups: Vec<Vec<String>>,
+    mut score: Score,
+) -> ImportResult<Score> {
+    let voices: Vec<Voice> = voices
+        .into_iter()
+        .filter(|voice| !voice.bars.is_empty())
+        .collect();
     if voices.is_empty() {
         return Err("the tune contains no music".into());
     }
@@ -1564,13 +1958,24 @@ fn build_score(voices: Vec<Voice>, staff_groups: Vec<Vec<String>>, mut score: Sc
     let mut used: Set<String> = Set::new();
     for (index, voice) in voices.iter().enumerate() {
         let group = staff_groups.iter().find(|group| group.contains(&voice.id));
-        let owner = group.and_then(|group| group.first()).filter(|owner| **owner != voice.id);
+        let owner = group
+            .and_then(|group| group.first())
+            .filter(|owner| **owner != voice.id);
         if let Some(staff) = owner.and_then(|owner| staff_of.get(owner)).cloned() {
             staff_of.insert(voice.id.clone(), staff.clone());
-            staff_voices.iter_mut().find(|(id, _)| *id == staff).expect("staff exists").1.push(index);
+            staff_voices
+                .iter_mut()
+                .find(|(id, _)| *id == staff)
+                .expect("staff exists")
+                .1
+                .push(index);
             continue;
         }
-        let base = slug(voice.name.as_deref().unwrap_or(&if voices.len() > 1 { format!("voice {}", voice.id) } else { "melody".into() }));
+        let base = slug(voice.name.as_deref().unwrap_or(&if voices.len() > 1 {
+            format!("voice {}", voice.id)
+        } else {
+            "melody".into()
+        }));
         let mut staff_id = base.clone();
         let mut counter = 2;
         while used.contains(&staff_id) {
@@ -1588,11 +1993,20 @@ fn build_score(voices: Vec<Voice>, staff_groups: Vec<Vec<String>>, mut score: Sc
         });
     }
 
-    let measure_count = voices.iter().map(|voice| voice.bars.len()).max().unwrap_or(0);
+    let measure_count = voices
+        .iter()
+        .map(|voice| voice.bars.len())
+        .max()
+        .unwrap_or(0);
     for index in 0..measure_count {
-        let mut measure = Measure { number: (index + 1).to_string(), ..Measure::default() };
+        let mut measure = Measure {
+            number: (index + 1).to_string(),
+            ..Measure::default()
+        };
         for voice in &voices {
-            let Some(bar) = voice.bars.get(index) else { continue };
+            let Some(bar) = voice.bars.get(index) else {
+                continue;
+            };
             if measure.barline_right.is_none() {
                 measure.barline_right = bar.right.clone();
             }
@@ -1628,19 +2042,31 @@ fn build_score(voices: Vec<Voice>, staff_groups: Vec<Vec<String>>, mut score: Sc
             let mut slots: Vec<Vec<Event>> = Vec::new();
             for member in members {
                 let voice = &voices[*member];
-                let width = voice.bars.iter().map(|bar| bar.slots.len()).max().unwrap_or(1);
+                let width = voice
+                    .bars
+                    .iter()
+                    .map(|bar| bar.slots.len())
+                    .max()
+                    .unwrap_or(1);
                 for slot in 0..width {
                     let events = voice
                         .bars
                         .get(index)
                         .and_then(|bar| bar.slots.get(slot))
-                        .map(|indices| indices.iter().map(|event| voice.events[*event].clone()).collect())
+                        .map(|indices| {
+                            indices
+                                .iter()
+                                .map(|event| voice.events[*event].clone())
+                                .collect()
+                        })
                         .unwrap_or_default();
                     slots.push(events);
                 }
             }
             if slots.len() > 4 {
-                score.warn(format!("staff {staff_id} has more than four voices; extra voices were dropped"));
+                score.warn(format!(
+                    "staff {staff_id} has more than four voices; extra voices were dropped"
+                ));
                 slots.truncate(4);
             }
             measure.voices.insert(staff_id.clone(), slots);

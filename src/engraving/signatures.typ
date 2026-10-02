@@ -235,13 +235,15 @@
 #let _draw-prologue(clef, key, time, show-time, previous-key: none, bottom-y: 0, unit: 8pt, staff-x: 0, clef-x: 0.35, paint: black) = {
   draw-clef(clef, clef-x, _clef-origin-y(clef, bottom-y: bottom-y), unit: unit, paint: paint)
   _draw-key-change(clef, previous-key, key, clef-x + _clef-advance, bottom-y: bottom-y, unit: unit, paint: paint)
-  if show-time { draw-time-signature(
-    time,
-    _prologue-time-x(key, previous-key: previous-key, clef-x: clef-x),
-    bottom-y: bottom-y,
-    unit: unit,
-    paint: paint,
-  ) }
+  if show-time {
+    draw-time-signature(
+      time,
+      _prologue-time-x(key, previous-key: previous-key, clef-x: clef-x),
+      bottom-y: bottom-y,
+      unit: unit,
+      paint: paint,
+    )
+  }
 }
 
 // Mid-score key/time changes shown at the start of a measure.

@@ -752,12 +752,24 @@ impl ParsedEvent {
         matches!(self, Self::Rest(_) | Self::Spacer { .. })
     }
 
-    fn transpose(&mut self, transposition: Transposition) -> Result<(), String> {
+    fn transpose(
+        &mut self,
+        transposition: Transposition,
+        staves: &StaffContext,
+        display_staff: usize,
+    ) -> Result<(), String> {
         match self {
-            Self::Note(note) => note.pitch = note.pitch.transposed(transposition)?,
+            Self::Note(note) => {
+                if staves.clef_of(display_staff) != Clef::Percussion {
+                    note.pitch = note.pitch.transposed(transposition)?;
+                }
+            }
             Self::Chord { notes, .. } => {
                 for note in notes {
-                    note.pitch = note.pitch.transposed(transposition)?;
+                    if staves.clef_of(note.split_staff.unwrap_or(display_staff)) != Clef::Percussion
+                    {
+                        note.pitch = note.pitch.transposed(transposition)?;
+                    }
                 }
             }
             Self::Rest(_) | Self::Spacer { .. } => {}
@@ -3717,7 +3729,8 @@ pub fn layout_transposed_staff_sequence_native(
     let mut events = parsed.events;
     if let Some(transposition) = transposition {
         for item in &mut events {
-            item.event.transpose(transposition)?;
+            item.event
+                .transpose(transposition, staves, item.display_staff)?;
         }
     }
     let mut layouts = layout_events(events, staves)?;
@@ -5002,7 +5015,11 @@ mod tests {
         assert!(error.contains("not adjacent"), "{error}");
     }
 
-    fn transposed(input: &str, steps: i32, semitones: i32) -> Result<RelativeLayoutResponse, String> {
+    fn transposed(
+        input: &str,
+        steps: i32,
+        semitones: i32,
+    ) -> Result<RelativeLayoutResponse, String> {
         layout_transposed_staff_sequence_native(
             input,
             &StaffContext::single(Clef::Treble),
@@ -5259,9 +5276,15 @@ mod tests {
             staff_position("E2", Clef::Bass)
         );
         let layouts = layout_sequence_relative_native("e:q g", Clef::Treble8, None).unwrap();
-        assert_eq!(layouts.layouts[0].pitches[0].pitch, parse_pitch("E3").unwrap());
+        assert_eq!(
+            layouts.layouts[0].pitches[0].pitch,
+            parse_pitch("E3").unwrap()
+        );
         let layouts = layout_sequence_relative_native("e:q", Clef::Bass8, None).unwrap();
-        assert_eq!(layouts.layouts[0].pitches[0].pitch, parse_pitch("E2").unwrap());
+        assert_eq!(
+            layouts.layouts[0].pitches[0].pitch,
+            parse_pitch("E2").unwrap()
+        );
     }
 
     fn guitar_staves(home: &str) -> StaffContext {
@@ -5308,14 +5331,74 @@ mod tests {
         assert!(parse_note("E4:q[string=1 string=2]")
             .unwrap_err()
             .contains("more than one string"));
-        assert!(layout_sequence_native("(c3 e3 g3):q[string=5,4]", Clef::Tab)
-            .unwrap_err()
-            .contains("names 2 strings for 3 pitches"));
+        assert!(
+            layout_sequence_native("(c3 e3 g3):q[string=5,4]", Clef::Tab)
+                .unwrap_err()
+                .contains("names 2 strings for 3 pitches")
+        );
         assert!(layout_sequence_native("c3:q[string=5,4]", Clef::Tab)
             .unwrap_err()
             .contains("names 2 strings for 1 pitch;"));
         assert!(layout_sequence_native("r:q[string=2]", Clef::Tab)
             .unwrap_err()
             .contains("cannot be attached to a rest"));
+    }
+    #[test]
+    fn transposition_leaves_percussion_pitches_and_drum_maps_unchanged() {
+        let staves = StaffContext::new(
+            vec![
+                ("melody".into(), Clef::Treble),
+                ("drums".into(), Clef::Percussion),
+            ],
+            "melody",
+        )
+        .unwrap()
+        .with_heads(1, "g5=x")
+        .unwrap();
+        let response = layout_transposed_staff_sequence_native(
+            "C5:q @drums G5:q",
+            &staves,
+            Some("2/4"),
+            None,
+            None,
+            Some(Transposition {
+                steps: 1,
+                semitones: 2,
+            }),
+        )
+        .unwrap();
+        assert_eq!(written_pitches(&response), vec!["D5", "G5"]);
+        assert_eq!(response.layouts[1].pitches[0].head, HeadShape::X);
+        let split = layout_transposed_staff_sequence_native(
+            "(C5 @drums G4):h",
+            &staves,
+            Some("2/4"),
+            None,
+            None,
+            Some(Transposition {
+                steps: 1,
+                semitones: 2,
+            }),
+        )
+        .unwrap();
+        assert_eq!(written_pitches(&split), vec!["D5", "G4"]);
+    }
+
+    #[test]
+    fn transposition_includes_grace_notes_under_octave_clefs() {
+        let response = layout_transposed_staff_sequence_native(
+            "grace { E3:s F3 } G3:h",
+            &StaffContext::single(Clef::Treble8),
+            Some("2/4"),
+            None,
+            None,
+            Some(Transposition {
+                steps: 1,
+                semitones: 2,
+            }),
+        )
+        .unwrap();
+        assert_eq!(written_pitches(&response), vec!["F#3", "G3", "A3"]);
+        assert!(response.layouts[0].grace);
     }
 }

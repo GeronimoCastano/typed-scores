@@ -13,7 +13,10 @@ fn main() {
         eprintln!("error: {path}: {error}");
         std::process::exit(1);
     });
-    let name = std::path::Path::new(path).file_name().and_then(|name| name.to_str()).unwrap_or(path);
+    let name = std::path::Path::new(path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(path);
     let request = Request {
         format: "auto",
         tune: arguments.get(2).map(String::as_str),
@@ -22,7 +25,15 @@ fn main() {
         scale: "0.7",
     };
     match convert(&bytes, &request) {
-        Ok((emitted, numbers)) => print!("{}", emitted.source(request.package, request.source_name, request.scale, &numbers)),
+        Ok((emitted, numbers)) => print!(
+            "{}",
+            emitted.source(
+                request.package,
+                request.source_name,
+                request.scale,
+                &numbers
+            )
+        ),
         Err(error) => {
             eprintln!("error: {path}: {error}");
             std::process::exit(1);

@@ -1,6 +1,7 @@
 #import "@preview/cetz:0.5.2"
 #import "primitives.typ": beam-spacing, beam-thickness, draw-accidental, draw-arpeggio, draw-augmentation-dot, draw-beam, draw-bow, draw-flag, draw-ledger-lines, draw-notehead, draw-rest, draw-stem, draw-stem-tremolo, ledger-extension, notehead-geometry, rest-extent, rest-width, staff-y, stem-anchor-dy, stem-center-offset, stem-tip
 #import "../foundation/diagnostics.typ": _score-error
+#import "../foundation/meter.typ": _rational-add, _rational-lte
 #import "event-geometry.typ": _accidental-gap, _alternating-tremolo-strokes, _default-stem-length, _dot-gap-from-head, _dot-step, _dot-y, _draw-dots, _duration-base, _event-bottom-y, _event-notation-scale, _event-pitch-ys, _event-staff-index, _group-notation-scale, _head-half-width, _is-split-chord, _layout-stem-direction, _pitch-bottom-y, _pitch-head-shape, _pitch-staff-index, _single-tremolo-strokes, _small-beam-center-step, _small-beam-thickness, _small-notation-scale, _small-stem-length, _small-stem-length-fraction, _stem-direction, _uses-small-notation
 #import "signatures.typ": _key-default-accidental
 #import "spacing.typ": _accidental-plan, _cluster-offsets
@@ -494,11 +495,17 @@
   }
 }
 
-// Marks every visible beam group that spans staves so vertical spacing and
-// stems can treat it as one gesture before the system is stacked.
+#let _event-occupies-onset(event, onset) = {
+  (
+    not event.at("grace", default: false)
+      and _rational-lte(event.onset, onset)
+      and not _rational-lte(_rational-add(event.onset, event.duration_value), onset)
+  )
+}
+
 // A rest in a staff with several voices moves toward its own voice's side
 // (up for odd voices, down for even ones) in half staff spaces until it
-// clears the noteheads other voices strike at the same onset on that staff,
+// clears the noteheads other voices sustain at that onset on that staff,
 // matching LilyPond's rest collision placement.
 // When every voice rests there for the same duration, one centered rest
 // stands for all of them.
@@ -515,7 +522,7 @@
       for other in voices {
         if other.id == voice.id { continue }
         for event in other.layouts {
-          if event.rest or event.at("grace", default: false) or event.onset != layout.onset { continue }
+          if event.rest or not _event-occupies-onset(event, layout.onset) { continue }
           for pitch in event.pitches {
             if pitch.staff_index == layout.staff_index { positions.push(pitch.staff_position) }
           }
@@ -535,7 +542,7 @@
         ))
         let voices-here = voices.filter(other => (
           other.staff-index == voice.staff-index
-            and other.layouts.any(event => event.onset == layout.onset and not event.at("grace", default: false))
+            and other.layouts.any(event => _event-occupies-onset(event, layout.onset))
         ))
         if partners.len() > 0 and partners.len() + 1 == voices-here.len() {
           if partners.any(other => other.layer-index < voice.layer-index) and layout.annotations.len() == 0 {
@@ -562,6 +569,8 @@
   })
 }
 
+// Marks every visible beam group that spans staves so vertical spacing and
+// stems can treat it as one gesture before the system is stacked.
 #let _classify-cross-staff-beams(layouts, beams, location) = {
   let classified = layouts
   let group-ids = layouts.map(layout => layout.at("beam_group", default: none)).filter(id => id != none).dedup()

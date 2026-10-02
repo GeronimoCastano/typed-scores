@@ -18,15 +18,16 @@ pub const DURATION_BASES: [(Frac, &str); 6] = [
 ];
 
 pub const DYNAMICS: &[&str] = &[
-    "p", "pp", "ppp", "pppp", "ppppp", "pppppp", "f", "ff", "fff", "ffff", "fffff", "ffffff",
-    "mp", "mf", "sf", "sfp", "sfpp", "fp", "rf", "rfz", "sfz", "sffz", "fz", "n", "pf", "sfzp",
+    "p", "pp", "ppp", "pppp", "ppppp", "pppppp", "f", "ff", "fff", "ffff", "fffff", "ffffff", "mp",
+    "mf", "sf", "sfp", "sfpp", "fp", "rf", "rfz", "sfz", "sffz", "fz", "n", "pf", "sfzp",
 ];
 
 const KEY_MAJOR: [&str; 15] = [
     "Cb", "Gb", "Db", "Ab", "Eb", "Bb", "F", "C", "G", "D", "A", "E", "B", "F#", "C#",
 ];
 const KEY_MINOR: [&str; 15] = [
-    "Abm", "Ebm", "Bbm", "Fm", "Cm", "Gm", "Dm", "Am", "Em", "Bm", "F#m", "C#m", "G#m", "D#m", "A#m",
+    "Abm", "Ebm", "Bbm", "Fm", "Cm", "Gm", "Dm", "Am", "Em", "Bm", "F#m", "C#m", "G#m", "D#m",
+    "A#m",
 ];
 pub const STEPS: &str = "CDEFGAB";
 
@@ -52,7 +53,12 @@ pub fn is_dynamic(mark: &str) -> bool {
 
 pub fn key_name(fifths: i32, minor: bool) -> String {
     let index = (fifths.clamp(-7, 7) + 7) as usize;
-    (if minor { KEY_MINOR[index] } else { KEY_MAJOR[index] }).to_string()
+    (if minor {
+        KEY_MINOR[index]
+    } else {
+        KEY_MAJOR[index]
+    })
+    .to_string()
 }
 
 /// Key-signature alteration of each pitch letter, indexed like `STEPS`.
@@ -87,7 +93,11 @@ pub fn written_value(base: Frac, dots: u8) -> Frac {
 
 /// (base, dots) for a value one duration token can write.
 pub fn split_written(value: Frac) -> Option<(Frac, u8)> {
-    for (dots, factor) in [(0_u8, Frac::ONE), (1, Frac::new(3, 2)), (2, Frac::new(7, 4))] {
+    for (dots, factor) in [
+        (0_u8, Frac::ONE),
+        (1, Frac::new(3, 2)),
+        (2, Frac::new(7, 4)),
+    ] {
         let base = value / factor;
         if base_code(base).is_some() {
             return Some((base, dots));
@@ -97,7 +107,11 @@ pub fn split_written(value: Frac) -> Option<(Frac, u8)> {
 }
 
 pub fn duration_code(base: Frac, dots: u8) -> String {
-    format!("{}{}", base_code(base).unwrap_or("q"), ".".repeat(dots as usize))
+    format!(
+        "{}{}",
+        base_code(base).unwrap_or("q"),
+        ".".repeat(dots as usize)
+    )
 }
 
 /// Greedily split a binary duration into writable (base, dots) tokens.
@@ -110,7 +124,12 @@ pub fn binary_pieces(value: Frac) -> ImportResult<Vec<(Frac, u8)>> {
     let mut pieces = Vec::new();
     let mut remaining = value;
     while remaining.is_positive() {
-        let piece = candidates.iter().find(|(amount, _, _)| *amount <= remaining);
+        if pieces.len() >= 256 {
+            return Err(format!("duration {value} needs more than 256 tied note values; divide it across shorter measures"));
+        }
+        let piece = candidates
+            .iter()
+            .find(|(amount, _, _)| *amount <= remaining);
         match piece {
             Some((amount, base, dots)) => {
                 pieces.push((*base, *dots));
@@ -232,9 +251,9 @@ impl Event {
 
     pub fn flagged(&self) -> bool {
         self.kind == Kind::Note
-            && self
-                .base
-                .is_some_and(|base| base == Frac::new(1, 8) || base == Frac::new(1, 16) || base == Frac::new(1, 32))
+            && self.base.is_some_and(|base| {
+                base == Frac::new(1, 8) || base == Frac::new(1, 16) || base == Frac::new(1, 32)
+            })
     }
 
     pub fn add(&mut self, annotation: impl Into<String>) {
@@ -350,7 +369,10 @@ impl Score {
 
 pub fn meter_length(time: &str) -> Frac {
     let (numerator, denominator) = time.split_once('/').unwrap_or(("4", "4"));
-    Frac::new(numerator.trim().parse().unwrap_or(4), denominator.trim().parse().unwrap_or(4))
+    Frac::new(
+        numerator.trim().parse().unwrap_or(4),
+        denominator.trim().parse().unwrap_or(4),
+    )
 }
 
 /// A lowercase ASCII staff ID that Typst accepts as a dictionary key.
@@ -377,8 +399,19 @@ pub fn slug(name: &str) -> String {
         value = format!("staff-{value}");
     }
     const RESERVED: &[&str] = &[
-        "key", "time", "clef", "partial", "tempo", "harmony", "barline", "ending",
-        "rehearsal", "navigation", "lyrics", "notes",
+        "key",
+        "time",
+        "clef",
+        "partial",
+        "tempo",
+        "harmony",
+        "figures",
+        "barline",
+        "ending",
+        "rehearsal",
+        "navigation",
+        "lyrics",
+        "notes",
     ];
     if RESERVED.contains(&value.as_str()) {
         value.push_str("-staff");

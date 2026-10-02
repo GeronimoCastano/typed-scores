@@ -1,4 +1,4 @@
-// Imported from export-quirks.musicxml by typed-scores.
+// Source score: export-quirks.musicxml.
 // Import note: parts with different key signatures share the first part's key.
 #import "../../src/lib.typ": score
 

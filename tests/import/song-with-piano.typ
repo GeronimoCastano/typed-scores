@@ -1,4 +1,4 @@
-// Imported from song-with-piano.musicxml by typed-scores.
+// Source score: song-with-piano.musicxml.
 #import "../../src/lib.typ": score
 
 #align(center, text(size: 1.6em, weight: "bold", "Morning Song"))

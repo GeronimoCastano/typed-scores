@@ -2310,3 +2310,58 @@ pedal marks, and cross-staff beams carry over.
 
 #let duet = read-score(read("import/folk-duet.abc"))
 #score(..duet.arguments, scale: 0.7, width: 52, ragged-last: true)
+
+#pagebreak()
+
+= Combined notation features
+
+Transposition moves the pitched staff and its mirrored tab together while
+keeping the percussion pitches and cymbal heads in place. The ottava changes
+the notation's register while tab numbers retain the sounding pitches.
+
+#score(
+  staves: (
+    guitar: (clef: "treble-8", label: "Guitar"),
+    tab: (clef: "tab", source: "guitar"),
+    drums: (clef: "percussion", heads: (g5: "x")),
+  ),
+  time: "2/4",
+  transpose: "M2",
+  bars: (
+    (guitar: "grace { e3:s f3 } g3:h", drums: "g5:q c5"),
+    (guitar: "e4:h[8va( 8va)]", drums: "g5:q c5"),
+  ),
+)
+
+Rests clear notes sustained from an earlier onset. A voice's rest does not
+merge with another resting voice while a third voice still sustains a note.
+
+#score(
+  time: "4/4",
+  bars: ((notes: ("r:q e4:h.", "c5:h r:h", "r:h r:h")),),
+)
+
+#import "../src/score-input.typ": _prepare-score-measures
+#let sustained-rests = _prepare-score-measures(
+  none, ((notes: ("r:q e4:h.", "c5:h r:h", "r:h r:h")),),
+  "treble", "C", "4/4", none,
+)
+#assert(sustained-rests.first().voices.at(1).layouts.at(1).at("rest-offset") < -1)
+#assert(not sustained-rests.first().voices.at(2).layouts.at(1).at("merged-rest", default: false))
+
+Independent tablature can be extracted as a part, keeping its tuning and
+shared measure metadata. Notation parts remain usable beside mirrored tab
+staves in the original ensemble.
+
+#let guitar-parts = (
+  staves: (guitar: (clef: "treble-8"), tab: (clef: "tab", source: "guitar")),
+  time: "2/4",
+  bars: ((guitar: "e3:q g3"),),
+)
+#score(..part(guitar-parts, "guitar"), transpose: "M2")
+#let independent-tab = (
+  staves: (tab: (clef: "tab", tuning: "bass"), melody: (clef: "treble")),
+  time: "2/4",
+  bars: ((tab: "e1:q g1", melody: "c5:h"),),
+)
+#score(..part(independent-tab, "tab"))

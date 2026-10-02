@@ -159,7 +159,7 @@ instrument's written part. The value is an interval from the pitches as typed
 to the pitches as drawn, such as `M2` (B-flat clarinet or trumpet), `M6`
 (alto saxophone), `P5` (F horn), or `-P8` (piccolo). Notes, key signatures,
 and chord-symbol roots all move; relative octaves resolve as typed, before the
-interval applies.
+interval applies. Percussion pitches and drum-map entries keep their original positions.
 
 ```typst
 #score(
@@ -201,7 +201,7 @@ another `score` call for each instrumental part:
 
 The part keeps its staff's clef changes and lyrics plus every bar's key,
 meter, tempo, harmony, barlines, endings, and marks; `staff-gap` and `group`
-are dropped.
+are dropped. A mirrored tab staff requires its notation source and cannot be extracted alone; extract that source or write independent tab content.
 
 ## Figured bass
 
@@ -276,8 +276,10 @@ the lanes with `lyric-size`, `lyric-font`, `lyric-gap`, and `verse-gap`.
 Multi-system scores justify their timed gaps to fill `width` by default. The
 line breaker evaluates all complete-bar partitions and chooses balanced density,
 rather than applying a fixed number of bars per system. One-system scores remain
-at their natural width; use `ragged-right: false` to justify one too.
-`ragged-last: true` leaves only the final system natural-width.
+at their natural width within the requested width; use `ragged-right: false`
+to justify one too. `ragged-last: true` leaves only the final system at natural
+width, bounded by `width` when wrapping. Clefs and keys repeat at system starts;
+time signatures appear only where the meter is first set or changes.
 
 Use `indent` and `short-indent` (in staff spaces) to reserve left space for the
 first system and later systems respectively; each indented system still reaches
@@ -570,13 +572,14 @@ and MusicXML voices become voice strings, with cross-staff notes written as
   fingerings, arpeggios, tremolo strokes, and text directions;
 - chord symbols as `harmony`, and lyric verses with hyphens and extenders.
 
-Whatever typed-scores cannot draw is simplified rather than rejected and listed
-in `warnings`: ties joining only part of a chord or crossing staves, lyrics
+`read-score` lists every conversion loss in `warnings` and the header of `source`. `import-score` reports those losses as an error; inspect the conversion with `read-score` before explicitly rendering its reviewed `arguments`. Conversion losses include ties joining only part of a chord or crossing staves, lyrics
 under a second voice, grace notes inside a tuplet, mid-bar clef changes (moved
 to the next barline), and the separate key signatures of transposing parts.
 Breves, notes shorter than a thirty-second, and a bar holding more music than
 its meter stop the import with an error naming the bar. Imported scores use
-`scale: 0.7`; lower `scale` or `note-spacing` if a dense bar does not fit.
+`scale: 0.7`; lower `scale` or `note-spacing` if a dense bar does not fit. Malformed numeric fields, zero durations or denominators, invalid pitches,
+and more than two dots report errors. A single duration may expand into at
+most 256 tied note values; divide longer values across shorter measures.
 
 ## Current limitations
 
@@ -585,6 +588,10 @@ its meter stop the import with an error naming the bar. Imported scores use
 - Cross-staff beams and split chords join two neighboring staves; stems cannot
   be flipped by hand, and ties cannot cross staves.
 - Grace groups exclude rests, tuplets, and nested ornamental groups.
+- Ottava requires a pitched notation staff; put octave markers on the notation source when mirroring tab.
+- Tablature cannot show notehead maps or mirror unpitched percussion.
+- Independent tab rejects notation annotations it cannot draw; place markings
+  on the notation source staff. Tuning pitches use octaves -1 through 9.
 - Tab staves draw fret numbers only (no rhythm stems, bends, slides, or
   hammer-ons yet), and automatic fretting picks the lowest position per onset
   rather than planning a phrase; use `string=` to hold a position.

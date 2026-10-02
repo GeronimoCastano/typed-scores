@@ -1,4 +1,4 @@
-// Imported from folk-duet.abc by typed-scores.
+// Source score: folk-duet.abc.
 #import "../../src/lib.typ": score
 
 #align(center, text(size: 1.6em, weight: "bold", "Hill Song"))
