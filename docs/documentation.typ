@@ -5,7 +5,7 @@
 
 #import "@preview/codly:1.3.0": *
 #import "@preview/codly-languages:0.1.1": *
-#import "../src/lib.typ": score, bar
+#import "../src/lib.typ": score, bar, part
 #import "../examples/chopin-opening.typ": chopin-opening
 #import "../examples/mozart-eine-kleine-nachtmusik.typ": mozart-k525-opening
 #import "../examples/beethoven-ode-to-joy-alto-sax.typ": ode-to-joy-alto-sax
@@ -54,7 +54,7 @@
   stroke: none,
 )
 
-#let pkg-scope = (score: score, bar: bar)
+#let pkg-scope = (score: score, bar: bar, part: part)
 
 #let example(body, side: true) = block(
   width: 100%,
@@ -586,6 +586,7 @@ matching LilyPond's usual sparse numbering; `"all"` prints every bar number.
   [#c("bars")], [`array`], [`()`], [Required non-empty array of bar dictionaries.],
   [#c("key")], [`str`], [#c("\"C\"")], [Initial key signature.],
   [#c("time")], [`str`], [#c("\"4/4\"")], [Initial meter and full-bar duration.],
+  [#c("transpose")], [`str | none`], [`none`], [Interval from the pitches as typed to the pitches as drawn, such as `M6` or `-M2`. Moves notes, key signatures, and chord symbols.],
   [#c("theme")], [`str`], [#c("\"auto\"")], [Notation ink: `light` uses black, `dark` uses white, and `auto` follows the surrounding solid text fill.],
   [#c("tempo")], [`str | content | dictionary | none`], [`none`], [Tempo text, or `(text:, beat:, bpm:)` for an engraved metronome mark.],
   [#c("composer")], [`str | content | none`], [`none`], [Composer credit above the first system.],
@@ -639,6 +640,78 @@ Set #c("ragged-last: true") for a natural-width final line.
 )
 ```, side: false)
 ]
+
+== Transposition and parts
+
+Write music at concert pitch and let #c("transpose") produce a transposing
+instrument's written part. The value is an interval from the pitches as typed
+to the pitches as drawn: a quality (`P`, `M`, `m`, `A`, or `d`) and a size,
+with a leading `-` for downward. Every note, key signature, and chord-symbol
+root moves by that interval. Relative octaves resolve as typed, before the
+interval applies, so the event strings read exactly as they would untransposed.
+
+#demo[
+  #example(```typ
+#score(
+  key: "D",
+  time: "4/4",
+  transpose: "M6",
+  bars: (
+    (notes: "F#4:q F# G A", harmony: "D:h A7:h"),
+    (notes: "F#:q. E:e E:h", harmony: "D:h A:h"),
+  ),
+)
+```, side: false)
+]
+
+#reference-table(
+  (38%, 62%),
+  [*Instrument*], [*Written part from concert pitch*],
+  [B-flat clarinet, trumpet, soprano saxophone], [#c("transpose: \"M2\"")],
+  [E-flat alto saxophone], [#c("transpose: \"M6\"")],
+  [B-flat tenor saxophone, bass clarinet], [#c("transpose: \"M9\"")],
+  [E-flat baritone saxophone], [#c("transpose: \"M13\"")],
+  [F horn, English horn], [#c("transpose: \"P5\"")],
+  [Guitar, double bass], [#c("transpose: \"P8\"")],
+  [Piccolo], [#c("transpose: \"-P8\"")],
+)
+
+A key keeps the interval's spelling unless that would need more than six
+sharps or flats (or more than the typed key already has). Then the part takes
+the enharmonic key, and its notes and chord symbols are spelled to match:
+concert F-sharp major for alto saxophone is written in E-flat major rather
+than D-sharp major. A note that would need a triple sharp or flat is respelled
+on a neighboring letter.
+
+To write a part from an ensemble score, keep the score's arguments in a
+dictionary and pass them through #c("part") with a declared staff ID. It
+returns arguments for a one-staff score: the chosen staff's content, clef
+changes, and lyrics, with every bar's key, meter, tempo, harmony, barlines,
+endings, and marks. The ensemble-only #c("staff-gap") and #c("group") are
+dropped. The same dictionary engraves the concert score with
+#c("score(..duet)"), and the extracted part spreads into #c("score") beside any
+argument for the part itself:
+
+#demo[
+  #example(```typ
+#let duet = (
+  staves: (
+    sax: (clef: "treble", label: "Alto Sax"),
+    cello: (clef: "bass", label: "Cello"),
+  ),
+  key: "D",
+  time: "4/4",
+  bars: (
+    (sax: "F#4:q F# G A", cello: "D3:w"),
+    (sax: "F#:q. E:e E:h", cello: "A2:w"),
+  ),
+)
+#score(..part(duet, "sax"), transpose: "M6")
+```, side: false)
+]
+
+A staff whose voices use #c("@staff") switches or split chords depends on its
+neighbors and cannot be extracted on its own.
 
 = Event language
 
@@ -1129,15 +1202,15 @@ fixtures and a compiled `showcase.pdf`:
 - Chopin, Nocturne Op. 9 No. 2 — piano, pickup and measures 1–4;
 - Mozart, Eine kleine Nachtmusik K. 525/I — four-staff strings, measures 1–4;
 - Bach, Cello Suite No. 1 BWV 1007/I — solo cello, measures 1–4;
-- Beethoven, the four-bar Ode to Joy theme — E-flat alto saxophone at written
-  pitch;
+- Beethoven, the four-bar Ode to Joy theme — E-flat alto saxophone, typed at
+  concert pitch;
 - Beethoven, Für Elise WoO 59 — piano, pickup and measures 1–4; and
 - Beethoven, Piano Sonata Op. 27 No. 2/III — piano, cross-staff coda,
   measures 178–185.
 
-The saxophone fixture is an explicit transposition: its B-major notation sounds
-in Beethoven's D major. The others retain their reference score's written
-pitches. This compact quartet excerpt demonstrates a bracketed ensemble:
+The saxophone fixture is typed in Beethoven's D major and drawn in B major
+with #c("transpose: \"M6\""). The others retain their reference score's
+written pitches. This compact quartet excerpt demonstrates a bracketed ensemble:
 
 #align(center)[#mozart-k525-opening(
   scale: 0.42,
@@ -1146,7 +1219,7 @@ pitches. This compact quartet excerpt demonstrates a bracketed ensemble:
 )]
 
 The single-staff case needs no staff declaration, even for a transposing
-instrument whose written pitch has been prepared by the author:
+instrument written from concert pitch:
 
 #align(center)[#ode-to-joy-alto-sax(scale: 0.66, note-spacing: 3.2)]
 

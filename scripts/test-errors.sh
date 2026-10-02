@@ -128,3 +128,8 @@ check_error tests/errors/distant-staff-beam.typ "a beam group joins notes on sta
 check_error tests/errors/kneed-beam-staff-gap.typ "staff-gap is too small for a kneed beam"
 check_error tests/errors/control-character-staff-id.typ "staff ID contains a control character"
 check_error tests/errors/single-staff-switch.typ "needs a score with several staves"
+check_error tests/errors/malformed-transpose.typ "score transpose: transposition must be an interval name"
+check_error tests/errors/invalid-transpose-quality.typ "interval quality does not exist for this size"
+check_error tests/errors/transposed-octave-out-of-range.typ "transposition moves C8 to octave 10"
+check_error tests/errors/part-unknown-staff.typ "part: staff ID is not declared in staves"
+check_error tests/errors/part-without-staves.typ "score arguments have no staves to extract from"

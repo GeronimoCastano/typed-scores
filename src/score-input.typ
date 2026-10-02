@@ -1,5 +1,6 @@
 #import "foundation/diagnostics.typ": _required-nonempty-string, _score-error, _validate-marking
 #import "foundation/parser.typ": _layout-sequence
+#import "foundation/transposition.typ": _transpose-key
 #import "engraving/signatures.typ": _validate-clef, _validate-key
 #import "foundation/meter.typ": _layout-harmony, _parse-time-rational, _rational-lte, _validate-measure-duration
 #import "engraving/spacing.typ": _measure-positions
@@ -230,7 +231,7 @@
   normalized-staves
 }
 
-#let _normalize-score-measures(staves, bars, clef, key, time, tempo) = {
+#let _normalize-score-measures(staves, bars, clef, key, time, tempo, transposition) = {
   if type(bars) != array or bars.len() == 0 {
     _score-error(
       "score bars",
@@ -278,6 +279,7 @@
       measure-input.at("key", default: current-key),
       measure-label + " key",
     )
+    let drawn-key = _transpose-key(current-key, transposition)
     current-time = measure-input.at("time", default: current-time)
     let current-time-value = _parse-time-rational(
       current-time,
@@ -414,7 +416,8 @@
       }
     }
     normalized-measures.push((
-      key: current-key,
+      key: drawn-key.key,
+      transposition: drawn-key.transposition,
       time: current-time,
       partial: partial,
       tempo: _normalize-tempo(
@@ -477,8 +480,11 @@
   beams: false,
   lyric-size: 0.9,
   lyric-font: none,
+  transposition: none,
 ) = {
-  let normalized-measures = _normalize-score-measures(staves, bars, clef, key, time, tempo)
+  let normalized-measures = _normalize-score-measures(
+    staves, bars, clef, key, time, tempo, transposition,
+  )
   let prepared-measures = ()
   let previous-key = none
   let previous-time = none
@@ -506,6 +512,7 @@
         time: validation-time,
         anchor: pitch-anchors.at(voice.id, default: none),
         duration-anchor: duration-anchors.at(voice.id, default: none),
+        transposition: normalized-measure.transposition,
         location: voice-location,
       )
       let event-layouts = layout-response.layouts
@@ -548,6 +555,7 @@
       normalized-measure.harmony,
       validation-time,
       measure-index + 1,
+      transposition: normalized-measure.transposition,
     )
     let lyric-layout = _layout-measure-lyrics(
       normalized-measure.lyrics,

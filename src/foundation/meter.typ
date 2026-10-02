@@ -1,4 +1,5 @@
 #import "diagnostics.typ": _score-error
+#import "transposition.typ": _transpose-harmony-symbol
 
 // ---------------------------------------------------------------------------
 // Rational duration and meter validation
@@ -142,7 +143,7 @@
   "t..": (numerator: 7, denominator: 128),
 )
 
-#let _layout-harmony(sequence, time, bar-number) = {
+#let _layout-harmony(sequence, time, bar-number, transposition: none) = {
   if sequence == none { return () }
   if type(sequence) != str or sequence.trim() == "" {
     _score-error(
@@ -177,7 +178,11 @@
       )
     }
     let duration = _harmony-duration-values.at(parts.last())
-    layouts.push((symbol: parts.first(), onset: onset, duration-value: duration))
+    layouts.push((
+      symbol: _transpose-harmony-symbol(parts.first(), transposition),
+      onset: onset,
+      duration-value: duration,
+    ))
     onset = _rational-add(onset, duration)
   }
   let expected = _parse-time-rational(time, label: "harmony bar " + str(bar-number) + " meter")

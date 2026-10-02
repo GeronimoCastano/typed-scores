@@ -18,9 +18,11 @@ runtime_typst_files="
 lib.typ
 score.typ
 score-input.typ
+part.typ
 foundation/diagnostics.typ
 foundation/parser.typ
 foundation/meter.typ
+foundation/transposition.typ
 engraving/primitives.typ
 engraving/signatures.typ
 engraving/event-geometry.typ
