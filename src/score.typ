@@ -298,7 +298,7 @@
         label-reserve: first-label-reserve,
       ),)
     }
-    let systems = _finalize-systems(packed-systems, max-width, ragged-right, ragged-last)
+    let systems = _finalize-systems(packed-systems, max-width, ragged-right, ragged-last, wrap: wrap)
     for system-index in range(systems.len()) {
       _render-score-system(
         measures,

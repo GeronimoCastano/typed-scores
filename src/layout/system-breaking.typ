@@ -336,13 +336,16 @@
   selected.systems
 }
 
-#let _finalize-systems(systems, max-width, ragged-right, ragged-last) = {
+// A ragged system keeps its natural width, except that a wrapped system the
+// packer compressed to fit never grows back past the requested width. An
+// unwrapped score keeps its natural width, since it has nowhere to break.
+#let _finalize-systems(systems, max-width, ragged-right, ragged-last, wrap: true) = {
   let all-ragged = if ragged-right == auto { systems.len() == 1 } else { ragged-right }
   let finalized-systems = ()
   for (system-index, system) in systems.enumerate() {
     let is-last = system-index + 1 == systems.len()
     let width = if all-ragged or (is-last and ragged-last) {
-      system.natural-width
+      if wrap { calc.min(system.natural-width, max-width) } else { system.natural-width }
     } else {
       max-width
     }

@@ -1732,3 +1732,24 @@ and limits the slant to one staff space.
   ),
 )
 
+#pagebreak()
+
+= Compressed ragged systems stay inside their width
+
+These four bars fit on one line only after the packer compresses them
+slightly. The single ragged system keeps that compression instead of returning
+to its natural width, so its final barline meets the right edge of the frame,
+drawn at the requested `width` of 80 staff spaces, rather than crossing it.
+
+#block(width: 80 * 8pt * 0.72, stroke: (right: 0.4pt + red), score(
+  time: "4/4",
+  beams: true,
+  scale: 0.72,
+  width: 80,
+  bars: (
+    (notes: "a3:e e4 a4 c5 e5 c5 a4 e4", harmony: "Am:w"),
+    (notes: "c4:e e4 g4 c5 e5 c5 g4 e4", harmony: "C:w"),
+    (notes: "d4:e a4 d5 f#5 (d4 a4 d5 f#5):h", harmony: "D:w"),
+    (notes: "(f3 c4 f4 a4 c5 f5):w", harmony: "F:w", barline: (right: "final")),
+  ),
+))
