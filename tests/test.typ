@@ -150,6 +150,23 @@ Staves are declared once; every bar supplies each staff ID.
   ),
 )
 
+Each system restates its clef and key, but a time signature appears only where
+the meter is set or changes. The second system continues in 3/4 without
+restating it, and the change to 2/4 opens the third.
+
+#score(
+  clef: "treble",
+  key: "D",
+  time: "3/4",
+  width: 24,
+  bars: (
+    (notes: "D5:q E5:q F#5:q"),
+    (notes: "G5:q F#5:q E5:q"),
+    (time: "2/4", notes: "D5:q C#5:q"),
+    (notes: "D5:h", barline: (right: "final")),
+  ),
+)
+
 == Repeat barlines and volta endings
 
 Repeat signs live on the left or right edge of a bar. Labeled endings span

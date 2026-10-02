@@ -313,6 +313,7 @@
   let first-note-start = _prologue-start-x(
     system-measures.first().key,
     system-measures.first().time,
+    system-measures.first().at("show-time"),
     previous-key: system-measures.first().at("previous-key"),
     staff-x: left-bar-x,
     clef-x: clef-x,
@@ -660,6 +661,7 @@
             voice.clef,
             measure.key,
             measure.time,
+            measure.at("show-time"),
             previous-key: measure.at("previous-key"),
             bottom-y: bottom-y,
             unit: unit,
