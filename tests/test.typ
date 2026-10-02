@@ -1338,7 +1338,7 @@ Hyphens and melisma extenders continue across barlines and wrapped systems.
 
 #score(
   time: "4/4",
-  width: 31,
+  width: 28,
   bars: (
     (notes: "c5:q d e f", lyrics: "Won -- der -- ful sing --"),
     (notes: "g5:q a b c6", lyrics: "ing bright stars glow"),
@@ -1656,7 +1656,7 @@ switch resets at every bar, so the tied target names its staff again.
   staves: (upper: (clef: "treble"), lower: (clef: "bass")),
   time: "2/4",
   beams: true,
-  width: 28,
+  width: 23,
   bars: (
     (upper: "C5:e[s1(] G4 @lower E3 C3[s1)]", lower: "C2:h"),
     (upper: "@lower G3:q[s2(] ~ G3:q", lower: "C2:h"),
