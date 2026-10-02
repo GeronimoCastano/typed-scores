@@ -364,6 +364,53 @@ controls the system grouping symbol. The default `auto` chooses the customary
 style from the number of staves. Key changes automatically print cancellation
 naturals before the new signature when required.
 
+## Importing MusicXML and ABC
+
+`import-score` engraves an existing MusicXML (`.musicxml`, `.xml`, or
+compressed `.mxl`) or ABC 2.1 file with the same renderer as hand-written
+input. Pass the file's contents, since a package cannot open files in your
+project:
+
+```typst
+#import "@preview/typed-scores:0.5.1": import-score, read-score
+
+#import-score(read("song.mxl", encoding: none))
+#import-score(read("tunes.abc"), tune: 12, scale: 0.8, theme: "dark")
+```
+
+The format is detected from the contents, `tune` picks an ABC tune by its `X:`
+number, and any other named argument overrides the imported `score()` option.
+`read-score` returns the conversion instead: `arguments` for `score()`, the
+`title`, `warnings` about notation that could not be reproduced, and `source`,
+an equivalent Typst file whose bars are ordinary event strings you can copy and
+edit.
+
+```typst
+#let song = read-score(read("song.musicxml", encoding: none))
+#score(..song.arguments, scale: 0.8, bar-numbers: "all")
+```
+
+Parts become labeled staves (a piano part becomes an upper and a lower staff),
+and MusicXML voices become voice strings, with cross-staff notes written as
+`@staff` switches. The importer carries over:
+
+- notes, chords, rests, ties, dots, tuplets, grace and cue notes, and the
+  source beaming;
+- clef, key, meter, and tempo changes, pickups and other short bars as
+  `partial`, repeats, first and second endings, rehearsal marks, and
+  segno/coda signs;
+- slurs, dynamics, hairpins, pedal marks, articulations, ornaments, fermatas,
+  fingerings, arpeggios, tremolo strokes, and text directions;
+- chord symbols as `harmony`, and lyric verses with hyphens and extenders.
+
+Whatever typed-scores cannot draw is simplified rather than rejected and listed
+in `warnings`: ties joining only part of a chord or crossing staves, lyrics
+under a second voice, grace notes inside a tuplet, mid-bar clef changes (moved
+to the next barline), and the separate key signatures of transposing parts.
+Breves, notes shorter than a thirty-second, and a bar holding more music than
+its meter stop the import with an error naming the bar. Imported scores use
+`scale: 0.7`; lower `scale` or `note-spacing` if a dense bar does not fit.
+
 ## Current limitations
 
 - One to four rhythmic voices per staff are supported; each staff's voice count

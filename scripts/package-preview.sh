@@ -18,6 +18,7 @@ runtime_typst_files="
 lib.typ
 score.typ
 score-input.typ
+importing.typ
 foundation/diagnostics.typ
 foundation/parser.typ
 foundation/meter.typ

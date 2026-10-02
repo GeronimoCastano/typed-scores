@@ -1,4 +1,4 @@
-#import "../src/lib.typ": score, bar
+#import "../src/lib.typ": score, bar, import-score, read-score
 #import "../examples/chopin-opening.typ": chopin-opening
 #import "../examples/mozart-eine-kleine-nachtmusik.typ": mozart-k525-opening
 #import "../examples/bach-cello-suite-prelude.typ": bach-bwv1007-opening
@@ -1715,3 +1715,47 @@ and limits the slant to one staff space.
   ),
 )
 
+
+#pagebreak()
+
+= LilyPond A/B: rests between voices
+
+A rest in one voice moves toward its own side in half staff spaces until it
+clears the noteheads the other voice strikes at the same onset: below the
+treble chords, below the A, and above the rising line. In the final bar
+LilyPond keeps both half rests, while `typed-scores` deliberately draws one
+rest for voices that rest together for the same value.
+
+#lilypond-ab(
+  "lilypond-ab/reference/voice-rests.svg",
+  57.0522,
+  score(
+    key: "F",
+    time: "3/4",
+    scale: 1.0,
+    note-spacing: 2.6,
+    width: 57,
+    ragged-right: false,
+    bars: (
+      (notes: ("(A4 C5 F5):q r (Bb4 D5)", "F4:h r:q")),
+      (notes: ("A4:q r C5", "r:q C4:h")),
+      (notes: ("E5:q F5 G5", "r:q r r")),
+      (notes: ("r:q r r", "A4:q C5 E5")),
+      (notes: ("C5:q r:h", "A4:q r:h"), barline: (right: "final")),
+    ),
+  ),
+)
+
+#pagebreak()
+
+= Importing MusicXML and ABC
+
+A compressed MusicXML score and an ABC tune are converted by the plugin and
+engraved like hand-written input: parts become labeled staves, a piano part
+becomes a braced pair, and repeats, voltas, lyrics, chord symbols, dynamics,
+pedal marks, and cross-staff beams carry over.
+
+#import-score(read("import/song-with-piano.mxl", encoding: none), width: 52)
+
+#let duet = read-score(read("import/folk-duet.abc"))
+#score(..duet.arguments, scale: 0.7, width: 52, ragged-last: true)

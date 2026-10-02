@@ -1,5 +1,5 @@
 #import "@preview/cetz:0.5.2"
-#import "primitives.typ": beam-spacing, beam-thickness, draw-accidental, draw-arpeggio, draw-augmentation-dot, draw-beam, draw-bow, draw-filled-notehead, draw-flag, draw-ledger-lines, draw-open-notehead, draw-rest, draw-stem, draw-stem-tremolo, draw-whole-notehead, ledger-extension, rest-width, staff-y, stem-anchor-dy, stem-center-offset, stem-tip
+#import "primitives.typ": beam-spacing, beam-thickness, draw-accidental, draw-arpeggio, draw-augmentation-dot, draw-beam, draw-bow, draw-filled-notehead, draw-flag, draw-ledger-lines, draw-open-notehead, draw-rest, draw-stem, draw-stem-tremolo, rest-extent, draw-whole-notehead, ledger-extension, rest-width, staff-y, stem-anchor-dy, stem-center-offset, stem-tip
 #import "../foundation/diagnostics.typ": _score-error
 #import "event-geometry.typ": _accidental-gap, _alternating-tremolo-strokes, _default-stem-length, _dot-gap-from-head, _dot-step, _dot-y, _draw-dots, _duration-base, _event-bottom-y, _event-notation-scale, _event-pitch-ys, _event-staff-index, _group-notation-scale, _head-half-width, _is-split-chord, _layout-stem-direction, _pitch-bottom-y, _pitch-staff-index, _single-tremolo-strokes, _small-beam-center-step, _small-beam-thickness, _small-notation-scale, _small-stem-length, _small-stem-length-fraction, _stem-direction, _uses-small-notation
 #import "signatures.typ": _key-default-accidental
@@ -22,7 +22,7 @@
   paint: black,
 ) = {
   import cetz.draw: *
-  if layout.at("spacer", default: false) { return }
+  if layout.at("spacer", default: false) or layout.at("merged-rest", default: false) { return }
   let bottom-y = _event-bottom-y(layout, bottom-y)
   let notation-scale = _event-notation-scale(layout)
   if layout.rest {
@@ -483,6 +483,72 @@
 
 // Marks every visible beam group that spans staves so vertical spacing and
 // stems can treat it as one gesture before the system is stacked.
+// A rest in a staff with several voices moves toward its own voice's side
+// (up for odd voices, down for even ones) in half staff spaces until it
+// clears the noteheads other voices strike at the same onset on that staff,
+// matching LilyPond's rest collision placement.
+// When every voice rests there for the same duration, one centered rest
+// stands for all of them.
+#let _separate-voice-rests(voices) = {
+  let clearance = 0.25
+  let notehead-half-height = 0.5
+  voices.map(voice => {
+    if voice.layer-count == 1 { return voice }
+    let layouts = voice.layouts.map(layout => {
+      if not layout.rest or layout.at("spacer", default: false) or layout.at("grace", default: false) {
+        return layout
+      }
+      let positions = ()
+      for other in voices {
+        if other.id == voice.id { continue }
+        for event in other.layouts {
+          if event.rest or event.at("grace", default: false) or event.onset != layout.onset { continue }
+          for pitch in event.pitches {
+            if pitch.staff_index == layout.staff_index { positions.push(pitch.staff_position) }
+          }
+        }
+      }
+      if positions.len() == 0 {
+        let partners = voices.filter(other => (
+          other.id != voice.id
+            and other.staff-index == voice.staff-index
+            and other.layouts.any(event => (
+              event.rest
+                and not event.at("spacer", default: false)
+                and event.onset == layout.onset
+                and event.duration_value == layout.duration_value
+                and event.staff_index == layout.staff_index
+            ))
+        ))
+        let voices-here = voices.filter(other => (
+          other.staff-index == voice.staff-index
+            and other.layouts.any(event => event.onset == layout.onset and not event.at("grace", default: false))
+        ))
+        if partners.len() > 0 and partners.len() + 1 == voices-here.len() {
+          if partners.any(other => other.layer-index < voice.layer-index) and layout.annotations.len() == 0 {
+            return layout + (merged-rest: true)
+          }
+          return layout + (rest-offset: 0)
+        }
+        return layout
+      }
+      let extent = rest-extent(_duration-base(layout))
+      let offset = layout.at("rest-offset", default: 0)
+      if offset < 0 {
+        let note-bottom = (calc.min(..positions) - 2) / 2 - notehead-half-height
+        let limit = note-bottom - clearance - extent.top
+        if offset > limit { offset = calc.floor(limit * 2) / 2 }
+      } else {
+        let note-top = (calc.max(..positions) - 2) / 2 + notehead-half-height
+        let limit = note-top + clearance - extent.bottom
+        if offset < limit { offset = calc.ceil(limit * 2) / 2 }
+      }
+      layout + (rest-offset: offset)
+    })
+    voice + (layouts: layouts)
+  })
+}
+
 #let _classify-cross-staff-beams(layouts, beams, location) = {
   let classified = layouts
   let group-ids = layouts.map(layout => layout.at("beam_group", default: none)).filter(id => id != none).dedup()

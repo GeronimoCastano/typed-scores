@@ -6,7 +6,7 @@
 #import "engraving/markings.typ": _normalize-tempo
 #import "engraving/lyrics.typ": _layout-measure-lyrics, _normalize-measure-lyrics, _validate-lyric-continuations
 #import "engraving/event-geometry.typ": _event-staff-index, _is-split-chord
-#import "engraving/events.typ": _classify-cross-staff-beams
+#import "engraving/events.typ": _classify-cross-staff-beams, _separate-voice-rests
 
 // Public score-shape normalization and eager musical preparation.
 
@@ -544,6 +544,7 @@
         layouts: event-layouts,
       ))
     }
+    let prepared-voices = _separate-voice-rests(prepared-voices)
     let harmony = _layout-harmony(
       normalized-measure.harmony,
       validation-time,

@@ -5,7 +5,7 @@
 
 #import "@preview/codly:1.3.0": *
 #import "@preview/codly-languages:0.1.1": *
-#import "../src/lib.typ": score, bar
+#import "../src/lib.typ": score, bar, import-score, read-score
 #import "../examples/chopin-opening.typ": chopin-opening
 #import "../examples/mozart-eine-kleine-nachtmusik.typ": mozart-k525-opening
 #import "../examples/beethoven-ode-to-joy-alto-sax.typ": ode-to-joy-alto-sax
@@ -54,7 +54,7 @@
   stroke: none,
 )
 
-#let pkg-scope = (score: score, bar: bar)
+#let pkg-scope = (score: score, bar: bar, import-score: import-score, read-score: read-score)
 
 #let example(body, side: true) = block(
   width: 100%,
@@ -1071,6 +1071,89 @@ another staff follows that staff's accidentals.
 )
 ```, side: false)
 ]
+
+= Importing MusicXML and ABC <importing>
+
+Existing scores do not need to be retyped. #c("import-score") reads a MusicXML
+file (`.musicxml`, `.xml`, or compressed `.mxl`, partwise or timewise) or an
+ABC 2.1 tune and engraves it with the same renderer as hand-written input.
+Pass the file's contents rather than its path, because a package cannot open
+files in your project; reading them as bytes works for every format:
+
+```typ
+#import "@preview/typed-scores:0.5.1": import-score, read-score
+
+#import-score(read("song.mxl", encoding: none))
+#import-score(read("tunes.abc"), tune: 12, scale: 0.8)
+```
+
+The format is detected from the contents; pass #c("format: \"musicxml\"") or
+#c("format: \"abc\"") to force one, and #c("tune") to pick an ABC tune by its
+`X:` number. Other named arguments are #c("score") options that override the
+imported ones, such as #c("scale"), #c("width"), or #c("theme"). The work
+title is centered above the score unless #c("title") is #c("none") or other
+content. An ABC tune can also be written inline:
+
+#demo[
+  #example(```typ
+#import-score(
+  "X:1
+T:Morning Air
+M:6/8
+L:1/8
+K:G
+|: \"G\"B2A G2B | \"D7\"A2^c d2=c | \"G\"{/c}B3- B2d :|",
+  title: none,
+)
+```, side: false)
+]
+
+#c("read-score") returns the conversion instead of engraving it, so the music
+can be adjusted before rendering. Its #c("arguments") dictionary holds the
+#c("score") arguments (#c("staves"), #c("key"), #c("time"), #c("tempo"),
+#c("composer"), #c("beams"), and #c("bars")); #c("title") is the work title;
+#c("warnings") lists what could not be reproduced; and #c("source") is an
+equivalent standalone Typst file, for copying into a document and editing as
+event strings.
+
+```typ
+#let song = read-score(read("song.musicxml", encoding: none))
+#let bars = song.arguments.bars.slice(0, 8)
+#score(..song.arguments, bars: bars, scale: 0.8, bar-numbers: "all")
+#raw(song.source, lang: "typ", block: true)
+```
+
+Each MusicXML part becomes a labeled staff, and a multi-staff part such as a
+piano becomes an upper and a lower staff. MusicXML voices become voice strings;
+a voice that moves to the other staff of its part is written with #c("@staff")
+switches. Each ABC voice becomes a staff, and #c("%%score (1 2)") groups voices
+onto one staff. Pitches are always written with an explicit octave, and a
+duration is omitted only when it repeats the previous one. Source beaming is
+kept by writing #c("-") and #c("/") only where it differs from the automatic
+beams.
+
+#reference-table(
+  (38%, 62%),
+  [*Source*], [*Result*],
+  [Short first or later bar], [#c("partial") with the bar's actual length.],
+  [Clef, key, meter, tempo change], [Bar metadata; a mid-bar clef moves to the next barline.],
+  [Repeats and endings], [#c("barline") repeat signs and #c("ending") brackets.],
+  [Rehearsal, segno, coda], [#c("rehearsal") and #c("navigation") fields.],
+  [Wedges, pedal lines], [Named #c("h1<") … #c("h1!") and #c("p1(") … #c("p1)") spans.],
+  [Chord symbols], [#c("harmony"), with invisible filler symbols where a change falls mid-beat.],
+  [Lyrics], [Verse strings with #c("--"), #c("__"), and #c("_") tokens.],
+  [Hidden rests, voice gaps], [Spacers #c("s"), which draw nothing.],
+)
+
+Anything typed-scores cannot draw is simplified instead of rejected: a tie
+joining only part of a chord or crossing staves is dropped, lyrics under a
+second voice are dropped, and grace notes inside a tuplet are dropped. Every
+staff shares the first part's key, so transposing parts lose their own key
+signature. Each kind of loss is listed in #c("warnings") and in the header of
+#c("source"). Breves, notes shorter than a thirty-second, and a bar holding
+more music than its meter stop the import with an error naming the bar.
+Imported scores are written at #c("scale: 0.7"); if a dense bar does not fit
+the line, lower #c("scale") or #c("note-spacing").
 
 = Validation and layout
 

@@ -128,3 +128,6 @@ check_error tests/errors/distant-staff-beam.typ "a beam group joins notes on sta
 check_error tests/errors/kneed-beam-staff-gap.typ "staff-gap is too small for a kneed beam"
 check_error tests/errors/control-character-staff-id.typ "staff ID contains a control character"
 check_error tests/errors/single-staff-switch.typ "needs a score with several staves"
+check_error tests/errors/import-overfull-bar.typ "bar 1 holds 4/4 of music, more than its 3/4 meter allows"
+check_error tests/errors/import-invalid-source.typ "source must be the file contents as bytes or a string"
+check_error tests/errors/import-malformed-xml.typ "the MusicXML file is not well-formed XML"
