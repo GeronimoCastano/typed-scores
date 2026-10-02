@@ -359,6 +359,7 @@ before the next bar. Set `bar-numbers` to
 | `acciaccatura { d:e } f:q` | Slashed single grace note resolving to F |
 | `tremolo 16 { c:h g:h }` | Two-note alternating sixteenth tremolo |
 | `(c e g):h[arpeggio=up]` | Upward arpeggio over a chord |
+| `(c3 e3 g3):h[string=5,4,3]` | Tab strings for each pitch, in written order |
 | `[s1(]` … `[s1)]` | Named slur |
 | `(g5[x] c5):q` / `g5:q[circle-x]` | X or circled-X noteheads, per pitch or per event |
 | `heads: (g5: "x")` | Staff drum map: noteheads by pitch |
@@ -478,6 +479,58 @@ controls the system grouping symbol. The default `auto` chooses the customary
 style from the number of staves. Key changes automatically print cancellation
 naturals before the new signature when required.
 
+## Guitar notation
+
+Guitar music pairs standard notation with tablature, and typed-scores writes
+both from one event string. The `treble-8` clef (and `bass-8` for bass guitar)
+takes the pitches the instrument sounds and prints them an octave up, as
+guitar music is written. A staff with `clef: "tab"` draws tablature; `source`
+makes it repeat another staff's music, so bars never write it twice.
+
+```typst
+#score(
+  staves: (
+    guitar: (clef: "treble-8"),
+    tab: (clef: "tab", source: "guitar"),
+  ),
+  time: "4/4",
+  chord-diagrams: guitar-chords,
+  beams: true,
+  bars: (
+    (guitar: "a2:e e3 a3 c4 e4 c4 a3 e3", harmony: "Am:w"),
+    (guitar: "c3:e e3 g3 c4 e4 c4 g3 e3", harmony: "C:w"),
+    (guitar: "d3:e a3 d4 f#4 (d3 a3 d4 f#4):h", harmony: "D:w"),
+    (guitar: "(f2 c3 f3 a3 c4 f4):w", harmony: "F:w"),
+  ),
+)
+```
+
+![Guitar notation with tablature and chord diagrams](assets/readme/guitar.png)
+
+Each note takes the lowest fret that reaches it. Notes that start together
+share out the strings, a note still ringing in another voice keeps its
+string, and a tied note stays on the string it was tied from. Add
+`[string=2]` to choose a string (1 is the highest), or `[string=5,4,3]` to
+choose one per chord pitch in written order. A tab staff draws fret numbers,
+leaving rests, stems, and marks to the notation it repeats. A tied note
+reappears in parentheses only when it continues onto a new system, and tab
+lines break around each number so they read on any page color.
+
+`tuning` takes a preset (`"guitar"`, `"drop-d"`, `"dadgad"`, `"open-g"`,
+`"bass"`, `"ukulele"`) or an array of open-string pitches from the lowest
+string, such as `("d2", "a2", "d3", "g3", "b3", "e4")`. A tab staff with no
+notation beside it prints the time signature itself.
+
+`chord-diagram("x32010", name: "C", fingers: "032010")` draws a fretboard box
+anywhere in a document. Shapes list the lowest string first; separate the
+entries once frets reach 10 (`"x 7 9 9 9 7"`). A finger laid across several
+strings draws a barre, and shapes above the fourth fret move the grid up with
+a position label. In a score, `chord-diagrams` maps harmony symbols to shapes
+and draws each diagram above its symbol. The bundled `guitar-chords` library
+covers major, minor, 7, m7, and maj7 chords on every root, plus common sus and
+add9 shapes; extend it with `guitar-chords + ("Cadd9/G": "332033")`, and map a
+symbol to `none` to leave it without a diagram.
+
 ## Current limitations
 
 - One to four rhythmic voices per staff are supported; each staff's voice count
@@ -485,6 +538,9 @@ naturals before the new signature when required.
 - Cross-staff beams and split chords join two neighboring staves; stems cannot
   be flipped by hand, and ties cannot cross staves.
 - Grace groups exclude rests, tuplets, and nested ornamental groups.
+- Tab staves draw fret numbers only (no rhythm stems, bends, slides, or
+  hammer-ons yet), and automatic fretting picks the lowest position per onset
+  rather than planning a phrase; use `string=` to hold a position.
 - Pedals and hairpins do not split automatically at system breaks.
 - Ottava spans stay on their voice's staff, figured bass sits under the bottom
   staff without continuation lines, and percussion staves have five lines.

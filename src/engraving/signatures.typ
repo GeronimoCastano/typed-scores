@@ -15,18 +15,23 @@
 // Staff positions of the seven key-signature accidentals, in signature order.
 // Tenor clef places its first sharp on the low F line so the whole signature
 // stays inside the staff, which is why it cannot reuse the treble layout.
+// Octave clefs keep their plain clef's signature layout.
 #let _flat-order-positions = (
   treble: (6, 9, 5, 8, 4, 7, 3),
   bass: (4, 7, 3, 6, 2, 5, 1),
   alto: (5, 8, 4, 7, 3, 6, 2),
   tenor: (7, 10, 6, 9, 5, 8, 4),
 )
+#_flat-order-positions.insert("treble-8", _flat-order-positions.treble)
+#_flat-order-positions.insert("bass-8", _flat-order-positions.bass)
 #let _sharp-order-positions = (
   treble: (10, 7, 11, 8, 5, 9, 6),
   bass: (8, 5, 9, 6, 3, 7, 4),
   alto: (9, 6, 10, 7, 4, 8, 5),
   tenor: (4, 8, 5, 9, 6, 10, 7),
 )
+#_sharp-order-positions.insert("treble-8", _sharp-order-positions.treble)
+#_sharp-order-positions.insert("bass-8", _sharp-order-positions.bass)
 
 // ---------------------------------------------------------------------------
 // Key signatures
@@ -219,15 +224,24 @@
   x + _content-lead-in
 }
 
-#let _draw-prologue(clef, key, time, show-time, previous-key: none, bottom-y: 0, unit: 8pt, staff-x: 0, clef-x: 0.35, paint: black) = {
-  draw-clef(clef, clef-x, _clef-origin-y(clef, bottom-y: bottom-y), unit: unit, paint: paint)
+// Left edge of the time signature in a system's opening prologue.
+#let _prologue-time-x(key, previous-key: none, clef-x: 0.35) = {
   let x = clef-x + _clef-advance
-  _draw-key-change(clef, previous-key, key, x, bottom-y: bottom-y, unit: unit, paint: paint)
   let key-width = _key-change-width(previous-key, key)
   if key-width > 0 { x += key-width + _prologue-gap }
-  if show-time {
-    draw-time-signature(time, x, bottom-y: bottom-y, unit: unit, paint: paint)
-  }
+  x
+}
+
+#let _draw-prologue(clef, key, time, show-time, previous-key: none, bottom-y: 0, unit: 8pt, staff-x: 0, clef-x: 0.35, paint: black) = {
+  draw-clef(clef, clef-x, _clef-origin-y(clef, bottom-y: bottom-y), unit: unit, paint: paint)
+  _draw-key-change(clef, previous-key, key, clef-x + _clef-advance, bottom-y: bottom-y, unit: unit, paint: paint)
+  if show-time { draw-time-signature(
+    time,
+    _prologue-time-x(key, previous-key: previous-key, clef-x: clef-x),
+    bottom-y: bottom-y,
+    unit: unit,
+    paint: paint,
+  ) }
 }
 
 // Mid-score key/time changes shown at the start of a measure.
@@ -266,6 +280,17 @@
   }
 }
 
+// Left edge of a mid-score time signature, after any clef or key change.
+#let _inline-time-x(measure-start, key, show-key, reserve-clef: false, previous-key: none) = {
+  let x = measure-start + 0.8
+  if reserve-clef { x += _change-clef-advance + _prologue-gap }
+  if show-key {
+    let key-width = _key-change-width(previous-key, key)
+    if key-width > 0 { x += key-width + _prologue-gap }
+  }
+  x
+}
+
 #let _draw-inline-signature(
   clef,
   key,
@@ -294,11 +319,15 @@
   if show-clef or reserve-clef { x += _change-clef-advance + _prologue-gap }
   if show-key {
     _draw-key-change(clef, previous-key, key, x, bottom-y: bottom-y, unit: unit, paint: paint)
-    let key-width = _key-change-width(previous-key, key)
-    if key-width > 0 { x += key-width + _prologue-gap }
   }
   if show-time {
-    draw-time-signature(time, x, bottom-y: bottom-y, unit: unit, paint: paint)
+    draw-time-signature(
+      time,
+      _inline-time-x(measure-start, key, show-key, reserve-clef: show-clef or reserve-clef, previous-key: previous-key),
+      bottom-y: bottom-y,
+      unit: unit,
+      paint: paint,
+    )
   }
 }
 
@@ -307,7 +336,7 @@
 // Clef and key validation
 // ---------------------------------------------------------------------------
 
-#let _valid-clefs = ("treble", "bass", "alto", "tenor", "percussion")
+#let _valid-clefs = ("treble", "bass", "alto", "tenor", "percussion", "treble-8", "bass-8", "tab")
 
 #let _validate-clef(value, label) = {
   if type(value) != str or value not in _valid-clefs {
@@ -315,7 +344,7 @@
       label,
       "unknown clef",
       value: value,
-      expected: "treble, bass, alto, tenor, or percussion",
+      expected: "treble, bass, alto, tenor, percussion, treble-8, bass-8, or tab",
       fix: "choose one of the supported clef names",
     )
   }

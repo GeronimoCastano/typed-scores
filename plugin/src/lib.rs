@@ -185,6 +185,12 @@ pub enum Clef {
     /// Unpitched percussion: each line and space names an instrument, and
     /// written pitches place noteheads exactly as a treble clef would.
     Percussion,
+    /// Treble clef sounding an octave lower, as guitar music is written.
+    Treble8,
+    /// Bass clef sounding an octave lower, as bass guitar music is written.
+    Bass8,
+    /// Tablature: pitches are fretted on strings rather than placed on lines.
+    Tab,
 }
 
 impl Clef {
@@ -200,14 +206,24 @@ impl Clef {
             Self::Alto => 3 * 7 + Letter::D.diatonic_index(),
             // B2 is the first ledger line below tenor staff.
             Self::Tenor => 2 * 7 + Letter::B.diatonic_index(),
+            // Octave clefs keep their plain clef's lines one octave lower.
+            // A tab staff has no lines for pitches; it borrows the guitar
+            // clef's positions so its layouts stay well formed.
+            Self::Treble8 | Self::Tab => 3 * 7 + Letter::C.diatonic_index(),
+            Self::Bass8 => 7 + Letter::E.diatonic_index(),
         }
     }
 
     fn default_relative_octave(self) -> i32 {
         match self {
             Self::Treble | Self::Alto | Self::Tenor | Self::Percussion => 4,
-            Self::Bass => 3,
+            Self::Bass | Self::Treble8 | Self::Tab => 3,
+            Self::Bass8 => 2,
         }
+    }
+
+    fn is_tab(self) -> bool {
+        self == Self::Tab
     }
 }
 
@@ -218,8 +234,11 @@ pub fn parse_clef(input: &str) -> Result<Clef, String> {
         "alto" => Ok(Clef::Alto),
         "tenor" => Ok(Clef::Tenor),
         "percussion" => Ok(Clef::Percussion),
+        "treble-8" => Ok(Clef::Treble8),
+        "bass-8" => Ok(Clef::Bass8),
+        "tab" => Ok(Clef::Tab),
         other => Err(format!(
-            "unknown clef {other:?}; expected treble, bass, alto, tenor, or percussion"
+            "unknown clef {other:?}; expected treble, bass, alto, tenor, percussion, treble-8, bass-8, or tab"
         )),
     }
 }
@@ -857,7 +876,14 @@ impl StaffContext {
                 "staff switch @{staff_id} needs a score with several staves; declare them with staves: (upper: (clef: \"treble\"), lower: (clef: \"bass\"))"
             ));
         }
-        self.staff_ids
+        if self.home_clef().is_tab() {
+            return Err(format!(
+                "staff switch @{staff_id} cannot leave tab staff {}; tablature frets every note on its own strings",
+                self.staff_id(self.home_staff)
+            ));
+        }
+        let target = self
+            .staff_ids
             .iter()
             .position(|declared| declared == staff_id)
             .ok_or_else(|| {
@@ -870,7 +896,13 @@ impl StaffContext {
                 format!(
                     "staff switch @{staff_id} names an unknown staff; expected one of {declared}"
                 )
-            })
+            })?;
+        if self.clef_of(target).is_tab() {
+            return Err(format!(
+                "staff switch @{staff_id} targets a tab staff; cross-staff notes may only move between notation staves"
+            ));
+        }
+        Ok(target)
     }
 }
 
@@ -1636,7 +1668,38 @@ fn is_ornament(annotation: &str) -> bool {
     is_turn_ornament(annotation) || matches!(annotation, "trill" | "mordent" | "inverted-mordent")
 }
 
+/// Largest string number a tab annotation may name; real tunings stop well
+/// before it, and the tab staff checks the exact count against its tuning.
+const MAX_TAB_STRING: u32 = 12;
+
+/// Parses `string=N` or, for a chord, `string=N,M,...` in written pitch
+/// order. String 1 is the highest-sounding string.
+fn parse_tab_strings(value: &str) -> Result<Vec<u32>, String> {
+    let mut strings = Vec::new();
+    for part in value.split(',') {
+        let string = part
+            .parse::<u32>()
+            .ok()
+            .filter(|string| (1..=MAX_TAB_STRING).contains(string))
+            .ok_or_else(|| {
+                format!(
+                    "string={value} names string {part:?}; expected whole numbers from 1 to {MAX_TAB_STRING}, one per pitch, separated by commas"
+                )
+            })?;
+        if strings.contains(&string) {
+            return Err(format!(
+                "string={value} names string {string} twice; each pitch of a chord needs its own string"
+            ));
+        }
+        strings.push(string);
+    }
+    Ok(strings)
+}
+
 fn validate_annotation(annotation: &str) -> Result<(), String> {
+    if let Some(value) = annotation.strip_prefix("string=") {
+        return parse_tab_strings(value).map(|_| ());
+    }
     const MARKS: &[&str] = &[
         "stacc",
         "staccatissimo",
@@ -1718,6 +1781,7 @@ fn validate_annotation_combinations(annotations: &[String]) -> Result<(), String
         ("dynamic", "dyn="),
         ("arpeggio", "arpeggio"),
         ("single-note tremolo", "tremolo="),
+        ("string", "string="),
     ] {
         let count = annotations
             .iter()
@@ -3268,6 +3332,7 @@ fn layout_event(
                     | "inverted-mordent"
                     | "arpeggio"
             ) || mark.starts_with("f=")
+                || mark.starts_with("string=")
                 || mark.starts_with("turn-f=")
                 || mark.starts_with("arpeggio=")
                 || mark.starts_with("tremolo=")
@@ -3278,6 +3343,20 @@ fn layout_event(
         if let Some(annotation) = invalid_annotation {
             return Err(format!(
                 "annotation {annotation:?} requires a note or chord and cannot be attached to a rest; move it to a pitched event"
+            ));
+        }
+    }
+    if let Some(value) = annotations
+        .iter()
+        .find_map(|mark| mark.strip_prefix("string="))
+    {
+        let string_count = parse_tab_strings(value)?.len();
+        if !is_silent && string_count != pitches.len() {
+            return Err(format!(
+                "string={value} names {string_count} string{} for {} pitch{}; list one string per pitch in written order",
+                if string_count == 1 { "" } else { "s" },
+                pitches.len(),
+                if pitches.len() == 1 { "" } else { "es" },
             ));
         }
     }
@@ -5150,5 +5229,81 @@ mod tests {
             HeadShape::Normal
         );
         assert!(StaffContext::from_request("a\u{1e}a\u{1f}treble\u{1f}\u{1f}x").is_err());
+    }
+
+    #[test]
+    fn octave_clefs_place_sounding_pitches_on_their_plain_clef_lines() {
+        assert_eq!(parse_clef("treble-8"), Ok(Clef::Treble8));
+        assert_eq!(parse_clef("bass-8"), Ok(Clef::Bass8));
+        assert_eq!(parse_clef("tab"), Ok(Clef::Tab));
+        assert!(parse_clef("treble8").unwrap_err().contains("treble-8"));
+        // Guitar music sounds an octave below the written treble staff.
+        assert_eq!(
+            staff_position("E3", Clef::Treble8),
+            staff_position("E4", Clef::Treble)
+        );
+        assert_eq!(
+            staff_position("E1", Clef::Bass8),
+            staff_position("E2", Clef::Bass)
+        );
+        let layouts = layout_sequence_relative_native("e:q g", Clef::Treble8, None).unwrap();
+        assert_eq!(layouts.layouts[0].pitches[0].pitch, parse_pitch("E3").unwrap());
+        let layouts = layout_sequence_relative_native("e:q", Clef::Bass8, None).unwrap();
+        assert_eq!(layouts.layouts[0].pitches[0].pitch, parse_pitch("E2").unwrap());
+    }
+
+    fn guitar_staves(home: &str) -> StaffContext {
+        StaffContext::new(
+            vec![
+                ("guitar".to_string(), Clef::Treble8),
+                ("tab".to_string(), Clef::Tab),
+            ],
+            home,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn tab_staves_reject_staff_switches_in_both_directions() {
+        let layout = |input: &str, home: &str| {
+            layout_staff_sequence_native(input, &guitar_staves(home), Some("2/4"), None, None)
+        };
+        assert!(layout("e3:q @tab g3:q", "guitar")
+            .unwrap_err()
+            .contains("targets a tab staff"));
+        assert!(layout("(e3 @tab g3):h", "guitar")
+            .unwrap_err()
+            .contains("targets a tab staff"));
+        assert!(layout("e3:q @guitar g3:q", "tab")
+            .unwrap_err()
+            .contains("cannot leave tab staff tab"));
+        assert!(layout("e3:q g3:q", "tab").is_ok());
+    }
+
+    #[test]
+    fn string_annotations_name_one_string_per_pitch() {
+        assert!(parse_note("E4:q[string=2]").is_ok());
+        assert!(parse_chord_event("(c3 e3 g3):q[string=5,4,3]").is_ok());
+        assert!(parse_note("E4:q[string=0]")
+            .unwrap_err()
+            .contains("expected whole numbers from 1 to 12"));
+        assert!(parse_note("E4:q[string=13]").is_err());
+        assert!(parse_note("E4:q[string=two]").is_err());
+        assert!(parse_note("E4:q[string=]").is_err());
+        assert!(parse_chord_event("(c3 e3):q[string=4,4]")
+            .unwrap_err()
+            .contains("names string 4 twice"));
+        assert!(parse_note("E4:q[string=1 string=2]")
+            .unwrap_err()
+            .contains("more than one string"));
+        assert!(layout_sequence_native("(c3 e3 g3):q[string=5,4]", Clef::Tab)
+            .unwrap_err()
+            .contains("names 2 strings for 3 pitches"));
+        assert!(layout_sequence_native("c3:q[string=5,4]", Clef::Tab)
+            .unwrap_err()
+            .contains("names 2 strings for 1 pitch;"));
+        assert!(layout_sequence_native("r:q[string=2]", Clef::Tab)
+            .unwrap_err()
+            .contains("cannot be attached to a rest"));
     }
 }

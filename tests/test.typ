@@ -1,4 +1,4 @@
-#import "../src/lib.typ": score, bar, part
+#import "../src/lib.typ": score, bar, part, chord-diagram, guitar-chords
 #import "../examples/chopin-opening.typ": chopin-opening
 #import "../examples/mozart-eine-kleine-nachtmusik.typ": mozart-k525-opening
 #import "../examples/bach-cello-suite-prelude.typ": bach-bwv1007-opening
@@ -2051,3 +2051,218 @@ LilyPond's drum style table pairs each instrument with a position and head.
     ),
   ),
 )
+
+#pagebreak()
+
+= Guitar notation
+
+== Octave clefs
+
+Guitar and bass guitar are written an octave above their sounding pitch.
+`treble-8` and `bass-8` place sounding pitches on their plain clef's lines and
+share its key signatures, so the guitar's open strings E2–E4 sit where treble
+E3–E5 would.
+
+#score(
+  clef: "treble-8",
+  key: "E",
+  time: "4/4",
+  bars: (
+    (notes: "e2:q a2 d3 g3"),
+    (notes: "b3:h (e2 b2 e3 g#3 b3 e4)"),
+  ),
+)
+
+#v(1em)
+
+#score(
+  clef: "bass-8",
+  key: "Bb",
+  time: "4/4",
+  bars: ((notes: "e1:q a1 d2 g2"),),
+)
+
+== Notation with a mirrored tab staff
+
+`source` repeats the guitar staff's music on the tab staff. Frets take the
+lowest position, chords spread across distinct strings, a tied note is not
+restated, and the two staves share a bracket.
+
+#score(
+  staves: (
+    guitar: (clef: "treble-8", label: "Guitar"),
+    tab: (clef: "tab", source: "guitar"),
+  ),
+  key: "G",
+  time: "4/4",
+  bars: (
+    (guitar: "g2:e d3 g3 b3 d4 g3 b3 d4"),
+    (guitar: "(c3 e3 g3 c4 e4):h (d3 a3 d4 f#4):q e4:e~ e4"),
+    (guitar: "e4:q b3 g3:e a3 b3 c4"),
+    (guitar: "(g2 b2 d3 g3 b3 g4):w", barline: (right: "final")),
+  ),
+)
+
+== Tab-only staff
+
+A tab staff without notation prints its time signature. `string=` chooses
+strings for a note or, in written order, for each pitch of a chord. Grace
+notes use smaller numbers, and repeat dots take the second and fourth spaces.
+
+#score(
+  clef: "tab",
+  time: "4/4",
+  width: 44,
+  bars: (
+    (notes: "e2:e g2 a2 b2[string=5] d3 e3 g3[string=4] a3", barline: (left: "repeat-start")),
+    (notes: "grace { a3:s } b3:q (e3 b3 e4):q (e3 g#3 e4)[string=4,3,1] b3:q~", barline: (right: "repeat-end")),
+    (notes: "b3:q r:q (a2 e3 a3 c#4 e4):h", barline: (right: "dashed")),
+    (notes: "(e2 b2 e3 g#3 b3 e4):w", barline: (right: "final")),
+  ),
+)
+
+== Tunings
+
+Presets cover guitar, drop-D, DADGAD, open G, four-string bass, and
+re-entrant ukulele; any array of open-string pitches also works.
+
+#score(
+  staves: (bass: (clef: "tab", tuning: "bass", label: "Bass")),
+  time: "3/4",
+  bars: ((bass: "e1:q a1 d2"), (bass: "g2:q c3 f#2")),
+)
+
+#v(1em)
+
+#score(
+  staves: (
+    uke: (clef: "tab", tuning: "ukulele", label: "Ukulele"),
+  ),
+  time: "4/4",
+  bars: ((uke: "(g4 c4 e4 a4):q (g4 c4 e4 c5) c4:e d4 e4 f4"),),
+)
+
+#v(1em)
+
+#score(
+  staves: (
+    guitar: (clef: "treble-8"),
+    tab: (clef: "tab", source: "guitar", tuning: "drop-d"),
+  ),
+  key: "D",
+  time: "4/4",
+  bars: ((guitar: "(d2 a2 d3):q (d2 a2 d3 a3 d4 f#4) (e2 b2 e3):h"),),
+)
+
+== Voices share the strings
+
+A held bass keeps its string while the melody moves above it, and a tie that
+crosses a line break reappears in parentheses on the new system.
+
+#score(
+  staves: (
+    guitar: (clef: "treble-8"),
+    tab: (clef: "tab", source: "guitar"),
+  ),
+  time: "2/4",
+  bars: ((guitar: ("e4:e d4 c4 b3", "a2:h")),),
+)
+
+#v(1em)
+
+#score(
+  staves: (guitar: (clef: "treble-8"), tab: (clef: "tab", source: "guitar")),
+  time: "4/4",
+  width: 22,
+  bars: (
+    (guitar: "c4:q d4 e4 g4"),
+    (guitar: "a3:q c4 e4 (a3 c4 e4)~"),
+    (guitar: "(a3 c4 e4):h g3:h"),
+  ),
+)
+
+#pagebreak()
+
+== Chord diagrams
+
+Shapes list the lowest string first. One finger across several strings at one
+fret draws a barre; `barre` also sets one explicitly. A shape above fret four
+moves the grid up with a position label.
+
+#grid(
+  columns: 7,
+  column-gutter: 1.2em,
+  align: bottom,
+  chord-diagram("x32010", name: "C", fingers: "032010"),
+  chord-diagram("133211", name: "F", fingers: "134211"),
+  chord-diagram("x 7 9 9 9 7", name: "E/B"),
+  chord-diagram("x46654", name: "C#m", fingers: "013421"),
+  chord-diagram("xx0232", name: "D"),
+  chord-diagram((0, 0, 0, 3), name: "C (uke)"),
+  chord-diagram("x02220", name: "A", barre: 2),
+)
+
+== Diagrams above harmony symbols
+
+`chord-diagrams: guitar-chords` draws the library shape for each harmony
+symbol above the top staff's ink, with the diagrams' tops aligned.
+
+#score(
+  staves: (
+    guitar: (clef: "treble-8"),
+    tab: (clef: "tab", source: "guitar"),
+  ),
+  time: "4/4",
+  chord-diagrams: guitar-chords + ("N.C.": none),
+  bars: (
+    (guitar: "(c3 e3 g3 c4 e4):h (a2 e3 a3 c4 e4)", harmony: "C:h Am:h"),
+    (guitar: "(f2 c3 f3 a3 c4 f4):h (g2 b2 d3 g3 b3 g4)", harmony: "F:h G:h"),
+    (guitar: "(e2 b2 e3 g3 b3 e4):h r:h", harmony: "Em:h N.C.:h"),
+  ),
+)
+
+== The `guitar-chords` library
+
+#{
+  set text(size: 8pt)
+  grid(
+    columns: 10,
+    column-gutter: 0.6em,
+    row-gutter: 1em,
+    align: bottom,
+    ..guitar-chords.pairs().map(((name, shape)) => chord-diagram(
+      shape.frets,
+      fingers: shape.fingers,
+      name: name,
+      scale: 0.6,
+    )),
+  )
+}
+
+#pagebreak()
+#set page(fill: rgb("#202124"))
+#set text(fill: white)
+
+== Dark theme: tab lines and diagrams
+
+Tab lines break around fret numbers instead of masking them, so the numbers
+stay legible on any page color.
+
+#score(
+  staves: (
+    guitar: (clef: "treble-8"),
+    tab: (clef: "tab", source: "guitar"),
+  ),
+  time: "4/4",
+  chord-diagrams: guitar-chords,
+  theme: "dark",
+  bars: (
+    (guitar: "(c3 e3 g3 c4 e4):h (a2 e3 a3 c4 e4)", harmony: "C:h Am:h"),
+    (guitar: "(f2 c3 f3 a3 c4 f4):w", harmony: "F:w", barline: (right: "final")),
+  ),
+)
+
+#chord-diagram("x46654", name: "C#m", fingers: "013421", theme: "dark")
+
+#set page(fill: white)
+#set text(fill: black)

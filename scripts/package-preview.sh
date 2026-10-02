@@ -33,6 +33,8 @@ engraving/markings.typ
 engraving/ottava.typ
 engraving/figured-bass.typ
 engraving/ties-slurs.typ
+engraving/tablature.typ
+engraving/chord-diagrams.typ
 layout/staff-stacking.typ
 layout/system-breaking.typ
 layout/system-rendering.typ

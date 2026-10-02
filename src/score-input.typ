@@ -10,6 +10,8 @@
 #import "engraving/events.typ": _classify-cross-staff-beams
 #import "engraving/ottava.typ": _apply-ottava, _validate-ottava-closed
 #import "engraving/figured-bass.typ": _layout-figures
+#import "engraving/tablature.typ": _assign-tab-frets, _normalize-tuning, _tab-staff-height
+#import "engraving/chord-diagrams.typ": _chord-diagram-extent, _harmony-diagram, _score-diagram-scale
 
 // Public score-shape normalization and eager musical preparation.
 
@@ -179,8 +181,22 @@
   entries.join(" ")
 }
 
+// A tab staff carries its tuning, top string first; notation staves carry none.
+#let _staff-tab(clef, tuning, label) = {
+  if clef == "tab" {
+    (tuning: _normalize-tuning(if tuning == none { "guitar" } else { tuning }, label))
+  } else {
+    none
+  }
+}
+
+#let _staff-height(staff) = {
+  if staff.tab == none { 4 } else { _tab-staff-height(staff.tab.tuning.len()) }
+}
+
 #let _normalize-staves(staves, clef, heads) = {
   if staves == none {
+    let clef = _validate-clef(clef, "score clef")
     return ((
       id: "staff",
       field: "notes",
@@ -188,6 +204,8 @@
       heads: _normalize-drum-map(heads, "score heads"),
       label: none,
       short-label: none,
+      tab: _staff-tab(clef, none, "score clef"),
+      source: none,
     ),)
   }
   if heads != none {
@@ -248,12 +266,12 @@
       )
     }
     for field in staff-config.keys() {
-      if field not in ("clef", "heads", "label", "short-label") {
+      if field not in ("clef", "heads", "label", "short-label", "tuning", "source") {
         _score-error(
           "staff " + staff-id,
           "staff configuration has unknown field",
           value: field,
-          expected: "clef, heads, label, or short-label",
+          expected: "clef, heads, label, short-label, or, for a tab staff, tuning and source",
           fix: "remove or rename the unknown field",
         )
       }
@@ -285,6 +303,20 @@
         fix: "provide visible abbreviated text or remove short-label",
       )
     }
+    let staff-clef = _validate-clef(staff-clef, "staff " + staff-id + " clef")
+    let tuning = staff-config.at("tuning", default: none)
+    let source = staff-config.at("source", default: none)
+    for (field, value) in (("tuning", tuning), ("source", source)) {
+      if value != none and staff-clef != "tab" {
+        _score-error(
+          "staff " + staff-id + " " + field,
+          field + " applies only to a tab staff",
+          value: value,
+          expected: "clef: \"tab\" on a staff with " + field,
+          fix: "set clef: \"tab\" or remove " + field,
+        )
+      }
+    }
     normalized-staves.push((
       id: staff-id,
       field: staff-id,
@@ -295,7 +327,33 @@
       ),
       label: staff-label,
       short-label: short-label,
+      tab: _staff-tab(staff-clef, tuning, "staff " + staff-id + " tuning"),
+      source: source,
     ))
+  }
+  // A tab staff may repeat the music of a notation staff instead of
+  // restating it in every bar.
+  for staff in normalized-staves {
+    if staff.source == none { continue }
+    let source = normalized-staves.find(other => other.id == staff.source)
+    if type(staff.source) != str or source == none {
+      _score-error(
+        "staff " + staff.id + " source",
+        "source must name another declared staff",
+        value: staff.source,
+        expected: normalized-staves.filter(other => other.tab == none).map(other => repr(other.id)).join(", "),
+        fix: "name the notation staff whose notes this tab repeats",
+      )
+    }
+    if source.tab != none {
+      _score-error(
+        "staff " + staff.id + " source",
+        "source names a tab staff",
+        value: staff.source,
+        expected: "a notation staff",
+        fix: "point source at the notation staff that holds the notes",
+      )
+    }
   }
   normalized-staves
 }
@@ -321,6 +379,21 @@
     current-clefs.insert(staff.id, staff.clef)
   }
   let voice-counts = (:)
+  // Tablature cannot become notation or back, so its clef never changes.
+  let checked-clef-change(staff-id, new-clef, label) = {
+    let staff = staff-specs.find(staff => staff.id == staff-id)
+    let new-clef = _validate-clef(new-clef, label)
+    if (staff.tab != none) != (new-clef == "tab") {
+      _score-error(
+        label,
+        if staff.tab != none { "a tab staff cannot change clef" } else { "a notation staff cannot change into a tab staff" },
+        value: new-clef,
+        expected: "a clef change between notation clefs",
+        fix: "declare a separate staff with clef: \"tab\" for tablature",
+      )
+    }
+    new-clef
+  }
   for measure-index in range(bars.len()) {
     let measure-input = bars.at(measure-index)
     let measure-label = "bar " + str(measure-index + 1)
@@ -385,7 +458,7 @@
         }
         current-clefs.insert(
           staff-specs.first().id,
-          _validate-clef(clef-change, measure-label + " clef"),
+          checked-clef-change(staff-specs.first().id, clef-change, measure-label + " clef"),
         )
       } else if type(clef-change) == dictionary {
         if clef-change.len() == 0 {
@@ -408,10 +481,7 @@
           }
           current-clefs.insert(
             staff-id,
-            _validate-clef(
-              clef-change.at(staff-id),
-              measure-label + " clef " + staff-id,
-            ),
+            checked-clef-change(staff-id, clef-change.at(staff-id), measure-label + " clef " + staff-id),
           )
         }
       } else {
@@ -427,6 +497,38 @@
     let measure-voices = ()
     for (staff-index, staff) in staff-specs.enumerate() {
       let notes = measure-input.at(staff.field, default: none)
+      if staff.source != none {
+        if notes != none {
+          _score-error(
+            measure-label + " " + staff.field,
+            "tab staff " + staff.id + " repeats staff " + staff.source + " and takes no notes of its own",
+            value: notes,
+            expected: "no " + staff.field + " field in the bar",
+            fix: "remove the " + staff.field + " field, or remove source from the staff to write its notes directly",
+          )
+        }
+        let source-count = measure-voices.filter(voice => voice.staff-id == staff.source).len()
+        let voice-count = if source-count > 0 { source-count } else {
+          let source-notes = measure-input.at(staff.source, default: none)
+          if type(source-notes) == array { source-notes.len() } else { 1 }
+        }
+        for voice-index in range(voice-count) {
+          measure-voices.push((
+            id: staff.id + ".voice" + str(voice-index + 1),
+            staff-id: staff.id,
+            staff-index: staff-index,
+            layer-index: voice-index,
+            layer-count: voice-count,
+            clef: current-clefs.at(staff.id),
+            label: staff.label,
+            short-label: staff.short-label,
+            tab: staff.tab,
+            source: staff.source + ".voice" + str(voice-index + 1),
+            notes: none,
+          ))
+        }
+        continue
+      }
       if notes == none {
         _score-error(
           measure-label,
@@ -477,6 +579,8 @@
           clef: current-clefs.at(staff.id),
           label: staff.label,
           short-label: staff.short-label,
+          tab: staff.tab,
+          source: none,
           notes: _required-nonempty-string(
             voice-sequence,
             measure-label + " " + staff.field + " voice " + str(voice-index + 1),
@@ -517,6 +621,8 @@
         measure-index + 1,
       ),
       staff-count: staff-specs.len(),
+      staff-heights: staff-specs.map(_staff-height),
+      staff-tabs: staff-specs.map(staff => staff.tab),
       staff-clefs: staff-specs.map(staff => (staff.id, current-clefs.at(staff.id))),
       staff-heads: staff-specs.map(staff => staff.heads),
       voices: measure-voices,
@@ -539,6 +645,16 @@
   else { none }
 }
 
+// A tab staff that repeats a notation staff reads the same events, drawn on
+// its own staff. Stems and cross-staff beams belong to the notation.
+#let _mirror-layouts(layouts, staff-index) = {
+  layouts.map(layout => layout + (
+    staff_index: staff-index,
+    pitches: layout.pitches.map(positioned-pitch => positioned-pitch + (staff_index: staff-index)),
+    beam-crosses-staves: false,
+  ))
+}
+
 // Parse, validate, and pre-compute shared positions for every measure.
 #let _prepare-score-measures(
   staves,
@@ -549,6 +665,7 @@
   tempo,
   note-spacing: 3.1,
   beams: false,
+  chord-diagrams: none,
   lyric-size: 0.9,
   lyric-font: none,
   transposition: none,
@@ -565,6 +682,7 @@
   let duration-anchors = (:)
   let ottava-states = (:)
   let lyric-states = (:)
+  let tab-carry = (:)
   for measure-index in range(normalized-measures.len()) {
     let normalized-measure = normalized-measures.at(measure-index)
     let validation-time = normalized-measure.at("partial", default: none)
@@ -573,6 +691,11 @@
     }
     let prepared-voices = ()
     for voice in normalized-measure.voices {
+      if voice.source != none {
+        // Filled in below from the source staff's parsed voice.
+        prepared-voices.push(voice)
+        continue
+      }
       let voice-location = (
         "bar " + str(measure-index + 1)
           + ", staff " + voice.staff-id
@@ -629,16 +752,46 @@
           or voice.clef != previous-clefs.at(voice.staff-id, default: none),
         label: voice.label,
         short-label: voice.short-label,
+        tab: voice.tab,
+        source: none,
         notes: voice.notes,
         layouts: event-layouts,
       ))
+    }
+    prepared-voices = prepared-voices.map(voice => {
+      if voice.source == none { return voice }
+      let source = prepared-voices.find(other => other.id == voice.source)
+      voice + (
+        show-clef: measure-index == 0,
+        notes: source.notes,
+        layouts: _mirror-layouts(source.layouts, voice.staff-index),
+      )
+    })
+    let bar-location = "bar " + str(measure-index + 1)
+    for (staff-index, tab) in normalized-measure.staff-tabs.enumerate() {
+      if tab == none { continue }
+      let staff-voices = prepared-voices.filter(voice => voice.staff-index == staff-index)
+      let fretted = _assign-tab-frets(staff-voices, tab.tuning, tab-carry, bar-location)
+      tab-carry = fretted.carried
+      prepared-voices = prepared-voices.map(voice => {
+        let replacement = fretted.voices.find(other => other.id == voice.id)
+        if replacement == none { voice } else { replacement }
+      })
     }
     let harmony = _layout-harmony(
       normalized-measure.harmony,
       validation-time,
       measure-index + 1,
       transposition: normalized-measure.transposition,
-    )
+    ).map(item => {
+      let diagram = _harmony-diagram(item.symbol, chord-diagrams, measure-index + 1)
+      item + (
+        diagram: diagram,
+        diagram-width: if diagram == none { 0 } else {
+          _chord-diagram-extent(diagram, _score-diagram-scale).width
+        },
+      )
+    })
     let figures = _layout-figures(
       normalized-measure.figures,
       validation-time,
@@ -677,6 +830,8 @@
       rehearsal: normalized-measure.rehearsal,
       navigation: normalized-measure.navigation,
       staff-count: normalized-measure.staff-count,
+      staff-heights: normalized-measure.staff-heights,
+      staff-tabs: normalized-measure.staff-tabs,
       voices: prepared-voices,
       positions: spacing.positions,
       content-width: spacing.width,
@@ -692,7 +847,7 @@
   }
   for voice in normalized-measures.last().voices {
     _validate-ottava-closed(
-      ottava-states.at(voice.id),
+      ottava-states.at(voice.id, default: none),
       "staff " + voice.staff-id + ", voice " + str(voice.layer-index + 1),
     )
   }

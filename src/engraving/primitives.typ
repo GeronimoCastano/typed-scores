@@ -72,6 +72,10 @@
     "augmentation-dot": (sw: (0.0, -0.2), ne: (0.4, 0.2)),
     "treble-clef": (sw: (0.0, -2.632), ne: (2.684, 4.392)),
     "bass-clef": (sw: (-0.02, -2.54), ne: (2.736, 1.048)),
+    "treble-8-clef": (sw: (0.0, -3.512), ne: (2.684, 4.392)),
+    "bass-8-clef": (sw: (-0.02, -2.976), ne: (2.736, 1.048)),
+    "tab-clef": (sw: (-0.012, -2.992), ne: (1.632, 3.056)),
+    "tab-clef-small": (sw: (-0.012, -2.032), ne: (1.088, 2.016)),
     "alto-clef": (sw: (0.0, -2.024), ne: (2.796, 2.024)),
     "tenor-clef": (sw: (0.0, -2.024), ne: (2.796, 2.024)),
     "percussion-clef": (sw: (0.0, -1.0), ne: (1.528, 1.0)),
@@ -200,11 +204,12 @@
   x: 0,
   bottom-y: 0,
   line-gap: 1.0,
+  line-count: 5,
   unit: 8pt,
   paint: black,
 ) = {
   import cetz.draw: *
-  for staff-line-index in range(5) {
+  for staff-line-index in range(line-count) {
     let staff-line-y = bottom-y + staff-line-index * line-gap
     line((x, staff-line-y), (x + width, staff-line-y), stroke: staff-line-thickness * unit + paint)
   }

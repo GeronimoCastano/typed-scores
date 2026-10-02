@@ -129,7 +129,12 @@
 
 // Space needed to the left of the notehead center (accidental columns,
 // left-displaced cluster heads, wider whole-note heads).
+// Fret numbers on a tab staff take about a notehead's width and carry no
+// accidentals, dots, flags, or seconds offsets.
+#let _is-tab-layout(layout) = layout.at("tab", default: false)
+
 #let _left-pad(layout, key) = {
+  if _is-tab-layout(layout) { return 0 }
   let pad = _head-half-width(layout) - notehead-half-width
   if not layout.rest and layout.pitches.len() > 1 {
     let offsets = _cluster-offsets(layout, _stem-direction(layout.pitches.map(p => p.staff_position)))
@@ -141,6 +146,7 @@
 
 // Space the event's own ink needs to the right of the notehead center.
 #let _right-extent(layout, beamed) = {
+  if _is-tab-layout(layout) { return notehead-half-width }
   let x = _head-half-width(layout)
   if not layout.rest and layout.pitches.len() > 1 {
     let offsets = _cluster-offsets(layout, _stem-direction(layout.pitches.map(p => p.staff_position)))
@@ -193,6 +199,13 @@
 // musical spacing still supplies the final position; this only adds the
 // text's required clearance.
 #let _harmony-width(symbol) = 0.75 * symbol.clusters().len() + 1.2
+
+// A chord diagram under the symbol widens the column it needs.
+#let _harmony-item-width(item) = {
+  let diagram-width = item.at("diagram-width", default: 0)
+  let text-width = _harmony-width(item.symbol)
+  if diagram-width > 0 { calc.max(text-width, diagram-width + 0.6) } else { text-width }
+}
 
 #let _measure-positions(
   voices-layouts,
@@ -247,7 +260,7 @@
     // before the first note column and keep it clear of the system material.
     first-onset-x = calc.max(
       first-onset-x,
-      _harmony-width(harmony.first().symbol) / 2 + 0.35,
+      _harmony-item-width(harmony.first()) / 2 + 0.35,
     )
   }
   shortest-duration-value = calc.clamp(shortest-duration-value, 1 / 32, 1 / 4)
@@ -297,9 +310,9 @@
   }
   for harmony-index in range(harmony.len()) {
     let layout = harmony.at(harmony-index)
-    let width = _harmony-width(layout.symbol)
+    let width = _harmony-item-width(layout)
     let distance = if harmony-index + 1 < harmony.len() {
-      let next-width = _harmony-width(harmony.at(harmony-index + 1).symbol)
+      let next-width = _harmony-item-width(harmony.at(harmony-index + 1))
       // Both symbols are centered on their onset columns. Preserve the
       // existing rhythmic clearance and add enough room for their extents.
       calc.max(width, (width + next-width) / 2 + 0.35)
@@ -404,7 +417,10 @@
 }
 
 #let _polyphony-shift(layout, voice, all-voices) = {
-  if voice == none or voice.layer-count == 1 or voice.layer-index == 0 or layout.at("grace", default: false) {
+  if (
+    voice == none or voice.layer-count == 1 or voice.layer-index == 0
+      or layout.at("grace", default: false) or _is-tab-layout(layout)
+  ) {
     return 0
   }
   for sibling in all-voices {
