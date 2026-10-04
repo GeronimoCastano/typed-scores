@@ -9,7 +9,7 @@ strings are parsed by a Rust/WASM plugin; Typst and CeTZ lay out the resulting
 score with bundled Bravura glyphs.
 
 ```typst
-#import "@preview/typed-scores:0.5.1": *
+#import "@preview/typed-scores:0.6.0": *
 ```
 
 ## Quick start
@@ -541,7 +541,7 @@ input. Pass the file's contents, since a package cannot open files in your
 project:
 
 ```typst
-#import "@preview/typed-scores:0.5.1": import-score, read-score
+#import "@preview/typed-scores:0.6.0": import-score, read-score
 
 #import-score(read("song.mxl", encoding: none))
 #import-score(read("tunes.abc"), tune: 12, scale: 0.8, theme: "dark")

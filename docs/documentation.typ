@@ -11,7 +11,7 @@
 #import "../examples/beethoven-ode-to-joy-alto-sax.typ": ode-to-joy-alto-sax
 #import "../examples/beethoven-moonlight-coda.typ": moonlight-coda
 
-#let version = "0.5.1"
+#let version = "0.6.0"
 #let accent = rgb("#7A2141")
 #let accent-soft = rgb("#F7E8EE")
 
@@ -210,7 +210,7 @@ standalone fretboard diagram, with the #c("guitar-chords") shape library. #c("pa
 Import the package from the Typst preview namespace:
 
 ```typ
-#import "@preview/typed-scores:0.5.1": *
+#import "@preview/typed-scores:0.6.0": *
 ```
 
 The examples in this guide use lowercase pitch letters for fast entry.
@@ -1493,7 +1493,7 @@ Pass the file's contents rather than its path, because a package cannot open
 files in your project; reading them as bytes works for every format:
 
 ```typ
-#import "@preview/typed-scores:0.5.1": import-score, read-score
+#import "@preview/typed-scores:0.6.0": import-score, read-score
 
 #import-score(read("song.mxl", encoding: none))
 #import-score(read("tunes.abc"), tune: 12, scale: 0.8)
