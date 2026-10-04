@@ -416,7 +416,8 @@ the active clef is printed full-size when a new system begins.
 This excerpt is measures 73–75 of Liszt's *Liebestraum No. 3*, in 6/4. The
 left-hand staff returns to bass clef at each barline, then switches to treble
 for the two chords. The right-hand accompaniment beams five eighth notes at a
-time. The public-domain MusicXML transcription is available in
+time. The inline clef leaves room for the accidentals on its following chord.
+The public-domain MusicXML transcription is available in
 #link("https://github.com/kevinkorfmann/musicxml_library/blob/master/scores/Liebestraum_No._3_in_A_Major.mxl")[the MuseTrainer score library].
 
 #demo[

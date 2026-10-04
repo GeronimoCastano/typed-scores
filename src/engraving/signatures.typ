@@ -334,9 +334,9 @@
   }
 }
 
-#let _draw-event-clef(layout, x, bottom-y: 0, unit: 8pt, paint: black) = {
+#let _draw-event-clef(layout, x, event-prefix-width: 0, bottom-y: 0, unit: 8pt, paint: black) = {
   if layout.at("clef_change_before", default: false) {
-    let clef-x = x - _inline-clef-change-prefix-width
+    let clef-x = x - _inline-clef-change-prefix-width - event-prefix-width
     draw-clef(
       layout.clef,
       clef-x,

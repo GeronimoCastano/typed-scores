@@ -2372,7 +2372,8 @@ staves in the original ensemble.
 
 Liszt's *Liebestraum No. 3* returns the left-hand staff to bass clef at each
 barline, then switches to treble for the two chords. The right-hand accompaniment
-uses beamed groups of five eighth notes.
+uses beamed groups of five eighth notes. The last measure places a natural and
+flat before a chord after the clef change to check their spacing.
 
 #score(
   staves: (
