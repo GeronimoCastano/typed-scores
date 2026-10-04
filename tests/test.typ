@@ -2371,7 +2371,8 @@ staves in the original ensemble.
 = Mid-bar clef changes
 
 Liszt's *Liebestraum No. 3* returns the left-hand staff to bass clef at each
-barline, then switches to treble for the two chords.
+barline, then switches to treble for the two chords. The right-hand accompaniment
+uses beamed groups of five eighth notes.
 
 #score(
   staves: (
@@ -2387,7 +2388,7 @@ barline, then switches to treble for the two chords.
       tempo: "poco a poco ritenuto",
       upper: (
         "r:h. bb4:h.",
-        "r:e bb3:e fb4:e ab4:e fb4:e bb3:e r:e bb3:e fb4:e g4:e fb4:e bb3:e",
+        "r:e bb3:e - fb4:e - ab4:e - fb4:e - bb3:e r:e bb3:e - fb4:e - g4:e - fb4:e - bb3:e",
       ),
       lower: "(db2 fb3):q r:q clef treble (fb5 ab5 bb5):q[s1(] (fb5 g5 bb5):q[s1)] r:q r:q",
     ),
@@ -2395,7 +2396,7 @@ barline, then switches to treble for the two chords.
       clef: (lower: "bass"),
       upper: (
         "eb5:w.",
-        "r:e eb4:e gb4:e bb4:e gb4:e eb4:e r:e eb4:e gb4:e a4:e gb4:e eb4:e",
+        "r:e eb4:e - gb4:e - bb4:e - gb4:e - eb4:e r:e eb4:e - gb4:e - a4:e - gb4:e - eb4:e",
       ),
       lower: "(c2 eb3):q[arpeggio] r:q clef treble (gb5 bb5 eb6):q[s1(] (gb5 a5 eb6):q[s1)] r:q r:q",
     ),
@@ -2403,7 +2404,7 @@ barline, then switches to treble for the two chords.
       clef: (lower: "bass"),
       upper: (
         "r:h. ab4:h.",
-        "r:e ab3:e d4:e gb4:e d4:e ab3:e r:e ab3:e d4:e f4:e d4:e ab3:e",
+        "r:e ab3:e - d4:e - gb4:e - d4:e - ab3:e r:e ab3:e - d4:e - f4:e - d4:e - ab3:e",
       ),
       lower: "(cb2 d3):q r:q clef treble (d5 gb5 ab5):q[s1(] (d5 f5 ab5):q[s1)] r:q r:q",
       barline: (right: "final"),

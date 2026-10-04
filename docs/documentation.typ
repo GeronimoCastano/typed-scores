@@ -415,7 +415,8 @@ the active clef is printed full-size when a new system begins.
 
 This excerpt is measures 73–75 of Liszt's *Liebestraum No. 3*, in 6/4. The
 left-hand staff returns to bass clef at each barline, then switches to treble
-for the two chords. The public-domain MusicXML transcription is available in
+for the two chords. The right-hand accompaniment beams five eighth notes at a
+time. The public-domain MusicXML transcription is available in
 #link("https://github.com/kevinkorfmann/musicxml_library/blob/master/scores/Liebestraum_No._3_in_A_Major.mxl")[the MuseTrainer score library].
 
 #demo[
@@ -427,17 +428,17 @@ for the two chords. The public-domain MusicXML transcription is available in
   bars: (
     (
       tempo: "poco a poco ritenuto",
-      upper: ("r:h. bb4:h.", "r:e bb3:e fb4:e ab4:e fb4:e bb3:e r:e bb3:e fb4:e g4:e fb4:e bb3:e"),
+      upper: ("r:h. bb4:h.", "r:e bb3:e - fb4:e - ab4:e - fb4:e - bb3:e r:e bb3:e - fb4:e - g4:e - fb4:e - bb3:e"),
       lower: "(db2 fb3):q r:q clef treble (fb5 ab5 bb5):q[s1(] (fb5 g5 bb5):q[s1)] r:q r:q",
     ),
     (
       clef: (lower: "bass"),
-      upper: ("eb5:w.", "r:e eb4:e gb4:e bb4:e gb4:e eb4:e r:e eb4:e gb4:e a4:e gb4:e eb4:e"),
+      upper: ("eb5:w.", "r:e eb4:e - gb4:e - bb4:e - gb4:e - eb4:e r:e eb4:e - gb4:e - a4:e - gb4:e - eb4:e"),
       lower: "(c2 eb3):q[arpeggio] r:q clef treble (gb5 bb5 eb6):q[s1(] (gb5 a5 eb6):q[s1)] r:q r:q",
     ),
     (
       clef: (lower: "bass"),
-      upper: ("r:h. ab4:h.", "r:e ab3:e d4:e gb4:e d4:e ab3:e r:e ab3:e d4:e f4:e d4:e ab3:e"),
+      upper: ("r:h. ab4:h.", "r:e ab3:e - d4:e - gb4:e - d4:e - ab3:e r:e ab3:e - d4:e - f4:e - d4:e - ab3:e"),
       lower: "(cb2 d3):q r:q clef treble (d5 gb5 ab5):q[s1(] (d5 f5 ab5):q[s1)] r:q r:q",
       barline: (right: "final"),
     ),
