@@ -179,6 +179,7 @@ impl Transposition {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum Clef {
     Treble,
     Bass,
@@ -188,14 +189,29 @@ pub enum Clef {
     /// written pitches place noteheads exactly as a treble clef would.
     Percussion,
     /// Treble clef sounding an octave lower, as guitar music is written.
+    #[serde(rename = "treble-8")]
     Treble8,
     /// Bass clef sounding an octave lower, as bass guitar music is written.
+    #[serde(rename = "bass-8")]
     Bass8,
     /// Tablature: pitches are fretted on strings rather than placed on lines.
     Tab,
 }
 
 impl Clef {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Treble => "treble",
+            Self::Bass => "bass",
+            Self::Alto => "alto",
+            Self::Tenor => "tenor",
+            Self::Percussion => "percussion",
+            Self::Treble8 => "treble-8",
+            Self::Bass8 => "bass-8",
+            Self::Tab => "tab",
+        }
+    }
+
     fn position_zero_diatonic_index(self) -> i32 {
         match self {
             // C4 is the first ledger line below treble staff. Percussion
@@ -924,20 +940,32 @@ impl StaffContext {
 /// staff, and an `@staff` switch holds until the next switch.
 struct StaffCursor<'a> {
     context: &'a StaffContext,
+    active_clefs: Vec<Clef>,
     display_staff: usize,
     switch_awaiting_event: Option<String>,
+    clef_change_awaiting_event: bool,
+    has_seen_event: bool,
 }
 
 impl<'a> StaffCursor<'a> {
     fn new(context: &'a StaffContext) -> Self {
         Self {
             context,
+            active_clefs: context.clefs.clone(),
             display_staff: context.home_staff,
             switch_awaiting_event: None,
+            clef_change_awaiting_event: false,
+            has_seen_event: false,
         }
     }
 
     fn switch_to(&mut self, staff_id: &str) -> Result<(), String> {
+        if self.clef_change_awaiting_event {
+            return Err(
+                "an inline clef change must be followed by an event on the home staff; place a home-staff event before switching staves"
+                    .to_string(),
+            );
+        }
         if let Some(previous) = &self.switch_awaiting_event {
             return Err(format!(
                 "staff switches @{previous} and @{staff_id} have no event between them; keep only the switch you intend"
@@ -954,9 +982,69 @@ impl<'a> StaffCursor<'a> {
         Ok(())
     }
 
-    fn staff_for_next_event(&mut self) -> usize {
+    fn staff_for_next_event(&mut self) -> EventStaffState {
         self.switch_awaiting_event = None;
-        self.display_staff
+        self.has_seen_event = true;
+        EventStaffState {
+            display_staff: self.display_staff,
+            clefs: self.active_clefs.clone(),
+            clef_change_before: core::mem::take(&mut self.clef_change_awaiting_event),
+        }
+    }
+
+    fn clef_of(&self, staff: usize) -> Clef {
+        self.active_clefs[staff]
+    }
+
+    fn home_clef(&self) -> Clef {
+        self.active_clefs[self.context.home_staff]
+    }
+
+    fn has_pending_clef_change(&self) -> bool {
+        self.clef_change_awaiting_event
+    }
+
+    fn change_home_clef(&mut self, clef: Clef) -> Result<(), String> {
+        if !self.has_seen_event {
+            return Err(
+                "a clef change at the start of a bar belongs in the bar's clef field; place inline clef changes after an event"
+                    .to_string(),
+            );
+        }
+        if self.display_staff != self.context.home_staff {
+            return Err(format!(
+                "inline clef changes can only change the voice's home staff {}; place the clef command after returning to that staff",
+                self.context.staff_id(self.context.home_staff)
+            ));
+        }
+        if self.clef_change_awaiting_event {
+            return Err(
+                "clef changes cannot be repeated before an event; keep only the last intended change"
+                    .to_string(),
+            );
+        }
+        let current_clef = self.clef_of(self.context.home_staff);
+        if clef == Clef::Tab || current_clef == Clef::Tab {
+            return Err(
+                "a tablature staff cannot change clef; declare a separate notation staff"
+                    .to_string(),
+            );
+        }
+        if clef == Clef::Percussion || current_clef == Clef::Percussion {
+            return Err(
+                "inline clef changes require pitched notation clefs; use the bar's clef field to switch to or from percussion"
+                    .to_string(),
+            );
+        }
+        if clef == current_clef {
+            return Err(format!(
+                "clef change to {} does not change the active clef; remove it",
+                clef.name()
+            ));
+        }
+        self.active_clefs[self.context.home_staff] = clef;
+        self.clef_change_awaiting_event = true;
+        Ok(())
     }
 
     fn reject_switch_inside(&self, group: &str) -> Result<(), String> {
@@ -965,20 +1053,46 @@ impl<'a> StaffCursor<'a> {
         ))
     }
 
-    fn finish(&self) -> Result<(), String> {
-        match &self.switch_awaiting_event {
-            Some(staff_id) => Err(format!(
-                "staff switch @{staff_id} must be followed by a note, chord, rest, or spacer"
-            )),
-            None => Ok(()),
-        }
+    fn reject_clef_change_inside(&self, group: &str) -> Result<(), String> {
+        Err(format!(
+            "clef changes are not supported inside {group}; place the clef command before the group"
+        ))
     }
+
+    fn finish(&self) -> Result<(), String> {
+        if let Some(staff_id) = &self.switch_awaiting_event {
+            return Err(format!(
+                "staff switch @{staff_id} must be followed by a note, chord, rest, or spacer"
+            ));
+        }
+        if self.clef_change_awaiting_event {
+            return Err(
+                "clef change must be followed by a note, chord, or rest in the same bar"
+                    .to_string(),
+            );
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct EventStaffState {
+    display_staff: usize,
+    clefs: Vec<Clef>,
+    clef_change_before: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ParsedSequenceEvent {
+    event: ParsedEvent,
+    staff: EventStaffState,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Token {
     Event(String),
     StaffSwitch(String),
+    ClefChange(Clef),
     Grace {
         style: String,
         contents: Vec<Token>,
@@ -1030,6 +1144,8 @@ struct GraceMeta {
 struct SequencedEvent {
     event: ParsedEvent,
     display_staff: usize,
+    staff_clefs: Vec<Clef>,
+    clef_change_before: bool,
     beam_directive: BeamDirective,
     duration_scale: Rational,
     grace: Option<GraceMeta>,
@@ -1205,6 +1321,7 @@ fn parse_event_relative(
     duration_anchor: &mut Option<Duration>,
     staves: &StaffContext,
     display_staff: usize,
+    home_clef: Clef,
 ) -> Result<ParsedEvent, String> {
     let input = input.trim();
     if input.is_empty() {
@@ -1225,6 +1342,7 @@ fn parse_event_relative(
             duration_anchor,
             staves,
             display_staff,
+            home_clef,
         )?;
         if let ParsedEvent::Chord { notes, .. } = &chord_event {
             *pitch_anchor = notes.first().map(|note| note.pitch.clone());
@@ -1239,7 +1357,7 @@ fn parse_event_relative(
         let pitch = resolve_pitch(
             parse_pitch_spec(pitch_part)?,
             pitch_anchor.as_ref(),
-            staves.home_clef(),
+            home_clef,
         );
         let (duration, annotations) =
             parse_duration_with_state(tail, duration_is_explicit, duration_anchor, input)?;
@@ -1260,17 +1378,19 @@ fn parse_sequence_event_relative(
     pitch_anchor: &mut Option<Pitch>,
     duration_anchor: &mut Option<Duration>,
     staves: &mut StaffCursor,
-) -> Result<ParsedEvent, String> {
-    let display_staff = staves.staff_for_next_event();
-    parse_event_relative(
+) -> Result<ParsedSequenceEvent, String> {
+    let staff = staves.staff_for_next_event();
+    let event = parse_event_relative(
         event_text,
         pitch_anchor,
         duration_anchor,
         staves.context,
-        display_staff,
+        staff.display_staff,
+        staves.home_clef(),
     )
     .map(apply_event_head_shape)
-    .map_err(|error| format!("invalid event {event_text:?}: {error}"))
+    .map_err(|error| format!("invalid event {event_text:?}: {error}"))?;
+    Ok(ParsedSequenceEvent { event, staff })
 }
 
 fn split_note_pitch_and_tail(input: &str) -> Result<(&str, &str, bool), String> {
@@ -1352,6 +1472,7 @@ fn parse_chord_event_relative(
     duration_anchor: &mut Option<Duration>,
     staves: &StaffContext,
     display_staff: usize,
+    home_clef: Clef,
 ) -> Result<ParsedEvent, String> {
     let closing_parenthesis = chord_closing_parenthesis(input)
         .ok_or_else(|| format!("missing ')' in chord event {input:?}"))?;
@@ -1394,7 +1515,7 @@ fn parse_chord_event_relative(
         let pitch = resolve_pitch(
             parse_pitch_spec(pitch_text)?,
             chord_pitch_anchor.as_ref(),
-            staves.home_clef(),
+            home_clef,
         );
         chord_pitch_anchor = Some(pitch.clone());
         notes.push(Note {
@@ -1887,14 +2008,17 @@ fn parse_tuplet_tokens(
     for token in tokens {
         match token {
             Token::Event(event_text) => {
+                let parsed = parse_sequence_event_relative(
+                    event_text,
+                    pitch_anchor,
+                    duration_anchor,
+                    staves,
+                )?;
                 events.push(SequencedEvent {
-                    event: parse_sequence_event_relative(
-                        event_text,
-                        pitch_anchor,
-                        duration_anchor,
-                        staves,
-                    )?,
-                    display_staff: staves.display_staff,
+                    event: parsed.event,
+                    display_staff: parsed.staff.display_staff,
+                    staff_clefs: parsed.staff.clefs,
+                    clef_change_before: parsed.staff.clef_change_before,
                     beam_directive: pending_beam,
                     duration_scale: scale,
                     grace: None,
@@ -1956,6 +2080,7 @@ fn parse_tuplet_tokens(
             }
             Token::BeamJoin => set_pending_beam_directive(&mut pending_beam, BeamDirective::Join)?,
             Token::StaffSwitch(staff_id) => staves.switch_to(&staff_id)?,
+            Token::ClefChange(clef) => staves.change_home_clef(*clef)?,
             Token::Tie => {
                 let Some(previous) = events.last_mut() else {
                     return Err("tie marker '~' cannot appear before a note or chord".to_string());
@@ -1998,14 +2123,17 @@ fn parse_cue_tokens(
     for token in tokens {
         match token {
             Token::Event(event_text) => {
+                let parsed = parse_sequence_event_relative(
+                    event_text,
+                    pitch_anchor,
+                    duration_anchor,
+                    staves,
+                )?;
                 events.push(SequencedEvent {
-                    event: parse_sequence_event_relative(
-                        event_text,
-                        pitch_anchor,
-                        duration_anchor,
-                        staves,
-                    )?,
-                    display_staff: staves.display_staff,
+                    event: parsed.event,
+                    display_staff: parsed.staff.display_staff,
+                    staff_clefs: parsed.staff.clefs,
+                    clef_change_before: parsed.staff.clef_change_before,
                     beam_directive: pending_beam,
                     duration_scale: scale,
                     grace: None,
@@ -2058,6 +2186,7 @@ fn parse_cue_tokens(
             }
             Token::BeamJoin => set_pending_beam_directive(&mut pending_beam, BeamDirective::Join)?,
             Token::StaffSwitch(staff_id) => staves.switch_to(&staff_id)?,
+            Token::ClefChange(clef) => staves.change_home_clef(*clef)?,
             Token::Tie => {
                 let Some(previous) = events.last_mut() else {
                     return Err("tie marker '~' cannot appear before a note or chord".to_string());
@@ -2095,14 +2224,17 @@ fn parse_grace_tokens(
     for token in tokens {
         match token {
             Token::Event(event_text) => {
+                let parsed = parse_sequence_event_relative(
+                    event_text,
+                    pitch_anchor,
+                    duration_anchor,
+                    staves,
+                )?;
                 grace_events.push(SequencedEvent {
-                    event: parse_sequence_event_relative(
-                        event_text,
-                        pitch_anchor,
-                        duration_anchor,
-                        staves,
-                    )?,
-                    display_staff: staves.display_staff,
+                    event: parsed.event,
+                    display_staff: parsed.staff.display_staff,
+                    staff_clefs: parsed.staff.clefs,
+                    clef_change_before: parsed.staff.clef_change_before,
                     beam_directive: pending_beam,
                     duration_scale: Rational::new(0, 1),
                     grace: None,
@@ -2115,6 +2247,7 @@ fn parse_grace_tokens(
             }
             Token::BeamJoin => set_pending_beam_directive(&mut pending_beam, BeamDirective::Join)?,
             Token::StaffSwitch(_) => staves.reject_switch_inside("grace groups")?,
+            Token::ClefChange(_) => staves.reject_clef_change_inside("grace groups")?,
             Token::Tie => {
                 let Some(previous) = grace_events.last_mut() else {
                     return Err("tie marker '~' cannot appear before a grace note".to_string());
@@ -2185,15 +2318,17 @@ fn parse_tremolo_tokens(
                     duration_anchor,
                     staves,
                 )?;
-                if tremolo_event.is_silent() {
+                if tremolo_event.event.is_silent() {
                     return Err(
                         "alternating tremolo requires notes or chords, not rests or spacers"
                             .to_string(),
                     );
                 }
                 events.push(SequencedEvent {
-                    event: tremolo_event,
-                    display_staff: staves.display_staff,
+                    event: tremolo_event.event,
+                    display_staff: tremolo_event.staff.display_staff,
+                    staff_clefs: tremolo_event.staff.clefs,
+                    clef_change_before: tremolo_event.staff.clef_change_before,
                     beam_directive: pending_beam,
                     duration_scale: Rational::new(1, 1),
                     grace: None,
@@ -2205,6 +2340,7 @@ fn parse_tremolo_tokens(
                 return Err("beam markers are not used inside alternating tremolos".to_string())
             }
             Token::StaffSwitch(_) => staves.reject_switch_inside("alternating tremolos")?,
+            Token::ClefChange(_) => staves.reject_clef_change_inside("alternating tremolos")?,
             Token::Tie => {
                 return Err("ties are not supported inside alternating tremolos".to_string())
             }
@@ -2260,14 +2396,17 @@ fn parse_sequence_marked(
     for token in tokens {
         match token {
             Token::Event(event_text) => {
+                let parsed = parse_sequence_event_relative(
+                    &event_text,
+                    &mut pitch_anchor,
+                    &mut duration_anchor,
+                    staves,
+                )?;
                 events.push(SequencedEvent {
-                    event: parse_sequence_event_relative(
-                        &event_text,
-                        &mut pitch_anchor,
-                        &mut duration_anchor,
-                        staves,
-                    )?,
-                    display_staff: staves.display_staff,
+                    event: parsed.event,
+                    display_staff: parsed.staff.display_staff,
+                    staff_clefs: parsed.staff.clefs,
+                    clef_change_before: parsed.staff.clef_change_before,
                     beam_directive: pending_beam,
                     duration_scale: Rational::new(1, 1),
                     grace: None,
@@ -2279,6 +2418,12 @@ fn parse_sequence_marked(
                 if pending_beam != BeamDirective::Auto {
                     return Err(
                         "beam marker '/' or '-' cannot appear before a grace group".to_string()
+                    );
+                }
+                if staves.has_pending_clef_change() {
+                    return Err(
+                        "an inline clef change cannot precede a grace group; place the grace group before the clef command"
+                            .to_string(),
                     );
                 }
                 let group = events
@@ -2363,6 +2508,7 @@ fn parse_sequence_marked(
                 set_pending_beam_directive(&mut pending_beam, BeamDirective::Join)?;
             }
             Token::StaffSwitch(staff_id) => staves.switch_to(&staff_id)?,
+            Token::ClefChange(clef) => staves.change_home_clef(clef)?,
             Token::Tie => {
                 let Some(previous) = events.last_mut() else {
                     return Err("tie marker '~' cannot appear before a note or chord".to_string());
@@ -2458,6 +2604,10 @@ fn tokenize_sequence_with_depth(input: &str, nesting_depth: usize) -> Result<Vec
                 )
             }
             _ => {
+                if starts_directive_keyword(&chars, cursor, "clef") {
+                    tokens.push(parse_clef_change_token(&chars, &mut cursor)?);
+                    continue;
+                }
                 if starts_group_keyword(&chars, cursor, "tremolo") {
                     tokens.push(parse_tremolo_token(&chars, &mut cursor, nesting_depth)?);
                     continue;
@@ -2597,6 +2747,34 @@ fn starts_group_keyword(chars: &[char], cursor: usize, keyword: &str) -> bool {
     chars[cursor..].starts_with(&keyword_chars)
         && after_keyword < chars.len()
         && chars[after_keyword].is_whitespace()
+}
+
+fn starts_directive_keyword(chars: &[char], cursor: usize, keyword: &str) -> bool {
+    let keyword_chars: Vec<char> = keyword.chars().collect();
+    let after_keyword = cursor + keyword_chars.len();
+    chars[cursor..].starts_with(&keyword_chars)
+        && (after_keyword == chars.len() || chars[after_keyword].is_whitespace())
+}
+
+fn parse_clef_change_token(chars: &[char], cursor: &mut usize) -> Result<Token, String> {
+    *cursor += "clef".len();
+    while *cursor < chars.len() && chars[*cursor].is_whitespace() {
+        *cursor += 1;
+    }
+    let clef_start = *cursor;
+    while *cursor < chars.len()
+        && !chars[*cursor].is_whitespace()
+        && !matches!(chars[*cursor], '~' | '/' | '{' | '}' | '|' | '@')
+    {
+        *cursor += 1;
+    }
+    if *cursor == clef_start {
+        return Err("clef command must name a clef, as in 'clef treble'".to_string());
+    }
+    let clef_name: String = chars[clef_start..*cursor].iter().collect();
+    parse_clef(&clef_name)
+        .map(Token::ClefChange)
+        .map_err(|error| format!("invalid clef command: {error}"))
 }
 
 fn parse_grace_token(
@@ -2807,7 +2985,11 @@ fn parse_sequence_with_auto_rests(
 /// automatic rest whose duration is known only after the whole measure is read.
 enum MeasureSlot {
     Event(SequencedEvent),
-    AutomaticRest { display_staff: usize },
+    AutomaticRest {
+        display_staff: usize,
+        staff_clefs: Vec<Clef>,
+        clef_change_before: bool,
+    },
 }
 
 impl MeasureSlot {
@@ -2868,10 +3050,12 @@ fn parse_sequence_with_auto_rests_relative(
                     staves,
                 )?;
                 known_total =
-                    known_total.checked_add(duration_to_rational(parsed_event.duration()))?;
+                    known_total.checked_add(duration_to_rational(parsed_event.event.duration()))?;
                 slots.push(MeasureSlot::Event(SequencedEvent {
-                    event: parsed_event,
-                    display_staff: staves.display_staff,
+                    event: parsed_event.event,
+                    display_staff: parsed_event.staff.display_staff,
+                    staff_clefs: parsed_event.staff.clefs,
+                    clef_change_before: parsed_event.staff.clef_change_before,
                     beam_directive: pending_beam,
                     duration_scale: Rational::new(1, 1),
                     grace: None,
@@ -2883,6 +3067,12 @@ fn parse_sequence_with_auto_rests_relative(
                 if pending_beam != BeamDirective::Auto {
                     return Err(
                         "beam marker '/' or '-' cannot appear before a grace group".to_string()
+                    );
+                }
+                if staves.has_pending_clef_change() {
+                    return Err(
+                        "an inline clef change cannot precede a grace group; place the grace group before the clef command"
+                            .to_string(),
                     );
                 }
                 let group = slots
@@ -2996,8 +3186,11 @@ fn parse_sequence_with_auto_rests_relative(
                     );
                 }
                 auto_rest_count += 1;
+                let staff = staves.staff_for_next_event();
                 slots.push(MeasureSlot::AutomaticRest {
-                    display_staff: staves.staff_for_next_event(),
+                    display_staff: staff.display_staff,
+                    staff_clefs: staff.clefs,
+                    clef_change_before: staff.clef_change_before,
                 });
             }
             Token::BeamBreak => {
@@ -3007,6 +3200,7 @@ fn parse_sequence_with_auto_rests_relative(
                 set_pending_beam_directive(&mut pending_beam, BeamDirective::Join)?;
             }
             Token::StaffSwitch(staff_id) => staves.switch_to(&staff_id)?,
+            Token::ClefChange(clef) => staves.change_home_clef(clef)?,
             Token::Tie => {
                 let Some(last) = slots.last_mut() else {
                     return Err("tie marker '~' cannot appear before a note or chord".to_string());
@@ -3072,7 +3266,11 @@ fn parse_sequence_with_auto_rests_relative(
     for slot in slots {
         match slot {
             MeasureSlot::Event(event) => expanded_events.push(event),
-            MeasureSlot::AutomaticRest { display_staff } => {
+            MeasureSlot::AutomaticRest {
+                display_staff,
+                staff_clefs,
+                clef_change_before,
+            } => {
                 let duration = generated_rest_durations.next().ok_or_else(|| {
                     "internal auto-rest expansion produced too few durations".to_string()
                 })?;
@@ -3082,6 +3280,8 @@ fn parse_sequence_with_auto_rests_relative(
                         annotations: Vec::new(),
                     }),
                     display_staff,
+                    staff_clefs,
+                    clef_change_before,
                     beam_directive: BeamDirective::Auto,
                     duration_scale: Rational::new(1, 1),
                     grace: None,
@@ -3179,6 +3379,8 @@ pub struct NoteLayout {
     pub kind: String,
     /// Clef of the staff that draws this event.
     pub clef: Clef,
+    /// Whether this event begins with a mid-sequence clef change.
+    pub clef_change_before: bool,
     /// Top-to-bottom index of the staff that draws this event. Split chords
     /// record the staff of each pitch separately.
     pub staff_index: usize,
@@ -3238,12 +3440,15 @@ pub struct RelativeLayoutResponse {
     pub layouts: Vec<NoteLayout>,
     pub anchor: Option<String>,
     pub duration_anchor: Option<String>,
+    pub ending_clef: Clef,
 }
 
 fn layout_event(
     event: ParsedEvent,
     staves: &StaffContext,
     display_staff: usize,
+    staff_clefs: &[Clef],
+    clef_change_before: bool,
     beam_directive: BeamDirective,
     onset: Rational,
     duration_scale: Rational,
@@ -3266,7 +3471,7 @@ fn layout_event(
 
     let position_on_staff = |note: &Note| {
         let staff_index = note.split_staff.unwrap_or(display_staff);
-        let clef = staves.clef_of(staff_index);
+        let clef = staff_clefs[staff_index];
         let percussion = clef == Clef::Percussion;
         if percussion && note.pitch.accidental != Accidental::Natural {
             let staff = if staves.staff_ids.len() == 1 {
@@ -3404,7 +3609,8 @@ fn layout_event(
         rest: is_silent,
         spacer: kind == "spacer",
         kind,
-        clef: staves.clef_of(display_staff),
+        clef: staff_clefs[display_staff],
+        clef_change_before,
         staff_index: display_staff,
         duration,
         duration_value,
@@ -3444,6 +3650,8 @@ fn layout_events(
             sequenced_event.event,
             staves,
             sequenced_event.display_staff,
+            &sequenced_event.staff_clefs,
+            sequenced_event.clef_change_before,
             sequenced_event.beam_directive,
             onset,
             sequenced_event.duration_scale,
@@ -3590,6 +3798,8 @@ pub fn layout_note_native(input: &str, clef: Clef) -> Result<NoteLayout, String>
         parse_event(input)?,
         &staves,
         0,
+        &staves.clefs,
+        false,
         BeamDirective::Auto,
         Rational::new(0, 1),
         Rational::new(1, 1),
@@ -3741,6 +3951,7 @@ pub fn layout_transposed_staff_sequence_native(
         layouts,
         anchor: parsed.pitch_anchor.as_ref().map(pitch_anchor_string),
         duration_anchor: parsed.duration_anchor.map(duration_anchor_string),
+        ending_clef: staff_cursor.clef_of(staves.home_staff),
     })
 }
 
@@ -4279,6 +4490,86 @@ mod tests {
         let bass = layout_sequence_relative_native("G:q A:q", Clef::Bass, None).unwrap();
         assert_eq!(pitch_anchor_string(&bass.layouts[0].pitches[0].pitch), "G3");
         assert_eq!(bass.anchor.as_deref(), Some("A3"));
+    }
+
+    #[test]
+    fn inline_clef_changes_update_following_staff_positions_and_carry_state() {
+        let response = layout_sequence_with_time_relative_native(
+            "C3:q clef treble (C4 E4 G4):q (D4 F4 A4):q",
+            Clef::Bass,
+            "3/4",
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(response.layouts[0].clef, Clef::Bass);
+        assert!(!response.layouts[0].clef_change_before);
+        assert_eq!(response.layouts[1].clef, Clef::Treble);
+        assert!(response.layouts[1].clef_change_before);
+        assert_eq!(
+            response.layouts[1].pitches[0].staff_position,
+            staff_position("C4", Clef::Treble)
+        );
+        assert_eq!(response.layouts[2].clef, Clef::Treble);
+        assert!(!response.layouts[2].clef_change_before);
+        assert_eq!(response.ending_clef, Clef::Treble);
+
+        let clef_default_after_rest =
+            layout_sequence_native("r:q clef treble c:q", Clef::Bass).unwrap();
+        assert_eq!(
+            pitch_anchor_string(&clef_default_after_rest[1].pitches[0].pitch),
+            "C4"
+        );
+    }
+
+    #[test]
+    fn inline_clef_changes_reject_invalid_positions_and_transitions() {
+        assert!(layout_sequence_native("clef bass C3:h", Clef::Treble)
+            .unwrap_err()
+            .contains("start of a bar"));
+        assert!(layout_sequence_native("C4:q clef", Clef::Treble)
+            .unwrap_err()
+            .contains("must name a clef"));
+        assert!(
+            layout_sequence_native("C4:q clef treble D4:h", Clef::Treble)
+                .unwrap_err()
+                .contains("does not change the active clef")
+        );
+        assert!(
+            layout_sequence_native("C4:q clef bass clef treble D4:h", Clef::Treble)
+                .unwrap_err()
+                .contains("cannot be repeated before an event")
+        );
+        assert!(layout_sequence_native("C4:q clef bass", Clef::Treble)
+            .unwrap_err()
+            .contains("must be followed by a note, chord, or rest"));
+        assert!(
+            layout_sequence_native("C4:q clef bass grace { D4:s } E4:h", Clef::Treble)
+                .unwrap_err()
+                .contains("cannot precede a grace group")
+        );
+        let staves = StaffContext::new(
+            vec![
+                ("upper".to_string(), Clef::Treble),
+                ("lower".to_string(), Clef::Bass),
+            ],
+            "lower",
+        )
+        .unwrap();
+        assert!(layout_staff_sequence_native(
+            "C2:q clef treble @upper C4:h",
+            &staves,
+            Some("3/4"),
+            None,
+            None,
+        )
+        .unwrap_err()
+        .contains("must be followed by an event on the home staff"));
+        assert!(
+            layout_sequence_native("C4:q clef soprano D4:h", Clef::Treble)
+                .unwrap_err()
+                .contains("invalid clef command")
+        );
     }
 
     #[test]

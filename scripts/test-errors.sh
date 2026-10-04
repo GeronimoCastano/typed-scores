@@ -44,6 +44,11 @@ check_error tests/errors/invalid-alternating-tremolo.typ "alternating tremolo mu
 check_error tests/errors/invalid-grace-ending.typ "grace group must be followed by a main note, chord, or rest"
 check_error tests/errors/inconsistent-voice-count.typ "voice count changed from earlier bars"
 check_error tests/errors/invalid-multistaff-clef-change.typ "single clef string cannot target a multi-staff score"
+check_error tests/errors/inline-clef-change-at-start.typ "at the start of a bar"
+check_error tests/errors/inline-clef-change-without-event.typ "must be followed by a note, chord, or rest"
+check_error tests/errors/inline-clef-change-multivoice.typ "inline clef changes require a single voice"
+check_error tests/errors/inline-clef-before-grace.typ "cannot precede a grace group"
+check_error tests/errors/inline-clef-before-staff-switch.typ "must be followed by an event on the home staff"
 
 check_error tests/errors/invalid-clef-type.typ "unknown clef"
 check_error tests/errors/unsupported-key.typ "unsupported key signature"

@@ -403,6 +403,48 @@ a dictionary containing only the staves that change, such as
 `clef: (left: "bass")`. As in LilyPond, a mid-system change is reduced in size;
 the active clef is printed full-size when a new system begins.
 
+#block(breakable: false)[
+  To change clef within a bar, write `clef treble` in that staff's event string.
+  It takes effect before the next event and remains active in later bars until a
+  bar-level or inline change replaces it. Inline changes need one voice on the
+  staff, must be written while the voice is on its home staff, and must be
+  followed by a home-staff event. Place grace groups before the inline clef
+  command. Use bar metadata for changes at the start of a bar and for changes
+  to or from tablature or percussion.
+]
+
+This excerpt is measures 73–75 of Liszt's *Liebestraum No. 3*, in 6/4. The
+left-hand staff returns to bass clef at each barline, then switches to treble
+for the two chords. The public-domain MusicXML transcription is available in
+#link("https://github.com/kevinkorfmann/musicxml_library/blob/master/scores/Liebestraum_No._3_in_A_Major.mxl")[the MuseTrainer score library].
+
+#demo[
+  #example(```typ
+#score(
+  staves: (upper: (clef: "treble", label: "Right hand"), lower: (clef: "bass", label: "Left hand")),
+  key: "Ab", time: "6/4", scale: 0.5,
+  bars: (
+    (
+      tempo: "poco a poco ritenuto",
+      upper: ("r:h. bb4:h.", "r:e bb3:e fb4:e ab4:e fb4:e bb3:e r:e bb3:e fb4:e g4:e fb4:e bb3:e"),
+      lower: "(db2 fb3):q r:q clef treble (fb5 ab5 bb5):q[s1(] (fb5 g5 bb5):q[s1)] r:q r:q",
+    ),
+    (
+      clef: (lower: "bass"),
+      upper: ("eb5:w.", "r:e eb4:e gb4:e bb4:e gb4:e eb4:e r:e eb4:e gb4:e a4:e gb4:e eb4:e"),
+      lower: "(c2 eb3):q[arpeggio] r:q clef treble (gb5 bb5 eb6):q[s1(] (gb5 a5 eb6):q[s1)] r:q r:q",
+    ),
+    (
+      clef: (lower: "bass"),
+      upper: ("r:h. ab4:h.", "r:e ab3:e d4:e gb4:e d4:e ab3:e r:e ab3:e d4:e f4:e d4:e ab3:e"),
+      lower: "(cb2 d3):q r:q clef treble (d5 gb5 ab5):q[s1(] (d5 f5 ab5):q[s1)] r:q r:q",
+      barline: (right: "final"),
+    ),
+  ),
+)
+```, side: false)
+]
+
 #demo[
   #example(```typ
 #score(
@@ -1548,7 +1590,7 @@ beams.
   (38%, 62%),
   [*Source*], [*Result*],
   [Short first or later bar], [#c("partial") with the bar's actual length.],
-  [Clef, key, meter, tempo change], [Bar metadata; a mid-bar clef moves to the next barline.],
+  [Clef, key, meter, tempo change], [Bar metadata; imported mid-bar clefs move to the next barline.],
   [Repeats and endings], [#c("barline") repeat signs and #c("ending") brackets.],
   [Rehearsal, segno, coda], [#c("rehearsal") and #c("navigation") fields.],
   [Wedges, pedal lines], [Named #c("h1<") … #c("h1!") and #c("p1(") … #c("p1)") spans.],
@@ -1683,6 +1725,7 @@ instrument written from concert pitch:
   [#c("r:q") / #c("_")], [Written rest / computed remainder rest.],
   [#c("s:q")], [Invisible spacer that fills time.],
   [#c("@lower")], [Draw the following events on another staff until the bar ends.],
+  [#c("clef treble")], [Change the home staff's clef before the next event.],
   [#c("(c3 @upper e4):h")], [Split chord across two neighboring staves.],
   [#c("~")], [Tie the preceding event.],
   [#c("/") / #c("-")], [Break / force a local beam connection.],

@@ -1,6 +1,6 @@
 #import "primitives.typ": accidental-width, notehead-half-width, rest-width, stem-thickness
 #import "event-geometry.typ": _accidental-gap, _dot-gap-from-head, _dot-step, _duration-base, _grace-main-gap, _grace-note-step, _head-half-width, _min-onset-step, _pitch-head-shape, _pitch-vertical-rank, _stem-direction
-#import "signatures.typ": _barline-clearance, _key-alters-natural, _key-suppresses-accidental
+#import "signatures.typ": _barline-clearance, _inline-clef-change-prefix-width, _key-alters-natural, _key-suppresses-accidental
 #import "lyrics.typ": _add-lyric-spacing-demands
 #import "figured-bass.typ": _figure-stack-extent
 
@@ -141,7 +141,12 @@
     pad += -calc.min(..offsets, 0)
   }
   let arpeggio-pad = if layout.annotations.any(mark => str(mark) == "arpeggio" or str(mark).starts-with("arpeggio=")) { 0.95 } else { 0 }
-  pad + _accidental-plan(layout, key).total + arpeggio-pad
+  let clef-pad = if layout.at("clef_change_before", default: false) {
+    _inline-clef-change-prefix-width
+  } else {
+    0
+  }
+  pad + _accidental-plan(layout, key).total + arpeggio-pad + clef-pad
 }
 
 // Space the event's own ink needs to the right of the notehead center.
