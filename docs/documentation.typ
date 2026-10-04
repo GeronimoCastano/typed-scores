@@ -423,6 +423,7 @@ for the two chords. The public-domain MusicXML transcription is available in
 #score(
   staves: (upper: (clef: "treble", label: "Right hand"), lower: (clef: "bass", label: "Left hand")),
   key: "Ab", time: "6/4", scale: 0.5,
+  beams: true,
   bars: (
     (
       tempo: "poco a poco ritenuto",

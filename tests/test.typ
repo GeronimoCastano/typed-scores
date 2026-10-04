@@ -2381,6 +2381,7 @@ barline, then switches to treble for the two chords.
   key: "Ab",
   time: "6/4",
   scale: 0.58,
+  beams: true,
   bars: (
     (
       tempo: "poco a poco ritenuto",
