@@ -203,7 +203,7 @@
     return ((
       id: "staff",
       field: "notes",
-      clef: _validate-clef(clef, "score clef"),
+      clef: clef,
       heads: _normalize-drum-map(heads, "score heads"),
       label: none,
       short-label: none,
@@ -326,7 +326,7 @@
     normalized-staves.push((
       id: staff-id,
       field: staff-id,
-      clef: _validate-clef(staff-clef, "staff " + staff-id + " clef"),
+      clef: staff-clef,
       heads: _normalize-drum-map(
         staff-config.at("heads", default: none),
         "staff " + staff-id + " heads",
