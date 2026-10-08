@@ -10,7 +10,7 @@
 #import "engraving/events.typ": _classify-cross-staff-beams, _separate-voice-rests
 #import "engraving/ottava.typ": _apply-ottava, _validate-ottava-closed
 #import "engraving/figured-bass.typ": _layout-figures
-#import "engraving/tablature.typ": _assign-tab-frets, _normalize-tuning, _tab-staff-height
+#import "engraving/tablature.typ": _assign-tab-frets, _normalize-tab-position, _normalize-tuning, _tab-staff-height
 #import "engraving/chord-diagrams.typ": _chord-diagram-extent, _harmony-diagram, _score-diagram-scale
 
 // Public score-shape normalization and eager musical preparation.
@@ -181,10 +181,14 @@
   entries.join(" ")
 }
 
-// A tab staff carries its tuning, top string first; notation staves carry none.
-#let _staff-tab(clef, tuning, label) = {
+// A tab staff carries its tuning, top string first, and its preferred hand
+// position; notation staves carry neither.
+#let _staff-tab(clef, tuning, position, staff-id) = {
   if clef == "tab" {
-    (tuning: _normalize-tuning(if tuning == none { "guitar" } else { tuning }, label))
+    (
+      tuning: _normalize-tuning(if tuning == none { "guitar" } else { tuning }, "staff " + staff-id + " tuning"),
+      position: _normalize-tab-position(position, "staff " + staff-id + " position"),
+    )
   } else {
     none
   }
@@ -207,7 +211,7 @@
       heads: _normalize-drum-map(heads, "score heads"),
       label: none,
       short-label: none,
-      tab: _staff-tab(clef, none, "score clef"),
+      tab: _staff-tab(clef, none, none, "score"),
       source: none,
     ),)
   }
@@ -269,12 +273,12 @@
       )
     }
     for field in staff-config.keys() {
-      if field not in ("clef", "heads", "label", "short-label", "tuning", "source") {
+      if field not in ("clef", "heads", "label", "short-label", "tuning", "position", "source") {
         _score-error(
           "staff " + staff-id,
           "staff configuration has unknown field",
           value: field,
-          expected: "clef, heads, label, short-label, or, for a tab staff, tuning and source",
+          expected: "clef, heads, label, short-label, or, for a tab staff, tuning, position, and source",
           fix: "remove or rename the unknown field",
         )
       }
@@ -308,8 +312,9 @@
     }
     let staff-clef = _validate-clef(staff-clef, "staff " + staff-id + " clef")
     let tuning = staff-config.at("tuning", default: none)
+    let position = staff-config.at("position", default: none)
     let source = staff-config.at("source", default: none)
-    for (field, value) in (("tuning", tuning), ("source", source)) {
+    for (field, value) in (("tuning", tuning), ("position", position), ("source", source)) {
       if value != none and staff-clef != "tab" {
         _score-error(
           "staff " + staff-id + " " + field,
@@ -333,7 +338,7 @@
       ),
       label: staff-label,
       short-label: short-label,
-      tab: _staff-tab(staff-clef, tuning, "staff " + staff-id + " tuning"),
+      tab: _staff-tab(staff-clef, tuning, position, staff-id),
       source: source,
     ))
   }
@@ -682,6 +687,7 @@
   chord-diagrams: none,
   lyric-size: 0.9,
   lyric-font: none,
+  harmony-size: 1.12,
   transposition: none,
   heads: none,
 ) = {
@@ -837,7 +843,7 @@
     for (staff-index, tab) in normalized-measure.staff-tabs.enumerate() {
       if tab == none { continue }
       let staff-voices = prepared-voices.filter(voice => voice.staff-index == staff-index)
-      let fretted = _assign-tab-frets(staff-voices, tab.tuning, tab-carry, bar-location)
+      let fretted = _assign-tab-frets(staff-voices, tab, staff-index, tab-carry, bar-location)
       tab-carry = fretted.carried
       prepared-voices = prepared-voices.map(voice => {
         let replacement = fretted.voices.find(other => other.id == voice.id)
@@ -882,6 +888,7 @@
       note-spacing: note-spacing,
       beams: beams,
       key: normalized-measure.key,
+      harmony-size: harmony-size,
     )
     prepared-measures.push((
       key: normalized-measure.key,

@@ -12,6 +12,29 @@ score with bundled Bravura glyphs.
 #import "@preview/typed-scores:0.6.0": *
 ```
 
+## Examples
+
+<table>
+<tr>
+  <td><a href="https://github.com/GeronimoCastano/typed-scores/blob/main/assets/readme/examples/bird-blues.typ"><img src="assets/readme/examples/bird-blues.png" width="400"></a></td>
+  <td><a href="https://github.com/GeronimoCastano/typed-scores/blob/main/assets/readme/examples/chopin-fantaisie-impromptu.typ"><img src="assets/readme/examples/chopin-fantaisie-impromptu.png" width="400"></a></td>
+</tr>
+<tr>
+  <td>Bird blues in F: an original bebop lead sheet over Parker-style changes, with a walking bass</td>
+  <td>Chopin, Fantaisie-Impromptu Op. 66, bars 5–10: sixteenths against sextuplets, with pedal and ottava</td>
+</tr>
+<tr>
+  <td><a href="https://github.com/GeronimoCastano/typed-scores/blob/main/assets/readme/examples/carcassi-prelude-c.typ"><img src="assets/readme/examples/carcassi-prelude-c.png" width="400"></a></td>
+  <td><a href="https://github.com/GeronimoCastano/typed-scores/blob/main/assets/readme/examples/ein-feste-burg.typ"><img src="assets/readme/examples/ein-feste-burg.png" width="400"></a></td>
+</tr>
+<tr>
+  <td>Carcassi, Prelude in C (Op. 59 No. 1): guitar arpeggios over C, Am, Dm and G7, with a mirrored tab staff and chord diagrams</td>
+  <td>Ein' feste Burg (Luther, 1529): SATB with two voices per staff and the German text under the soprano</td>
+</tr>
+</table>
+
+*Click an example to see its source.*
+
 ## Quick start
 
 `bar` is the quick one-staff, one-measure helper. It accepts notes, optional
@@ -599,8 +622,8 @@ most 256 tied note values; divide longer values across shorter measures.
 - Independent tab rejects notation annotations it cannot draw; place markings
   on the notation source staff. Tuning pitches use octaves -1 through 9.
 - Tab staves draw fret numbers only (no rhythm stems, bends, slides, or
-  hammer-ons yet), and automatic fretting picks the lowest position per onset
-  rather than planning a phrase; use `string=` to hold a position.
+  hammer-ons yet), and automatic fretting chooses each onset without looking
+  ahead to later onsets; use `string=` or `position:` to steer a passage.
 - Pedals and hairpins do not split automatically at system breaks.
 - Ottava spans stay on their voice's staff, figured bass sits under the bottom
   staff without continuation lines, and percussion staves have five lines.

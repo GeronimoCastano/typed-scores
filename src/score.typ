@@ -28,6 +28,19 @@
   value
 }
 
+#let _validate-harmony-weight(value, label: "score harmony-weight") = {
+  if value not in ("regular", "bold") {
+    _score-error(
+      label,
+      "unsupported harmony weight",
+      value: value,
+      expected: "regular or bold",
+      fix: "choose the weight of chord symbols as regular or bold",
+    )
+  }
+  value
+}
+
 // The ink color of a validated theme. Must be called in context, since the
 // automatic theme follows the surrounding text color.
 #let _theme-paint(theme, label: "score theme") = {
@@ -67,6 +80,8 @@
   lyric-font: none,
   lyric-gap: 0.8,
   verse-gap: 1.45,
+  harmony-size: 1.12,
+  harmony-weight: "bold",
   beams: false,
   chord-diagrams: none,
   staff-gap: none,
@@ -92,6 +107,8 @@
   _positive-number(lyric-size, "lyric-size")
   _nonnegative-number(lyric-gap, "lyric-gap")
   _positive-number(verse-gap, "verse-gap")
+  _positive-number(harmony-size, "harmony-size")
+  let harmony-weight = _validate-harmony-weight(harmony-weight)
   if verse-gap < lyric-size {
     _score-error(
       "score verse-gap",
@@ -219,6 +236,7 @@
       chord-diagrams: chord-diagrams,
       lyric-size: lyric-size,
       lyric-font: lyric-font,
+      harmony-size: harmony-size,
       transposition: transposition,
       heads: heads,
     )
@@ -334,6 +352,8 @@
         lyric-font: lyric-font,
         lyric-gap: lyric-gap,
         verse-gap: verse-gap,
+        harmony-size: harmony-size,
+        harmony-weight: harmony-weight,
         paint: paint,
       )
       if system-index + 1 < systems.len() {

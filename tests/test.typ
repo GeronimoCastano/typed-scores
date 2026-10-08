@@ -2412,3 +2412,238 @@ flat before a chord after the clef change to check their spacing.
     ),
   ),
 )
+
+#pagebreak()
+
+= Chord symbol size and weight
+
+`harmony-size` sets chord symbols in staff spaces, and `harmony-weight` chooses
+regular or bold text. The header above the staff rises with the largest symbol,
+so the composer line clears enlarged chords, and chord diagrams keep their
+place beneath them.
+
+#score(
+  composer: "Chord study",
+  chord-diagrams: guitar-chords,
+  harmony-size: 1.9,
+  harmony-weight: "regular",
+  time: "4/4",
+  bars: (
+    (notes: "c4:h (a3 c4 e4):h", harmony: "C:h Am:h"),
+    (notes: "(f3 a3 c4):w", harmony: "F:w", barline: (right: "final")),
+  ),
+)
+
+#score(
+  composer: "Default size",
+  chord-diagrams: guitar-chords,
+  time: "4/4",
+  bars: (
+    (notes: "c4:h (a3 c4 e4):h", harmony: "C:h Am:h"),
+    (notes: "(f3 a3 c4):w", harmony: "F:w", barline: (right: "final")),
+  ),
+)
+
+= Fingering across several voices
+
+Automatic fretting prices each onset by its highest fret, the span of its
+fretted notes, and how far the hand moves from the previous onset. Open strings
+cost less than fretted notes, and a `position` hint on a tab staff pulls the
+hand toward a chosen lowest fret. The melody and the top note of each triplet
+sound the same B4, so they share one string and one fret number.
+
+The first bar keeps the melody on string 1 at frets 7, 5, and 3 while the triplets
+ring B3 and G3 open on strings 2 and 3, with the bass on the open sixth string.
+
+#let fingerstyle-passage = (
+  staves: (
+    guitar: (clef: "treble-8", label: "Guitar"),
+    tab: (clef: "tab", source: "guitar"),
+  ),
+  key: "Em",
+  time: "3/4",
+  bars: (
+    (guitar: (
+      "b4:q b4 b4",
+      "tuplet 3:2 { b4:e b3 g3 } tuplet 3:2 { b4:e b3 g3 } tuplet 3:2 { b4:e b3 g3 }",
+      "e2:h.",
+    )),
+    (guitar: ("b4:q a4 g4", "r:h.", "e2:h.")),
+  ),
+)
+#score(..fingerstyle-passage)
+
+#let chord-shape-passage = (
+  staves: (tab: (clef: "tab", tuning: "guitar")),
+  time: "4/4",
+  bars: ((tab: "(c3 e3 g3 c4 e4):w"), (tab: "(a2 e3 a3 c4 e4):w", barline: (right: "final"))),
+)
+#score(..chord-shape-passage)
+
+#v(1em)
+
+A `position` hint of 10 pulls the hand up the neck, so the phrase settles near
+fret 10 instead of the lowest frets it would otherwise choose.
+
+#score(
+  staves: (tab: (clef: "tab", tuning: "guitar", position: 10)),
+  time: "4/4",
+  bars: ((tab: "b4:q a4 b4 g4"),),
+)
+
+#let _tab-frets-by-onset(measures, measure-index, layer-index) = {
+  let voice = measures.at(measure-index).voices.find(voice => (
+    voice.tab != none and voice.layer-index == layer-index
+  ))
+  voice.layouts.filter(layout => not layout.rest).map(layout => (
+    layout.at("tab-notes").map(note => (note.string + 1, note.fret))
+  ))
+}
+
+#let fingering = _prepare-score-measures(
+  fingerstyle-passage.staves,
+  fingerstyle-passage.bars,
+  "treble",
+  fingerstyle-passage.key,
+  fingerstyle-passage.time,
+  none,
+)
+#assert(_tab-frets-by-onset(fingering, 0, 0) == (((1, 7),), ((1, 7),), ((1, 7),)))
+#assert(_tab-frets-by-onset(fingering, 1, 0) == (((1, 7),), ((1, 5),), ((1, 3),)))
+#assert(_tab-frets-by-onset(fingering, 0, 1) == (
+  ((1, 7),), ((2, 0),), ((3, 0),),
+  ((1, 7),), ((2, 0),), ((3, 0),),
+  ((1, 7),), ((2, 0),), ((3, 0),),
+))
+#assert(_tab-frets-by-onset(fingering, 0, 2) == (((6, 0),),))
+#assert(_tab-frets-by-onset(fingering, 1, 2) == (((6, 0),),))
+
+#let hinted-passage = _prepare-score-measures(
+  (tab: (clef: "tab", tuning: "guitar", position: 10)),
+  ((tab: "b4:q a4 b4 g4"),),
+  "treble",
+  "C",
+  "4/4",
+  none,
+)
+#assert(_tab-frets-by-onset(hinted-passage, 0, 0) == (((1, 7),), ((2, 10),), ((1, 7),), ((2, 8),)))
+
+#let chord-shape = _prepare-score-measures(
+  chord-shape-passage.staves,
+  chord-shape-passage.bars,
+  "treble",
+  "C",
+  "4/4",
+  none,
+)
+#assert(_tab-frets-by-onset(chord-shape, 0, 0) == (((5, 3), (4, 2), (3, 0), (2, 1), (1, 0)),))
+#assert(_tab-frets-by-onset(chord-shape, 1, 0) == (((5, 0), (4, 2), (3, 2), (2, 1), (1, 0)),))
+
+= Dynamics below ledger lines
+
+A dynamic clears the lowest ink of its column on its staff: the noteheads,
+ledger lines, and stems of every voice sharing that onset. In the first bar a
+dynamic under the upper voice sits below the lower voice's C2 ledger lines. In
+the second bar two dynamics share one column and stack, the upper voice's mark
+nearest the staff.
+
+#score(
+  clef: "bass",
+  time: "4/4",
+  bars: (
+    (notes: ("e3:h[dyn=f] g3:h", "c2:h e2:h")),
+    (notes: ("(a3 c4):q[dyn=p] r:q r:h", "f1:w[dyn=mf]"), barline: (right: "final")),
+  ),
+)
+
+= Rests between voices
+
+A rest in a staff with several voices starts on its voice's side of the staff
+and stays there while that space is clear. Otherwise it moves further toward
+its own side, to the nearest half staff space whose padded extent clears the
+noteheads, ledger lines, and stems that the other voices sound at its onset.
+A rest never crosses to the other side of its voice.
+
+#import "../src/engraving/events.typ": _find-nearest-free-rest-offset
+#import "../src/engraving/primitives.typ": rest-extent
+
+#let _first-voice-rest-offset(prepared, voice-index) = {
+  prepared.first().voices.at(voice-index).layouts.at(0).at("rest-offset")
+}
+
+== Three voices with a rest between melody and bass
+
+The middle voice's rest keeps its place inside the staff, clear of the melody
+above and of the bass E2 and its ledger lines below.
+
+#score(
+  staves: (guitar: (clef: "treble-8", label: "Guitar")),
+  time: "3/4",
+  key: "Em",
+  bars: ((guitar: ("b4:q a4 g4", "r:h.", "e2:h.")),),
+)
+
+#let rest-between-fingering = _prepare-score-measures(
+  (guitar: (clef: "treble-8", label: "Guitar")),
+  ((guitar: ("b4:q a4 g4", "r:h.", "e2:h.")),),
+  "treble", "Em", "3/4", none,
+)
+#assert(_first-voice-rest-offset(rest-between-fingering, 1) == -1.0)
+
+== Upper rest above a lower chord
+
+The upper voice's quarter rests sit just above the top notehead of the lower
+chord. The chord's stems hang below its noteheads, so they do not raise the
+rest.
+
+#score(
+  time: "4/4",
+  bars: ((notes: ("r:q r:q r:h", "(g4 b4 d5):h r:h")),),
+)
+
+#let rest-above-chord = _prepare-score-measures(
+  none, ((notes: ("r:q r:q r:h", "(g4 b4 d5):h r:h")),),
+  "treble", "C", "4/4", none,
+)
+#assert(_first-voice-rest-offset(rest-above-chord, 0) == 3.5)
+
+== Lower rest beside a ledger-line note
+
+The upper voice's middle C has a ledger line and an upward stem. The lower
+voice's rest stays on its own side and lands below the C4 notehead and its
+ledger line.
+
+#score(
+  time: "4/4",
+  bars: ((notes: ("c4:h c4:h", "r:h r:h")),),
+)
+
+#let rest-beside-ledger = _prepare-score-measures(
+  none, ((notes: ("c4:h c4:h", "r:h r:h")),),
+  "treble", "C", "4/4", none,
+)
+#assert(_first-voice-rest-offset(rest-beside-ledger, 1) == -4.5)
+
+== Rest in a staff filled by a chord
+
+The whole-note chord fills the staff's interior, so the lower voice's rest
+leaves the staff for the nearest clear space below the chord.
+
+#score(
+  time: "4/4",
+  bars: ((notes: ("(e4 f4 g4 a4 b4 c5 d5 e5 f5):w", "r:h r:h")),),
+)
+
+#let rest-in-filled-staff = _prepare-score-measures(
+  none, ((notes: ("(e4 f4 g4 a4 b4 c5 d5 e5 f5):w", "r:h r:h")),),
+  "treble", "C", "4/4", none,
+)
+#assert(_first-voice-rest-offset(rest-in-filled-staff, 1) == -3.5)
+
+== Search range
+
+A rest searches at most ten staff spaces from its preferred offset. When an
+obstacle covers that whole range, no offset is found and the rest falls back
+to the nearest notehead on its side.
+
+#assert(_find-nearest-free-rest-offset(1.0, rest-extent("Half"), ((bottom: -30, top: 30),)) == none)

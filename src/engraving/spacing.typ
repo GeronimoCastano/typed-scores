@@ -209,12 +209,17 @@
 // colliding when a harmony change falls between note onsets. The score's
 // musical spacing still supplies the final position; this only adds the
 // text's required clearance.
-#let _harmony-width(symbol) = 0.75 * symbol.clusters().len() + 1.2
+// The estimate is calibrated for the default symbol size; larger symbols
+// scale it in proportion so their neighbors keep the same clearance.
+#let _harmony-reference-size = 1.12
+#let _harmony-width(symbol, harmony-size) = (
+  (0.75 * symbol.clusters().len() + 1.2) * (harmony-size / _harmony-reference-size)
+)
 
 // A chord diagram under the symbol widens the column it needs.
-#let _harmony-item-width(item) = {
+#let _harmony-item-width(item, harmony-size) = {
   let diagram-width = item.at("diagram-width", default: 0)
-  let text-width = _harmony-width(item.symbol)
+  let text-width = _harmony-width(item.symbol, harmony-size)
   if diagram-width > 0 { calc.max(text-width, diagram-width + 0.6) } else { text-width }
 }
 
@@ -226,6 +231,7 @@
   note-spacing: 3.1,
   beams: false,
   key: "C",
+  harmony-size: 1.12,
 ) = {
   let first-onset-x = 0
   let has-polyphony = voices-layouts.any(layouts => layouts.any(layout => (
@@ -271,7 +277,7 @@
     // before the first note column and keep it clear of the system material.
     first-onset-x = calc.max(
       first-onset-x,
-      _harmony-item-width(harmony.first()) / 2 + 0.35,
+      _harmony-item-width(harmony.first(), harmony-size) / 2 + 0.35,
     )
   }
   shortest-duration-value = calc.clamp(shortest-duration-value, 1 / 32, 1 / 4)
@@ -321,9 +327,9 @@
   }
   for harmony-index in range(harmony.len()) {
     let layout = harmony.at(harmony-index)
-    let width = _harmony-item-width(layout)
+    let width = _harmony-item-width(layout, harmony-size)
     let distance = if harmony-index + 1 < harmony.len() {
-      let next-width = _harmony-item-width(harmony.at(harmony-index + 1))
+      let next-width = _harmony-item-width(harmony.at(harmony-index + 1), harmony-size)
       // Both symbols are centered on their onset columns. Preserve the
       // existing rhythmic clearance and add enough room for their extents.
       calc.max(width, (width + next-width) / 2 + 0.35)

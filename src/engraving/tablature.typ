@@ -29,6 +29,21 @@
 #let _tab-min-strings = 3
 #let _tab-max-strings = 12
 
+// A tab's `position` hint is the preferred lowest fret of its hand window.
+#let _normalize-tab-position(value, label) = {
+  if value == none { return none }
+  if type(value) != int or value < 0 or value > _tab-max-fret {
+    _score-error(
+      label,
+      "position must be a whole fret number from 0 to " + str(_tab-max-fret),
+      value: value,
+      expected: "an integer such as 5",
+      fix: "choose the lowest fret of the hand position, or remove position",
+    )
+  }
+  value
+}
+
 #let _tab-staff-height(string-count) = (string-count - 1) * tab-line-gap
 
 // ---------------------------------------------------------------------------
@@ -173,31 +188,61 @@
   options
 }
 
-// A left hand spans about four frets; open strings cost nothing. Among
-// playable choices the lowest position wins, as in LilyPond's default.
-#let _fingering-cost(assignment) = {
-  let fretted = assignment.map(choice => choice.fret).filter(fret => fret > 0)
-  let span = if fretted.len() > 1 { calc.max(..fretted) - calc.min(..fretted) } else { 0 }
-  calc.max(0, span - 3) * 100 + assignment.map(choice => choice.fret).sum(default: 0)
+// A hand reaches about four frets; open strings cost little, and the lowest
+// fretted note of each onset is the hand's position.
+#let _hand-span-limit = 4
+#let _hand-span-excess-weight = 2
+#let _fretted-note-weight = 0.5
+#let _hand-move-weight = 1
+#let _hand-position-weight = 2
+
+// The lowest fretted note of an onset, or none when every note is open.
+#let _onset-hand-position(choices) = {
+  let fretted = choices.map(choice => choice.fret).filter(fret => fret > 0)
+  if fretted.len() == 0 { none } else { calc.min(..fretted) }
 }
 
-// Chooses distinct strings for simultaneous notes, visiting pitches with
-// the fewest choices first so the search prunes early.
-#let _best-string-assignment(option-lists, blocked) = {
+// Prices one onset's string choices: the highest fret, the fret span, a
+// surcharge for a span beyond a hand's reach, and each fretted note; then the
+// move from the previous hand position and the distance from the tab's
+// preferred position.
+#let _fingering-cost(choices, hand, position) = {
+  let fretted = choices.map(choice => choice.fret).filter(fret => fret > 0)
+  if fretted.len() == 0 { return 0 }
+  let highest = calc.max(..fretted)
+  let lowest = calc.min(..fretted)
+  let span = highest - lowest
+  let span-excess = calc.max(0, span - _hand-span-limit)
+  let cost = highest + span + span-excess * _hand-span-excess-weight + fretted.len() * _fretted-note-weight
+  if hand != none {
+    cost += _hand-move-weight * calc.abs(lowest - hand)
+  }
+  if position != none {
+    cost += _hand-position-weight * calc.abs(lowest - position)
+  }
+  cost
+}
+
+// Chooses one string per pitch slot, with distinct strings and no blocked
+// string, at the lowest fingering cost. Slots with the fewest options are
+// placed first so the search prunes early. Returns the choices in slot
+// order, or none when no assignment exists.
+#let _best-string-assignment(option-lists, blocked, hand, position) = {
   let order = range(option-lists.len()).sorted(key: index => option-lists.at(index).len())
   let search(depth, used, chosen) = {
     if depth == order.len() {
-      return (cost: _fingering-cost(chosen.values()), chosen: chosen)
+      let choices = range(option-lists.len()).map(index => chosen.at(str(index)))
+      return (cost: _fingering-cost(choices, hand, position), choices: choices)
     }
-    let note-index = order.at(depth)
+    let slot-index = order.at(depth)
     let best = none
-    for option in option-lists.at(note-index) {
+    for option in option-lists.at(slot-index) {
       let key = str(option.string)
       if key in used or option.string in blocked { continue }
       let found = search(
         depth + 1,
         used + ((key): true),
-        chosen + ((str(note-index)): option),
+        chosen + ((str(slot-index)): option),
       )
       if found != none and (best == none or found.cost < best.cost) {
         best = found
@@ -206,9 +251,7 @@
     best
   }
   let found = search(0, (:), (:))
-  if found == none { none } else {
-    range(option-lists.len()).map(index => found.chosen.at(str(index)))
-  }
+  if found == none { none } else { found.choices }
 }
 
 #let _event-sounds-at(layout, onset) = {
@@ -219,17 +262,101 @@
 
 #let _onset-value(layout) = layout.onset.numerator / layout.onset.denominator
 
+#let _hand-carry-key(staff-index) = "hand:" + str(staff-index)
+
+// Strings still ringing at an onset from notes that started earlier in any voice.
+#let _strings-ringing-at(voices, assigned, onset) = {
+  let blocked = ()
+  for (voice-index, voice) in voices.enumerate() {
+    for (event-index, layout) in voice.layouts.enumerate() {
+      let notes = assigned.at(voice-index).at(event-index)
+      if notes != none and not layout.grace and _event-sounds-at(layout, onset) {
+        blocked += notes.map(note => note.string)
+      }
+    }
+  }
+  blocked
+}
+
+// The notes a tie carries into this event, or none when nothing is tied in.
+#let _tied-in-notes(member, voice, assigned, carry) = {
+  if member.event-index > 0 {
+    if voice.layouts.at(member.event-index - 1).at("tie_to_next", default: false) {
+      assigned.at(member.voice-index).at(member.event-index - 1)
+    } else { none }
+  } else {
+    let state = carry.at(voice.id, default: none)
+    if state != none and state.tied { state.notes } else { none }
+  }
+}
+
+// The pitches that start together at one onset, merged across voices. Two
+// voices sounding the same pitch share one slot, hence one string and one
+// fret number; only the first voice draws that number.
+#let _onset-pitch-slots(members, voices, assigned, carry, location) = {
+  let slots = ()
+  for member in members {
+    let voice = voices.at(member.voice-index)
+    let layout = voice.layouts.at(member.event-index)
+    let event-location = location + ", staff " + voice.staff-id + ", voice " + str(voice.layer-index + 1)
+    let requested = _string-list-annotation(layout)
+    let tied-notes = _tied-in-notes(member, voice, assigned, carry)
+    for (pitch-index, positioned-pitch) in layout.pitches.enumerate() {
+      let midi = _pitch-midi(positioned-pitch.pitch)
+      let held-string = if tied-notes == none { none } else {
+        let held = tied-notes.find(note => note.midi == midi)
+        if held == none { none } else { held.string + 1 }
+      }
+      let requested-string = if requested != none { requested.at(pitch-index) } else { held-string }
+      let owner = (
+        voice-index: member.voice-index,
+        event-index: member.event-index,
+        shared: false,
+      )
+      let slot-index = slots.position(slot => slot.midi == midi)
+      if slot-index == none {
+        slots.push((
+          midi: midi,
+          pitch: positioned-pitch.pitch,
+          location: event-location,
+          requested: requested-string,
+          owners: (owner,),
+        ))
+      } else {
+        let slot = slots.at(slot-index)
+        if requested-string != none and slot.requested != none and requested-string != slot.requested {
+          _score-error(
+            event-location,
+            "voices sounding " + _pitch-label(positioned-pitch.pitch) + " together need different strings",
+            value: "string=" + str(slot.requested) + " and string=" + str(requested-string),
+            expected: "one string for a pitch that two voices share",
+            fix: "give both voices the same string= or keep only one of them",
+          )
+        }
+        if slot.requested == none { slot.requested = requested-string }
+        slot.owners.push(owner + (shared: true))
+        slots.at(slot-index) = slot
+      }
+    }
+  }
+  slots
+}
+
 // Assigns strings and frets to every pitched event of one tab staff in one
 // measure. Notes that start together share the strings between them, notes
-// still ringing from another voice keep their strings when possible, and a
-// tied note stays on the string it was tied from.
+// still ringing from another voice keep their strings when possible, a tied
+// note stays on the string it was tied from, and voices sounding the same
+// pitch together share its string. Each onset takes the cheapest assignment
+// for its own fingering cost; the hand position carries to the next onset.
 //
 // `voices` are the staff's voices for this measure; `carried` maps each
-// voice ID to its previous event's tab notes and tie. Returns the voices
-// with `tab-notes` on each pitched layout, plus the updated carry state.
-#let _assign-tab-frets(voices, tuning, carried, location) = {
+// voice ID to its previous event's tab notes and tie, and each staff's hand
+// position under `_hand-carry-key`. Returns the voices with `tab-notes` on
+// each pitched layout, plus the updated carry state.
+#let _assign-tab-frets(voices, tab, staff-index, carried, location) = {
   let assigned = voices.map(voice => voice.layouts.map(layout => none))
   let carry = carried
+  let hand = carry.at(_hand-carry-key(staff-index), default: none)
   // Notes starting together are fretted together. Graces sound before
   // their main note, so each is fretted on its own just ahead of it.
   let groups = (:)
@@ -253,72 +380,39 @@
   }
   let ordered-groups = groups.values().sorted(key: group => group.order).sorted(key: group => group.onset)
   for group in ordered-groups {
-    let members = group.members
-    let option-lists = ()
-    let owners = ()
-    for member in members {
-      let voice = voices.at(member.voice-index)
-      let layout = voice.layouts.at(member.event-index)
-      let event-location = location + ", staff " + voice.staff-id + ", voice " + str(voice.layer-index + 1)
-      let requested = _string-list-annotation(layout)
-      // A tied note sounds on, so it keeps the string it was tied from.
-      let previous = if member.event-index > 0 {
-        if voice.layouts.at(member.event-index - 1).at("tie_to_next", default: false) {
-          (notes: assigned.at(member.voice-index).at(member.event-index - 1))
-        } else { none }
-      } else {
-        let state = carry.at(voice.id, default: none)
-        if state != none and state.tied { state } else { none }
-      }
-      for (pitch-index, positioned-pitch) in layout.pitches.enumerate() {
-        let midi = _pitch-midi(positioned-pitch.pitch)
-        let held-string = if previous != none and previous.notes != none {
-          let held = previous.notes.find(note => note.midi == midi)
-          if held == none { none } else { held.string + 1 }
-        } else { none }
-        let requested-string = if requested != none { requested.at(pitch-index) } else { held-string }
-        option-lists.push(_pitch-string-options(
-          midi,
-          requested-string,
-          tuning,
-          positioned-pitch.pitch,
-          event-location,
-        ))
-        owners.push((member: member, midi: midi, label: _pitch-label(positioned-pitch.pitch)))
-      }
+    let slots = _onset-pitch-slots(group.members, voices, assigned, carry, location)
+    let option-lists = slots.map(slot => _pitch-string-options(
+      slot.midi,
+      slot.requested,
+      tab.tuning,
+      slot.pitch,
+      slot.location,
+    ))
+    let blocked = _strings-ringing-at(voices, assigned, group.onset)
+    let choices = _best-string-assignment(option-lists, blocked, hand, tab.position)
+    if choices == none {
+      choices = _best-string-assignment(option-lists, (), hand, tab.position)
     }
-    // Strings still ringing from notes that started earlier in any voice.
-    let onset = group.onset
-    let blocked = ()
-    for (voice-index, voice) in voices.enumerate() {
-      for (event-index, layout) in voice.layouts.enumerate() {
-        let notes = assigned.at(voice-index).at(event-index)
-        if notes != none and not layout.grace and _event-sounds-at(layout, onset) {
-          blocked += notes.map(note => note.string)
-        }
-      }
-    }
-    let assignment = _best-string-assignment(option-lists, blocked)
-    if assignment == none {
-      assignment = _best-string-assignment(option-lists, ())
-    }
-    if assignment == none {
-      let first = members.first()
-      let voice = voices.at(first.voice-index)
+    if choices == none {
+      let first-voice = voices.at(group.members.first().voice-index)
       _score-error(
-        location + ", staff " + voice.staff-id,
+        location + ", staff " + first-voice.staff-id,
         "the notes starting together cannot be fretted on separate strings",
-        value: owners.map(owner => owner.label).join(" "),
+        value: slots.map(slot => _pitch-label(slot.pitch)).join(" "),
         expected: "at most one note per string, each within fret " + str(_tab-max-fret),
         fix: "choose strings explicitly with string=, or spread the notes across fewer simultaneous pitches",
       )
     }
-    for (choice, owner) in assignment.zip(owners) {
-      let notes = assigned.at(owner.member.voice-index).at(owner.member.event-index)
-      if notes == none { notes = () }
-      notes.push((string: choice.string, fret: choice.fret, midi: owner.midi))
-      assigned.at(owner.member.voice-index).at(owner.member.event-index) = notes
+    for (choice, slot) in choices.zip(slots) {
+      for owner in slot.owners {
+        let notes = assigned.at(owner.voice-index).at(owner.event-index)
+        if notes == none { notes = () }
+        notes.push((string: choice.string, fret: choice.fret, midi: slot.midi, shared: owner.shared))
+        assigned.at(owner.voice-index).at(owner.event-index) = notes
+      }
     }
+    let lowest = _onset-hand-position(choices)
+    if lowest != none { hand = lowest }
   }
   let updated = ()
   for (voice-index, voice) in voices.enumerate() {
@@ -346,6 +440,9 @@
       ))
     }
     updated.push(voice + (layouts: layouts))
+  }
+  if hand != none {
+    carry.insert(_hand-carry-key(staff-index), hand)
   }
   (voices: updated, carried: carry)
 }
@@ -378,6 +475,8 @@
       let small = layout.at("grace", default: false) or layout.at("cue", default: false)
       let scale = if small { _tab-small-number-scale } else { 1.0 }
       for note in notes {
+        // A unison shared with an earlier voice keeps one number, drawn there.
+        if note.at("shared", default: false) { continue }
         let label = if layout.at("tab-tied-in", default: false) { "(" + str(note.fret) + ")" } else { str(note.fret) }
         let body = _tab-number-text(label, unit, scale, paint)
         items.push((

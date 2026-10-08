@@ -5,7 +5,7 @@
 #import "../engraving/spacing.typ": _onset-key, _place-voice-at-onsets
 #import "../engraving/event-geometry.typ": _event-pitch-ys, _event-staff-index, _pitch-staff-index
 #import "../engraving/events.typ": _beamed-stem-tips, _draw-placed-sequence, _draw-tuplets, _event-stem-geometry, _resolve-cross-staff-beams, _resolve-staff-accidentals
-#import "../engraving/markings.typ": _annotation-stem-direction, _collect-hairpins, _collect-pedal-spans, _draw-hairpins, _draw-pedal-spans, _draw-placed-annotations, _draw-tempo, _dynamics-baseline, _event-decoration-top
+#import "../engraving/markings.typ": _annotation-stem-direction, _collect-hairpins, _collect-pedal-spans, _draw-hairpins, _draw-pedal-spans, _draw-placed-annotations, _draw-tempo, _staff-dynamics-baselines, _event-decoration-top
 #import "../engraving/ties-slurs.typ": _collect-system-slurs, _collect-ties, _draw-slur-bows, _draw-ties, _layout-slurs, _slur-clearance-obstacles
 #import "../engraving/lyrics.typ": _draw-system-lyrics, _lyric-verse-counts, _placed-lyric-items
 #import "../engraving/figured-bass.typ": _draw-figure-stack, _figure-rows
@@ -239,6 +239,22 @@
   previous-layouts.len() > 0 and previous-layouts.last().at("tie_to_next", default: false)
 }
 
+// Chord symbols stand on their anchor and grow upward, so the header sits
+// above the tallest symbol. The default size keeps the original clearance.
+#let _harmony-symbol-text(symbol, unit, harmony-size, harmony-weight) = {
+  text(size: unit * harmony-size, weight: harmony-weight, symbol)
+}
+
+#let _harmony-header-clearance(system-measures, unit, harmony-size, harmony-weight) = {
+  let symbols = system-measures.map(measure => measure.harmony.map(item => item.symbol)).flatten()
+  let tallest = 0
+  for symbol in symbols {
+    let symbol-height = measure(_harmony-symbol-text(symbol, unit, harmony-size, harmony-weight)).height / unit
+    tallest = calc.max(tallest, symbol-height)
+  }
+  calc.max(3.0, tallest + 1.0)
+}
+
 #let _render-score-system(
   measures,
   system,
@@ -254,6 +270,8 @@
   lyric-font: none,
   lyric-gap: 0.8,
   verse-gap: 1.45,
+  harmony-size: 1.12,
+  harmony-weight: "bold",
   paint: black,
 ) = {
   let system-measures = measures.slice(system.start, system.start + system.widths.len())
@@ -425,19 +443,25 @@
   // Slur curves are settled before anything is drawn so fingerings and
   // ornaments can climb over the finished bows, and each voice's dynamics
   // share one system-wide baseline.
-  let dynamics-baseline-by-voice = ()
+  let pitched-voices-by-staff = range(staff-count).map(_ => ())
   for voice-index in range(lane-count) {
-    if is-tab-voice(voice-index) {
-      dynamics-baseline-by-voice.push(none)
-      continue
-    }
+    if is-tab-voice(voice-index) { continue }
     let staff-index = system-measures.first().voices.at(voice-index).staff-index
-    let bottom-y = bottom-map.at(str(staff-index))
     let placed-flat = ()
     for placed in placed-by-voice.at(voice-index) {
       placed-flat += placed
     }
-    dynamics-baseline-by-voice.push(_dynamics-baseline(placed-flat, bottom-y: bottom-y))
+    pitched-voices-by-staff.at(staff-index).push((voice-index: voice-index, placed: placed-flat))
+  }
+  let dynamics-baseline-by-voice = range(lane-count).map(_ => none)
+  for staff-index in range(staff-count) {
+    let baselines = _staff-dynamics-baselines(
+      pitched-voices-by-staff.at(staff-index),
+      bottom-y: bottom-map.at(str(staff-index)),
+    )
+    for entry in pitched-voices-by-staff.at(staff-index) {
+      dynamics-baseline-by-voice.at(entry.voice-index) = baselines.at(str(entry.voice-index))
+    }
   }
   let slur-layouts-by-voice = ()
   for voice-index in range(lane-count) {
@@ -609,7 +633,11 @@
       paint,
     ))
   }
-  let header-y = if has-harmony { calc.max(header-y-base, harmony-y + 3.0) } else { header-y-base }
+  let header-y = if has-harmony {
+    calc.max(header-y-base, harmony-y + _harmony-header-clearance(system-measures, unit, harmony-size, harmony-weight))
+  } else {
+    header-y-base
+  }
 
   block(width: system-width * unit, {
     set text(fill: paint)
@@ -765,7 +793,7 @@
             onset-x,
             harmony-y,
           ),
-          text(size: unit * 1.12, weight: "bold", harmony.symbol),
+          _harmony-symbol-text(harmony.symbol, unit, harmony-size, harmony-weight),
           anchor: "south",
           padding: 0pt,
         )

@@ -355,6 +355,13 @@ merge are shifted horizontally while retaining their shared onset.
 ```, side: false)
 ]
 
+A rest starts on its voice's side of the staff: upward for the first voice,
+downward for the second, and alternating for later voices. When the noteheads,
+ledger lines, or stems of other voices at its onset occupy that space, the rest
+moves further toward its own side, to the nearest free half staff space within
+ten staff spaces. It never crosses to the other side of its voice. If no free
+space exists in that range, it moves just past the nearest notehead on its side.
+
 Each staff may also define `label` for its first-system name and `short-label`
 for the optional name on later systems. This follows LilyPond's
 `instrumentName` / `shortInstrumentName` behavior: names live in a shared
@@ -536,7 +543,9 @@ Harmony changes use the same onset positions as the notes, including changes
 that fall between melody note onsets. Each symbol is centered on the onset
 where the harmony becomes active, independent of its duration. Symbols are text,
 so jazz spellings such as #c("Cmaj7"), #c("F#7(b9)"), #c("Bb/D"), and
-#c("N.C.") remain under the author's control.
+#c("N.C.") remain under the author's control. Set #c("harmony-size") and
+#c("harmony-weight") on the score to change every symbol's size and weight;
+larger symbols widen their columns and lift the header above the staff.
 
 #demo[
   #example(```typ
@@ -712,7 +721,7 @@ matching LilyPond's usual sparse numbering; `"all"` prints every bar number.
 
 #argtable(
   [#c("clef")], [`str`], [#c("\"treble\"")], [Clef for the implicit single staff only.],
-  [#c("staves")], [`dictionary | none`], [`none`], [Permanent staff-ID map. Each spec has `clef`, plus optional first-system `label` and later-system `short-label`. A `tab` staff also accepts `tuning` and `source` (@guitar).],
+  [#c("staves")], [`dictionary | none`], [`none`], [Permanent staff-ID map. Each spec has `clef`, plus optional first-system `label` and later-system `short-label`. A `tab` staff also accepts `tuning`, `position`, and `source` (@guitar).],
   [#c("bars")], [`array`], [`()`], [Required non-empty array of bar dictionaries.],
   [#c("key")], [`str`], [#c("\"C\"")], [Initial key signature.],
   [#c("time")], [`str`], [#c("\"4/4\"")], [Initial meter and full-bar duration.],
@@ -727,6 +736,8 @@ matching LilyPond's usual sparse numbering; `"all"` prints every bar number.
   [#c("lyric-font")], [`str | none`], [`none`], [Optional lyric font family.],
   [#c("lyric-gap")], [`number`], [`0.8`], [Clearance between existing below-staff ink and the first verse.],
   [#c("verse-gap")], [`number`], [`1.45`], [Baseline distance between lyric verses; must be at least `lyric-size`.],
+  [#c("harmony-size")], [`number`], [`1.12`], [Chord symbol text size in staff spaces. The header above the staff rises to clear larger symbols.],
+  [#c("harmony-weight")], [`str`], [#c("\"bold\"")], [Chord symbol weight: `regular` or `bold`.],
   [#c("beams")], [`bool`], [`false`], [Connect automatic beam groups.],
   [#c("chord-diagrams")], [`dictionary | none`], [`none`], [Harmony symbols to fretboard shapes, such as #c("guitar-chords"); draws a diagram above each symbol (@chord-diagrams).],
   [#c("staff-gap")], [`number | none`], [`none`], [Fixed distance between adjacent staff lines.],
@@ -1103,7 +1114,9 @@ the accidental-bearing `chromatic-turn` — accepts a fingered digit through
 Dynamics, hairpins, slurs, articulations, and fingerings avoid collisions with
 each other automatically: a hairpin shortens around an adjacent dynamic such
 as a closing `dyn=ff`, and fingerings rise above stacked articulations rather
-than overlapping them.
+than overlapping them. A dynamic below the staff clears the noteheads, ledger
+lines, and stems of every voice sharing its onset, and dynamics of different
+voices at one onset stack with the upper voice's mark nearest the staff.
 Named slurs over beamed passages follow the beam group's stem direction, so a
 slur goes below when every note it spans stems upward and above when any note
 stems downward.
@@ -1384,13 +1397,19 @@ an octave too high.
 
 === Choosing strings
 
-Each note takes the lowest fret that reaches it, the same default LilyPond
-uses, so music in open position needs no help. Notes that start together
-spread across separate strings with the smallest stretch, a note still ringing
-in another voice keeps its string when it can, and a tied note stays on the
-string it was tied from. To choose yourself, add `string=` with the string
-number, where string 1 is the highest; for a chord, list one string per pitch
-in written order.
+Each onset's notes are fingered together by the cheapest assignment. It weighs
+the highest fret used, the fret span of the fretted notes (a span beyond four
+frets costs extra), and how far the hand moves from the previous onset, so open
+strings and positions near the hand win. Notes that start together spread
+across separate strings, a note still ringing in another voice keeps its
+string, and a tied note stays on the string it was tied from. Two voices that
+sound the same pitch together share its string and draw one fret number. To
+choose yourself, add `string=` with the string number, where string 1 is the
+highest; for a chord, list one string per pitch in written order.
+
+A tab staff's `position` names the preferred lowest fret of the hand, so a
+passage can be steered toward a position without fixing each string. It biases
+the choice and never overrides `string=`, a tie, or a note that still rings.
 
 #demo[
   #example(```typ
@@ -1709,9 +1728,9 @@ instrument written from concert pitch:
 - Percussion staves have five lines; noteheads may be round, X, or circled X.
 - Independent tab rejects notation annotations it cannot draw; place markings on its notation source staff. Open-string pitches must use octaves -1 through 9.
 - Tab staves draw fret numbers only: no rhythm stems, bends, slides,
-  hammer-ons, or harmonics yet. Automatic fretting takes the lowest position
-  for each onset rather than planning hand positions across a phrase; use
-  `string=` where a passage should stay in one position.
+  hammer-ons, or harmonics yet. Automatic fretting chooses each onset's strings
+  without looking ahead to later onsets; use `string=` or `position:` to steer
+  a passage.
 - A chord cannot repeat a written pitch, so shapes that double a pitch on two
   strings (such as ukulele F or G) need one of the doubled notes left out.
 - Dense editorial markings or lyric verses may require `staff-gap`,

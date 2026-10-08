@@ -516,15 +516,125 @@
   )
 }
 
-// A rest in a staff with several voices moves toward its own voice's side
-// (up for odd voices, down for even ones) in half staff spaces until it
-// clears the noteheads other voices sustain at that onset on that staff,
-// matching LilyPond's rest collision placement.
+#let _top-staff-line-y = 4
+#let _bottom-staff-line-y = 0
+#let _notehead-half-height = 0.5
+#let _rest-clearance = 0.25
+// Rests move in half staff space steps, at most ten staff spaces from their
+// preferred offset.
+#let _rest-offset-step = 0.5
+#let _rest-offset-max-steps = 20
+
+#let _event-has-stem(event) = {
+  event.at("stem", default: false) or event.at("alternating_tremolo", default: false)
+}
+
+// Signed distance from a notehead center to the tip of a standard stem that
+// leaves in the given direction.
+#let _standard-stem-tip-offset(event, direction) = {
+  let notation-scale = _event-notation-scale(event)
+  let stem-length = if notation-scale < 1 { _small-stem-length } else { _default-stem-length }
+  stem-tip(0, 0, direction: direction, length: stem-length, glyph-scale: notation-scale).at(1)
+}
+
+// The vertical ink one sounding event occupies on a staff, in staff spaces
+// above the bottom line: each notehead on that staff, the ledger-line zone
+// between an off-staff head and the nearest staff line, and the stem from
+// each head to its tip.
+#let _event-rest-obstacle-intervals(event, staff-index) = {
+  let notation-scale = _event-notation-scale(event)
+  let head-half-height = _notehead-half-height * notation-scale
+  let stem-direction = _layout-stem-direction(event)
+  let intervals = ()
+  for pitch in event.pitches {
+    if _pitch-staff-index(pitch) != staff-index { continue }
+    let head-y = staff-y(pitch.staff_position)
+    intervals.push((bottom: head-y - head-half-height, top: head-y + head-half-height))
+    if head-y > _top-staff-line-y {
+      intervals.push((bottom: _top-staff-line-y, top: head-y))
+    }
+    if head-y < _bottom-staff-line-y {
+      intervals.push((bottom: head-y, top: _bottom-staff-line-y))
+    }
+    if _event-has-stem(event) {
+      let stem-tip-y = head-y + _standard-stem-tip-offset(event, stem-direction)
+      intervals.push((bottom: calc.min(head-y, stem-tip-y), top: calc.max(head-y, stem-tip-y)))
+    }
+  }
+  intervals
+}
+
+// Sorts intervals by their bottom edge and joins those that overlap.
+#let _merge-vertical-intervals(intervals) = {
+  let merged = ()
+  for interval in intervals.sorted(key: interval => interval.bottom) {
+    if merged.len() == 0 or interval.bottom > merged.last().top {
+      merged.push(interval)
+    } else {
+      let previous = merged.pop()
+      merged.push((bottom: previous.bottom, top: calc.max(previous.top, interval.top)))
+    }
+  }
+  merged
+}
+
+// Every stretch of the rest's staff that other voices occupy at its onset.
+#let _collect-rest-obstacle-intervals(voices, voice-id, rest-layout) = {
+  let intervals = ()
+  for other in voices {
+    if other.id == voice-id { continue }
+    for event in other.layouts {
+      if event.rest or event.at("spacer", default: false) { continue }
+      if not _event-occupies-onset(event, rest-layout.onset) { continue }
+      intervals += _event-rest-obstacle-intervals(event, rest-layout.staff_index)
+    }
+  }
+  _merge-vertical-intervals(intervals)
+}
+
+// A rest fits when its extent, padded by the clearance, lies entirely below or
+// entirely above every obstacle.
+#let _rest-fits-between-obstacles(rest-offset, extent, obstacles) = {
+  let padded-bottom = rest-offset + extent.bottom - _rest-clearance
+  let padded-top = rest-offset + extent.top + _rest-clearance
+  obstacles.all(obstacle => padded-top <= obstacle.bottom or padded-bottom >= obstacle.top)
+}
+
+// Searches outward from the preferred offset, only in the voice's own direction,
+// so a rest never crosses to the other side of its voice. Returns none when no
+// offset in range fits.
+#let _find-nearest-free-rest-offset(preferred-offset, extent, obstacles) = {
+  let own-side = if preferred-offset < 0 { -1 } else { 1 }
+  for step-index in range(_rest-offset-max-steps + 1) {
+    let candidate = preferred-offset + own-side * step-index * _rest-offset-step
+    if _rest-fits-between-obstacles(candidate, extent, obstacles) { return candidate }
+  }
+  none
+}
+
+// Fallback when no offset in range is clear: the rest moves just past the
+// nearest notehead of the other voices on its side of the staff.
+#let _push-rest-past-noteheads(offset, positions, extent) = {
+  if offset < 0 {
+    let note-bottom = staff-y(calc.min(..positions)) - _notehead-half-height
+    let limit = note-bottom - _rest-clearance - extent.top
+    if offset > limit { return calc.floor(limit * 2) / 2 }
+  } else {
+    let note-top = staff-y(calc.max(..positions)) + _notehead-half-height
+    let limit = note-top + _rest-clearance - extent.bottom
+    if offset < limit { return calc.ceil(limit * 2) / 2 }
+  }
+  offset
+}
+
+// A rest in a staff with several voices starts at its voice's preferred offset,
+// upward for even layer indices and downward for odd ones. It moves only further
+// toward its own side, to the nearest half staff space whose padded extent clears
+// the noteheads, ledger lines, and stems that other voices occupy at its onset on
+// its staff.
 // When every voice rests there for the same duration, one centered rest
 // stands for all of them.
 #let _separate-voice-rests(voices) = {
-  let clearance = 0.25
-  let notehead-half-height = 0.5
   voices.map(voice => {
     if voice.layer-count == 1 { return voice }
     let layouts = voice.layouts.map(layout => {
@@ -566,17 +676,11 @@
         return layout
       }
       let extent = rest-extent(_duration-base(layout))
-      let offset = layout.at("rest-offset", default: 0)
-      if offset < 0 {
-        let note-bottom = (calc.min(..positions) - 2) / 2 - notehead-half-height
-        let limit = note-bottom - clearance - extent.top
-        if offset > limit { offset = calc.floor(limit * 2) / 2 }
-      } else {
-        let note-top = (calc.max(..positions) - 2) / 2 + notehead-half-height
-        let limit = note-top + clearance - extent.bottom
-        if offset < limit { offset = calc.ceil(limit * 2) / 2 }
-      }
-      layout + (rest-offset: offset)
+      let preferred-offset = layout.at("rest-offset", default: 0)
+      let obstacles = _collect-rest-obstacle-intervals(voices, voice.id, layout)
+      let free-offset = _find-nearest-free-rest-offset(preferred-offset, extent, obstacles)
+      if free-offset != none { return layout + (rest-offset: free-offset) }
+      layout + (rest-offset: _push-rest-past-noteheads(preferred-offset, positions, extent))
     })
     voice + (layouts: layouts)
   })

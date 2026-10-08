@@ -1,5 +1,5 @@
 #import "@preview/cetz:0.5.2"
-#import "primitives.typ": _bravura-width, _draw-bravura-glyph, draw-accidental, draw-articulation, draw-breath-mark, draw-dynamic, draw-fermata, draw-hairpin, draw-ornament-mordent, draw-ornament-trill, draw-ornament-turn, draw-pedal-mark, dynamic-width, sampled-y-at-x
+#import "primitives.typ": _bravura-bounding-box, _bravura-width, _draw-bravura-glyph, draw-accidental, draw-articulation, draw-breath-mark, draw-dynamic, draw-fermata, draw-hairpin, draw-ornament-mordent, draw-ornament-trill, draw-ornament-turn, draw-pedal-mark, dynamic-width, sampled-y-at-x
 #import "../foundation/diagnostics.typ": _score-error, _validate-marking
 #import "event-geometry.typ": _event-bottom-y, _event-pitch-ys, _head-half-width, _is-split-chord, _stem-direction
 #import "events.typ": _beam-group-visible, _event-stem-geometry
@@ -345,28 +345,64 @@
   event-bottom
 }
 
-// All dynamics of one voice share a baseline per system: far enough below
-// the staff for every event that carries a dynamic, so a run of marks sits
-// on one line instead of bobbing with the notation above each one. The
-// tallest dynamic letter (f) reaches 1.78 above the baseline, so the
-// demand below each event's ink keeps that ascent clear.
-#let _dynamics-baseline(placed-flat, bottom-y: 0) = {
-  let baseline = none
-  for item in placed-flat {
-    if _annotation-with-prefix(item.layout, "dyn=") != none {
+// Dynamic letters are drawn at this scale (see draw-dynamic). A stacked
+// dynamic sits one step below the one above it: that letter's deepest
+// descender, the lower letter's tallest ink, and a 0.4 staff-space gap. The
+// step is taken from the letter with the largest extent, f.
+#let _dynamic-draw-scale = 0.78
+#let _dynamic-stack-step = {
+  let f-bounds = _bravura-bounding-box("dynamic-f")
+  -f-bounds.sw.at(1) * _dynamic-draw-scale + f-bounds.ne.at(1) * _dynamic-draw-scale + 0.4
+}
+
+// The shared dynamics baseline of each pitched voice on one staff, keyed by
+// voice index. `voices` pairs each voice index with its placed events, in
+// voice order from the top voice down. A dynamic clears the lowest ink of its
+// column on this staff: the noteheads, ledger lines, and stems of every voice
+// sharing the onset, with the usual padding. Events drawn on another staff do
+// not count. A voice's dynamic also sits at least one stack step below the
+// baseline of any higher voice that marks the same column.
+#let _staff-dynamics-baselines(voices, bottom-y: 0) = {
+  let column-ink = (:)
+  let column-dynamic-voices = (:)
+  for entry in voices {
+    for item in entry.placed {
+      if _event-bottom-y(item.layout, bottom-y) != bottom-y { continue }
+      let column = str(item.x)
+      column-ink.insert(column, calc.min(
+        column-ink.at(column, default: bottom-y),
+        _event-ink-bottom(item, bottom-y: bottom-y),
+      ))
+      if _annotation-with-prefix(item.layout, "dyn=") != none {
+        column-dynamic-voices.insert(column, column-dynamic-voices.at(column, default: ()) + (entry.voice-index,))
+      }
+    }
+  }
+  let baselines = (:)
+  for entry in voices {
+    let baseline = none
+    for item in entry.placed {
+      if _annotation-with-prefix(item.layout, "dyn=") == none { continue }
+      let column = str(item.x)
       let is-drawn-on-home-staff = (
         _event-bottom-y(item.layout, bottom-y) == bottom-y
           and not _is-split-chord(item.layout)
       )
-      let demand = if is-drawn-on-home-staff {
-        calc.min(bottom-y - 2.0, _event-ink-bottom(item, bottom-y: bottom-y) - 2.05)
-      } else {
-        bottom-y - 2.0
+      let ink-clearance = if is-drawn-on-home-staff { 2.05 } else { 2.0 }
+      let demand = calc.min(
+        bottom-y - 2.0,
+        column-ink.at(column, default: bottom-y) - ink-clearance,
+      )
+      for upper-voice in column-dynamic-voices.at(column) {
+        if upper-voice < entry.voice-index {
+          demand = calc.min(demand, baselines.at(str(upper-voice)) - _dynamic-stack-step)
+        }
       }
       baseline = if baseline == none { demand } else { calc.min(baseline, demand) }
     }
+    baselines.insert(str(entry.voice-index), baseline)
   }
-  baseline
+  baselines
 }
 
 #let _draw-placed-annotations(placed, bottom-y: 0, unit: 8pt, beams: false, slur-layouts: (), dynamics-baseline: none, paint: black) = {
