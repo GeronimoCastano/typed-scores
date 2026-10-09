@@ -1,6 +1,6 @@
 # typed-scores
 
-See the [documentation](https://github.com/GeronimoCastano/typed-scores/blob/d9b3df1/docs/documentation.pdf) for the complete reference.
+See the [documentation](https://github.com/GeronimoCastano/typed-scores/blob/63212dc/docs/documentation.pdf) for the complete reference.
 
 ![Chopin Nocturne Op. 9 No. 2 opening](assets/readme/chopin-opening.png)
 
@@ -630,9 +630,9 @@ most 256 tied note values; divide longer values across shorter measures.
 - Dense markings or lyric verses may need `staff-gap`, `note-spacing`,
   `lyric-gap`, `verse-gap`, or `scale` adjustment.
 
-See the [user guide](https://github.com/GeronimoCastano/typed-scores/blob/d9b3df1/docs/documentation.pdf)
+See the [user guide](https://github.com/GeronimoCastano/typed-scores/blob/63212dc/docs/documentation.pdf)
 for the complete reference. The
-[five-piece release showcase](https://github.com/GeronimoCastano/typed-scores/blob/b74f43d77bb6e00ab9b737b87859c86beb395c7e/examples/showcase.pdf)
+[five-piece release showcase](https://github.com/GeronimoCastano/typed-scores/blob/63212dc/examples/showcase.pdf)
 includes famous piano, string-score, solo-cello, and alto-saxophone excerpts;
-its reusable [source fixtures and reference notes](https://github.com/GeronimoCastano/typed-scores/tree/b74f43d77bb6e00ab9b737b87859c86beb395c7e/examples)
+its reusable [source fixtures and reference notes](https://github.com/GeronimoCastano/typed-scores/tree/63212dc/examples)
 live alongside it.
