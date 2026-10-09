@@ -30,18 +30,7 @@ Mutopia and its 1881 Schirmer source accordingly. The Moonlight Sonata edition
 by Chris Sawer and Stewart Holmes is distributed by Mutopia under CC BY-SA 2.5,
 after Berners (1908); its fixture records that source.
 
-The README gallery in `assets/readme/examples/` adds three translations. Its
-Fantaisie-Impromptu excerpt (bars 5–10 of Op. 66) follows Mutopia's
-public-domain [piece 1693](https://www.mutopiaproject.org/cgibin/piece-info.cgi?id=1693),
-edition by Herrmann Scholtz; its LilyPond reference is
-`lilypond-reference/chopin-fantaisie-impromptu-op66.ly`. The Carcassi Prelude in C (Op. 59 No. 1) follows Mutopia's public-domain
-[piece 2209](https://www.mutopiaproject.org/cgibin/piece-info.cgi?id=2209), the
-1906 Ditson edition by G. C. Santisteban, typeset by Jeffrey Olson. The guitar
-voice applies `\transpose c c'`, so the file records sounding pitches one octave
-below the printed ones. The Ein' feste Burg excerpt
-follows Mutopia's public-domain [piece 1237](https://www.mutopiaproject.org/cgibin/piece-info.cgi?id=1237),
-an SATB setting by Martin Luther (1529) typeset by Steve Dunlop, with the
-German text of Luther's stanza. Each file header records its source and licence.
+The README gallery in `assets/readme/examples/` adds four cards. The Eine kleine Nachtmusik card imports this folder's Mozart fixture with `bar-count: 4`, so its measures 1–4 match the showcase transcription above. Its Fantaisie-Impromptu excerpt (bars 5–8 of Op. 66) follows Mutopia's public-domain [piece 1693](https://www.mutopiaproject.org/cgibin/piece-info.cgi?id=1693), edition by Herrmann Scholtz; its LilyPond reference is `lilypond-reference/chopin-fantaisie-impromptu-op66.ly`. The Carcassi Prelude in C (Op. 59 No. 1) follows Mutopia's public-domain [piece 2209](https://www.mutopiaproject.org/cgibin/piece-info.cgi?id=2209), the 1906 Ditson edition by G. C. Santisteban, typeset by Jeffrey Olson. The guitar voice applies `\transpose c c'`, so the file records sounding pitches one octave below the printed ones. The Five-Four Vamp is an original 5/4 piece, not a transcription, so it has no external source. Each file header records its source and licence.
 
 ## LilyPond engraving references
 

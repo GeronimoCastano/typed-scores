@@ -10,18 +10,33 @@
 // above sounding pitch; the notes here are sounding pitches for the treble-8
 // clef. Each note has an explicit string. The bass voice of the source doubles
 // the arpeggio's lowest notes, so only the upper voice is set. Chord symbols
-// follow the bass changes.
+// follow the bass changes. The tempo marking is the README's own choice; the
+// Mutopia page does not state one.
 //
 // typst compile --root . --ppi 300 assets/readme/examples/carcassi-prelude-c.typ assets/readme/examples/carcassi-prelude-c.png
 
 #import "../../../src/lib.typ": *
 
-#set page(width: 17cm, height: auto, margin: 12pt)
+#set page(width: 16cm, height: auto, margin: 12pt)
 #set text(font: "New Computer Modern", size: 11pt)
 
+#let plate-header(title, subtitle, instrumentation) = {
+  align(center)[
+    #text(size: 18pt, weight: "semibold")[#title]
+    #v(0.12em)
+    #text(size: 10.5pt, style: "italic")[#subtitle]
+    #v(0.18em)
+    #text(size: 8pt, fill: rgb("555555"))[#instrumentation]
+  ]
+  v(1em)
+}
+
 #block(width: 100%, fill: white, stroke: 0.6pt + luma(215), radius: 8pt, inset: 18pt)[
-  #text(size: 9pt, style: "italic")[Prelude in C, Op. 59 No. 1 --- M. Carcassi]
-  #v(0.4em)
+  #plate-header(
+    [Prelude in C],
+    [Op. 59 No. 1 · measures 1–4],
+    [Guitar],
+  )
   #score(
     staves: (
       guitar: (clef: "treble-8"),
@@ -29,12 +44,14 @@
     ),
     key: "C",
     time: "4/4",
+    tempo: [Moderato],
+    composer: [M. Carcassi],
     theme: "light",
     beams: true,
     chord-diagrams: guitar-chords,
-    scale: 0.6,
-    width: 85,
-    system-gap: 0.5em,
+    scale: 0.49,
+    wrap: true,
+    system-gap: 0.3em,
     ragged-right: false,
     bars: (
     (

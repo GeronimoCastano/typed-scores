@@ -9,27 +9,27 @@ strings are parsed by a Rust/WASM plugin; Typst and CeTZ lay out the resulting
 score with bundled Bravura glyphs.
 
 ```typst
-#import "@preview/typed-scores:0.6.0": *
+#import "@preview/typed-scores:0.6.1": *
 ```
 
 ## Examples
 
 <table>
 <tr>
-  <td><a href="https://github.com/GeronimoCastano/typed-scores/blob/main/assets/readme/examples/bird-blues.typ"><img src="assets/readme/examples/bird-blues.png" width="400"></a></td>
+  <td><a href="https://github.com/GeronimoCastano/typed-scores/blob/main/assets/readme/examples/mozart-eine-kleine-nachtmusik.typ"><img src="assets/readme/examples/mozart-eine-kleine-nachtmusik.png" width="400"></a></td>
   <td><a href="https://github.com/GeronimoCastano/typed-scores/blob/main/assets/readme/examples/chopin-fantaisie-impromptu.typ"><img src="assets/readme/examples/chopin-fantaisie-impromptu.png" width="400"></a></td>
 </tr>
 <tr>
-  <td>Bird blues in F: an original bebop lead sheet over Parker-style changes, with a walking bass</td>
-  <td>Chopin, Fantaisie-Impromptu Op. 66, bars 5–10: sixteenths against sextuplets, with pedal and ottava</td>
+  <td>Mozart, Eine kleine Nachtmusik K. 525: measures 1–4 of the four-staff string opening</td>
+  <td>Chopin, Fantaisie-Impromptu Op. 66, bars 5–8: sixteenths against sextuplets, with pedal and ottava</td>
 </tr>
 <tr>
+  <td><a href="https://github.com/GeronimoCastano/typed-scores/blob/main/assets/readme/examples/five-four-vamp.typ"><img src="assets/readme/examples/five-four-vamp.png" width="400"></a></td>
   <td><a href="https://github.com/GeronimoCastano/typed-scores/blob/main/assets/readme/examples/carcassi-prelude-c.typ"><img src="assets/readme/examples/carcassi-prelude-c.png" width="400"></a></td>
-  <td><a href="https://github.com/GeronimoCastano/typed-scores/blob/main/assets/readme/examples/ein-feste-burg.typ"><img src="assets/readme/examples/ein-feste-burg.png" width="400"></a></td>
 </tr>
 <tr>
+  <td>Five-Four Vamp: an original piano study in 5/4 over E-flat minor changes, with a walking left hand and chord stabs</td>
   <td>Carcassi, Prelude in C (Op. 59 No. 1): guitar arpeggios over C, Am, Dm and G7, with a mirrored tab staff and chord diagrams</td>
-  <td>Ein' feste Burg (Luther, 1529): SATB with two voices per staff and the German text under the soprano</td>
 </tr>
 </table>
 
@@ -569,7 +569,7 @@ input. Pass the file's contents, since a package cannot open files in your
 project:
 
 ```typst
-#import "@preview/typed-scores:0.6.0": import-score, read-score
+#import "@preview/typed-scores:0.6.1": import-score, read-score
 
 #import-score(read("song.mxl", encoding: none))
 #import-score(read("tunes.abc"), tune: 12, scale: 0.8, theme: "dark")
