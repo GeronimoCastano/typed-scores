@@ -16,16 +16,16 @@ score with bundled Bravura glyphs.
 
 <table>
 <tr>
-  <td><a href="https://github.com/GeronimoCastano/typed-scores/blob/main/assets/readme/examples/mozart-eine-kleine-nachtmusik.typ"><img src="assets/readme/examples/mozart-eine-kleine-nachtmusik.png" width="400"></a></td>
-  <td><a href="https://github.com/GeronimoCastano/typed-scores/blob/main/assets/readme/examples/chopin-fantaisie-impromptu.typ"><img src="assets/readme/examples/chopin-fantaisie-impromptu.png" width="400"></a></td>
+  <td><a href="https://github.com/GeronimoCastano/typed-scores/blob/63212dc04bb98c00a27f89a4c2abc61bb080fb51/assets/readme/examples/mozart-eine-kleine-nachtmusik.typ"><img src="assets/readme/examples/mozart-eine-kleine-nachtmusik.png" alt="Opening of Eine kleine Nachtmusik for string quartet" width="400"></a></td>
+  <td><a href="https://github.com/GeronimoCastano/typed-scores/blob/63212dc04bb98c00a27f89a4c2abc61bb080fb51/assets/readme/examples/chopin-fantaisie-impromptu.typ"><img src="assets/readme/examples/chopin-fantaisie-impromptu.png" alt="Bars 5 to 8 of Chopin's Fantaisie-Impromptu" width="400"></a></td>
 </tr>
 <tr>
   <td>Mozart, Eine kleine Nachtmusik K. 525: measures 1–4 of the four-staff string opening</td>
   <td>Chopin, Fantaisie-Impromptu Op. 66, bars 5–8: sixteenths against sextuplets, with pedal and ottava</td>
 </tr>
 <tr>
-  <td><a href="https://github.com/GeronimoCastano/typed-scores/blob/main/assets/readme/examples/five-four-vamp.typ"><img src="assets/readme/examples/five-four-vamp.png" width="400"></a></td>
-  <td><a href="https://github.com/GeronimoCastano/typed-scores/blob/main/assets/readme/examples/carcassi-prelude-c.typ"><img src="assets/readme/examples/carcassi-prelude-c.png" width="400"></a></td>
+  <td><a href="https://github.com/GeronimoCastano/typed-scores/blob/63212dc04bb98c00a27f89a4c2abc61bb080fb51/assets/readme/examples/five-four-vamp.typ"><img src="assets/readme/examples/five-four-vamp.png" alt="Piano lead sheet in 5/4 with chord symbols" width="400"></a></td>
+  <td><a href="https://github.com/GeronimoCastano/typed-scores/blob/63212dc04bb98c00a27f89a4c2abc61bb080fb51/assets/readme/examples/carcassi-prelude-c.typ"><img src="assets/readme/examples/carcassi-prelude-c.png" alt="Carcassi Prelude in C with tab staff and chord diagrams" width="400"></a></td>
 </tr>
 <tr>
   <td>Five-Four Vamp: an original piano study in 5/4 over E-flat minor changes, with a walking left hand and chord stabs</td>

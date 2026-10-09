@@ -133,9 +133,11 @@ cp "$repo_root/src/plugin.wasm" "$package_target/src/plugin.wasm"
 cp -R "$repo_root/src/assets/glyphs" "$package_target/src/assets/glyphs"
 
 found_readme_image=0
-for readme_image in "$repo_root"/assets/readme/*.png; do
+for readme_image in "$repo_root"/assets/readme/*.png "$repo_root"/assets/readme/examples/*.png; do
   if [ -f "$readme_image" ]; then
-    cp "$readme_image" "$package_target/assets/readme/"
+    readme_image_relative=${readme_image#"$repo_root/"}
+    mkdir -p "$(dirname -- "$package_target/$readme_image_relative")"
+    cp "$readme_image" "$package_target/$readme_image_relative"
     found_readme_image=1
   fi
 done
