@@ -181,7 +181,23 @@ fn unpack_mxl(bytes: &[u8]) -> ImportResult<Vec<u8>> {
             .root()
             .descendants()
             .into_iter()
-            .find(|node| node.name() == "rootfile" && node.attribute("full-path").is_some())
+            .filter(|node| node.name() == "rootfile" && node.attribute("full-path").is_some())
+            .find(|node| {
+                node.attribute("media-type") == Some("application/vnd.recordare.musicxml+xml")
+            })
+            .or_else(|| {
+                document
+                    .root()
+                    .descendants()
+                    .into_iter()
+                    .filter(|node| node.name() == "rootfile")
+                    .find(|node| {
+                        node.attribute("full-path").is_some_and(|path| {
+                            let lower = path.to_ascii_lowercase();
+                            lower.ends_with(".xml") || lower.ends_with(".musicxml")
+                        })
+                    })
+            })
             .and_then(|node| node.attribute("full-path"))
             .map(str::to_string);
     }
@@ -357,7 +373,7 @@ fn clef_name(sign: Option<&str>, line: Option<&str>, score: &mut Score) -> Strin
     }
     let fallback = if sign == Some("F") { "bass" } else { "treble" };
     score.warn(format!(
-        "clef {}{} is not supported; using {fallback}",
+        "clef {} line {} is not supported; using {fallback}",
         sign.unwrap_or("None"),
         line.unwrap_or("")
     ));
@@ -523,6 +539,16 @@ impl<'s> PartReader<'s> {
     }
 
     fn read_attributes(&mut self, node: XNode<'_>, cursor: Frac) {
+        for style in children(node, "measure-style") {
+            if text_at(style, "multiple-rest")
+                .and_then(|value| value.parse::<usize>().ok())
+                .is_some_and(|count| count > 1)
+            {
+                self.score.warn(
+                    "MusicXML multiple-measure rests are not expanded; inspect read-score warnings and measure numbers",
+                );
+            }
+        }
         if let Some(divisions) = text_at(node, "divisions").and_then(|value| parse_number(&value)) {
             let whole = divisions.n / divisions.d;
             if whole > 0 {
@@ -530,16 +556,46 @@ impl<'s> PartReader<'s> {
             }
         }
         if let Some(key) = child(node, "key") {
+            if cursor > Frac::ZERO {
+                self.score.warn(
+                    "mid-measure MusicXML key changes are applied at the start of the measure",
+                );
+            }
             if let Some(fifths) = text_at(key, "fifths").and_then(|value| value.parse::<i32>().ok())
             {
                 let mode = text_at(key, "mode").unwrap_or_else(|| "major".into());
+                if !matches!(mode.as_str(), "major" | "minor" | "aeolian") {
+                    self.score
+                        .warn(format!("MusicXML key mode {mode:?} was imported as major"));
+                }
                 self.info().key = Some(key_name(fifths, mode == "minor" || mode == "aeolian"));
+            }
+        }
+        if let Some(transpose) = child(node, "transpose") {
+            let chromatic = text_at(transpose, "chromatic")
+                .and_then(|value| parse_number(&value))
+                .unwrap_or(Frac::ZERO);
+            let diatonic = text_at(transpose, "diatonic")
+                .and_then(|value| parse_number(&value))
+                .unwrap_or(Frac::ZERO);
+            if chromatic != Frac::ZERO
+                || diatonic != Frac::ZERO
+                || child(transpose, "octave-change").is_some()
+            {
+                self.score.warn(
+                    "instrument transposition metadata is not represented; written pitches are retained",
+                );
             }
         }
         if let Some(time) = child(node, "time") {
             if child(time, "beats").is_some() {
                 let beats = text_at(time, "beats").unwrap_or_default();
                 let beat_type = text_at(time, "beat-type").unwrap_or_default();
+                if beats.contains('+') {
+                    self.score.warn(
+                        "MusicXML additive meter grouping is not retained; only the summed meter is imported",
+                    );
+                }
                 let numerator: Option<i64> = beats
                     .split('+')
                     .map(|part| part.trim().parse::<i64>().ok())
@@ -561,13 +617,15 @@ impl<'s> PartReader<'s> {
                 .unwrap_or(1);
             let sign = text_at(clef, "sign");
             let line = text_at(clef, "line");
-            let name = clef_name(sign.as_deref(), line.as_deref(), self.score);
-            if !matches!(
-                text_at(clef, "clef-octave-change").as_deref(),
-                None | Some("0")
-            ) {
-                self.score
-                    .warn("octave-transposing clefs are drawn without their octave mark");
+            let mut name = clef_name(sign.as_deref(), line.as_deref(), self.score);
+            match text_at(clef, "clef-octave-change").as_deref() {
+                Some("-1") if matches!(name.as_str(), "treble" | "bass") => {
+                    name.push_str("-8");
+                }
+                None | Some("0") => {}
+                _ => self
+                    .score
+                    .warn("this octave-transposing clef is drawn without its octave mark"),
             }
             let staff_id = self.staff_id(number);
             let info = self.info();
@@ -591,6 +649,11 @@ impl<'s> PartReader<'s> {
             .and_then(|value| value.parse().ok())
             .unwrap_or(1);
         let staff_id = self.staff_id(staff);
+        if staff == 0 || staff > self.staff_ids.len() {
+            self.score.warn(format!(
+                "MusicXML staff number {staff} is out of range; staff {staff_id} was used"
+            ));
+        }
         if let Some(notehead) = text_at(node, "notehead") {
             if notehead != "normal" {
                 self.score.warn(format!(
@@ -609,6 +672,11 @@ impl<'s> PartReader<'s> {
         let cursor = state.cursor;
 
         if is_chord {
+            if node.attribute("print-object") == Some("no") {
+                self.score
+                    .warn("invisible MusicXML chord members are omitted from the imported chord");
+                return Ok(());
+            }
             if let Some(pitch) = pitch.clone() {
                 let on_grace = is_grace
                     && state
@@ -638,8 +706,29 @@ impl<'s> PartReader<'s> {
                         {
                             previous.pitches.push(pitch);
                         }
+                        if previous.tie != has_tie_start(node) {
+                            self.score
+                                .warn("partial chord ties in MusicXML were dropped");
+                        }
                         if !has_tie_start(node) {
                             previous.tie = false;
+                        }
+                        if child(node, "lyric").is_some() {
+                            let mut chord_member = Event::new(Kind::Note, Frac::ZERO);
+                            self.read_lyrics(node, &mut chord_member);
+                            if previous.lyrics.is_empty() {
+                                previous.lyrics = chord_member.lyrics;
+                            } else if !chord_member.lyrics.is_empty()
+                                && (previous.lyrics.iter().count()
+                                    != chord_member.lyrics.iter().count()
+                                    || previous.lyrics.iter().any(|(verse, lyric)| {
+                                        chord_member.lyrics.get(verse) != Some(lyric)
+                                    }))
+                            {
+                                self.score.warn(
+                                    "different lyrics on MusicXML chord members were dropped",
+                                );
+                            }
                         }
                         self.read_notations(node, &mut previous);
                     }
@@ -698,9 +787,11 @@ impl<'s> PartReader<'s> {
         event.cue = child(node, "cue").is_some()
             || child(node, "type").is_some_and(|value| value.attribute("size") == Some("cue"));
         event.onset = cursor;
-        if event.kind == Kind::Note {
+        if matches!(event.kind, Kind::Note | Kind::Rest) {
             self.read_beam(node, &mut event);
             self.read_notations(node, &mut event);
+        }
+        if event.kind == Kind::Note {
             self.read_lyrics(node, &mut event);
         }
         if is_grace {
@@ -948,11 +1039,30 @@ impl<'s> PartReader<'s> {
                         "accent" => &["accent"],
                         "strong-accent" => &["marcato"],
                         "detached-legato" => &["tenuto", "stacc"],
-                        "breath-mark" | "caesura" => &["breath"],
+                        "breath-mark" => &["breath"],
                         _ => &[],
                     };
                     for annotation in annotations {
                         event.add(*annotation);
+                    }
+                    if !matches!(
+                        mark.name(),
+                        "staccato"
+                            | "staccatissimo"
+                            | "spiccato"
+                            | "tenuto"
+                            | "accent"
+                            | "strong-accent"
+                            | "detached-legato"
+                            | "breath-mark"
+                    ) {
+                        self.score
+                            .warn(format!("MusicXML articulation {} was dropped", mark.name()));
+                    }
+                    if mark.name() == "caesura" {
+                        self.score.warn(
+                            "MusicXML caesura marks were dropped because typed-scores only supports breath marks",
+                        );
                     }
                 }
             }
@@ -971,10 +1081,22 @@ impl<'s> PartReader<'s> {
                     } else if name == "tremolo" {
                         self.score
                             .warn("two-note tremolos are written as plain notes");
+                    } else if !matches!(name, "tremolo" | "wavy-line") {
+                        self.score
+                            .warn(format!("MusicXML ornament {name} was dropped"));
+                    }
+                    if name == "wavy-line" {
+                        self.score.warn("MusicXML wavy-line ornaments were dropped");
                     }
                 }
             }
             if child(notations, "fermata").is_some() {
+                if child(notations, "fermata").and_then(|fermata| fermata.attribute("type"))
+                    == Some("inverted")
+                {
+                    self.score
+                        .warn("inverted MusicXML fermatas are written as upright fermatas");
+                }
                 event.add("fermata");
             }
             for technical in children(notations, "technical") {
@@ -985,7 +1107,13 @@ impl<'s> PartReader<'s> {
                         && !event.annotations.iter().any(|mark| mark.starts_with("f="))
                     {
                         event.add(format!("f={digits}"));
+                    } else if !digits.is_empty() && !digits.chars().all(|c| c.is_ascii_digit()) {
+                        self.score
+                            .warn("non-numeric MusicXML fingering was dropped");
                     }
+                }
+                if children(technical, "up-bow").next().is_some() {
+                    self.score.warn("MusicXML up-bow marks were dropped");
                 }
             }
             if let Some(arpeggiate) = child(notations, "arpeggiate") {
@@ -1037,6 +1165,7 @@ impl<'s> PartReader<'s> {
                     text: text.trim().to_string(),
                     hyphen_after: syllabic == "begin" || syllabic == "middle",
                     extend,
+                    token: None,
                 },
             );
         }
@@ -1168,13 +1297,18 @@ impl<'s> PartReader<'s> {
             return;
         }
         for text in words {
-            let info = self.info();
             // Navigation marks sit at the bar's left edge; later ones stay text.
-            if is_navigation_word(&text) && onset == Frac::ZERO && info.navigation.is_none() {
-                info.navigation = Some(text);
+            if is_navigation_word(&text) && onset == Frac::ZERO && self.info().navigation.is_none()
+            {
+                self.info().navigation = Some(text);
             } else {
+                if !below {
+                    self.score.warn(
+                        "above-staff MusicXML direction text is placed below the staff by typed-scores",
+                    );
+                }
                 let prefix = if below { "text-below=" } else { "text=" };
-                info.directions.push(Direction {
+                self.info().directions.push(Direction {
                     staff: staff_id.clone(),
                     onset,
                     annotation: format!("{prefix}{text}"),
@@ -1451,9 +1585,29 @@ pub fn read(bytes: &[u8]) -> ImportResult<Score> {
         let PartReader {
             measures,
             records,
-            events,
+            mut events,
+            verse_numbers,
             ..
         } = reader;
+        let mut verse_order: Vec<(usize, String)> = verse_numbers.into_iter().enumerate().collect();
+        verse_order.sort_by(|(_, left), (_, right)| {
+            match (left.parse::<u32>(), right.parse::<u32>()) {
+                (Ok(left), Ok(right)) => left.cmp(&right),
+                _ => left.cmp(right),
+            }
+        });
+        let mut verse_remap = Map::new();
+        for (new_index, (old_index, _)) in verse_order.into_iter().enumerate() {
+            verse_remap.insert(old_index, new_index);
+        }
+        for event in &mut events {
+            let lyrics = std::mem::take(&mut event.lyrics);
+            for (verse, lyric) in lyrics.iter() {
+                if let Some(index) = verse_remap.get(verse) {
+                    event.lyrics.insert(*index, lyric.clone());
+                }
+            }
+        }
         readers.push((ids, measures, records, events));
     }
 
@@ -1470,30 +1624,62 @@ pub fn read(bytes: &[u8]) -> ImportResult<Score> {
         .collect();
     let first_part_keys: Vec<Option<String>> =
         readers[0].1.iter().map(|info| info.key.clone()).collect();
+    let first_part_times: Vec<Option<String>> =
+        readers[0].1.iter().map(|info| info.time.clone()).collect();
     for (part_index, (ids, infos, records, events)) in readers.iter_mut().enumerate() {
         let mut pending_clefs: Vec<(String, String)> = Vec::new();
         for (index, info) in infos.iter_mut().enumerate() {
+            let mut warnings = Vec::new();
             let measure = &mut score.measures[index];
             if part_index == 0 {
                 measure.number = info.number.clone();
                 measure.time = info.time.clone();
                 measure.key = info.key.clone();
-            } else if info.key.is_some()
-                && first_part_keys
-                    .get(index)
-                    .is_some_and(|key| *key != info.key)
-            {
-                score.warn("parts with different key signatures share the first part's key");
+            } else {
+                if info.time.is_some()
+                    && first_part_times
+                        .get(index)
+                        .is_some_and(|time| *time != info.time)
+                {
+                    warnings.push(
+                        "time signature changes in later MusicXML parts were dropped".to_string(),
+                    );
+                }
+                if info.key.is_some()
+                    && first_part_keys
+                        .get(index)
+                        .is_some_and(|key| *key != info.key)
+                {
+                    warnings.push(
+                        "parts with different key signatures share the first part's key"
+                            .to_string(),
+                    );
+                }
             }
             let measure = &mut score.measures[index];
             if measure.tempo.is_none() {
                 measure.tempo = info.tempo.take();
+            } else if info.tempo.is_some() {
+                warnings.push(format!(
+                    "bar {}: an additional tempo mark was dropped",
+                    info.number
+                ));
             }
             if measure.rehearsal.is_none() {
                 measure.rehearsal = info.rehearsal.take();
+            } else if info.rehearsal.is_some() {
+                warnings.push(format!(
+                    "bar {}: an additional rehearsal mark was dropped",
+                    info.number
+                ));
             }
             if measure.navigation.is_none() {
                 measure.navigation = info.navigation.take();
+            } else if info.navigation.is_some() {
+                warnings.push(format!(
+                    "bar {}: an additional navigation mark was dropped",
+                    info.number
+                ));
             }
             if measure.barline_left.is_none() {
                 measure.barline_left = info.barline_left.take();
@@ -1520,8 +1706,19 @@ pub fn read(bytes: &[u8]) -> ImportResult<Score> {
                 measure.harmony = harmony;
             }
             measure.directions.extend(info.directions.drain(..));
+            for warning in warnings {
+                score.warn(warning);
+            }
         }
         assign_voices(ids, infos.len(), records, events, &mut score);
+    }
+
+    for measure in &mut score.measures {
+        for staff in &score.staves {
+            if measure.voices.get(&staff.id).is_none() {
+                measure.voices.insert(staff.id.clone(), vec![Vec::new()]);
+            }
+        }
     }
 
     let moved = readers

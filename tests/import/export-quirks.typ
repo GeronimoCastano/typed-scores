@@ -1,4 +1,8 @@
 // Source score: export-quirks.musicxml.
+// Import note: MusicXML wavy-line ornaments were dropped.
+// Import note: partial chord ties in MusicXML were dropped.
+// Import note: above-staff MusicXML direction text is placed below the staff by typed-scores.
+// Import note: instrument transposition metadata is not represented; written pitches are retained.
 // Import note: parts with different key signatures share the first part's key.
 #import "../../src/lib.typ": score
 

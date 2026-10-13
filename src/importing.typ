@@ -44,7 +44,7 @@
       fix: "pass the number that follows X: in the ABC file",
     )
   }
-  if tune != none and (type(tune) == int and tune < 1 or type(tune) == str and tune.match(regex("^[0-9]+$")) == none) {
+  if tune != none and (type(tune) == int and tune < 1 or type(tune) == str and (tune.match(regex("^[0-9]+$")) == none or tune.match(regex("^0+$")) != none)) {
     _score-error("read-score tune", "tune must be a positive ABC X: number", value: tune, fix: "write a positive integer or its digits as a string")
   }
   if tune != none and format == "musicxml" {
@@ -57,7 +57,7 @@
     "format=" + format,
     "tune=" + if tune == none { "" } else if type(tune) == int { repr(tune) } else { tune },
     "package=@preview/typed-scores:" + _package-version,
-    "source=" + if name == none { "" } else { name.replace("\n", " ") },
+    "source=" + if name == none { "" } else { name.replace("\n", " ").replace("\r", " ") },
     "scale=0.7",
   ).join("\n")
   let response = json(_score-plugin.import_score(data, bytes(options)))

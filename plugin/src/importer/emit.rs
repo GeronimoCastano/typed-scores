@@ -184,6 +184,7 @@ impl<'a> VoiceWriter<'a> {
         if events.len() == 1
             && events[0].kind == Kind::MeasureRest
             && events[0].duration == self.length
+            && events[0].annotations.is_empty()
         {
             return Ok("_".into());
         }
@@ -379,8 +380,14 @@ impl<'a> VoiceWriter<'a> {
             Kind::MeasureRest => {
                 self.last_code = None;
                 let mut parts = vec![self.switch(event)];
-                for (base, dots) in binary_pieces(event.duration)? {
-                    parts.push(format!("r:{}", duration_code(base, dots)));
+                for (index, (base, dots)) in binary_pieces(event.duration)?.into_iter().enumerate()
+                {
+                    let annotations = if index == 0 && !event.annotations.is_empty() {
+                        format!("[{}]", event.annotations.join(" "))
+                    } else {
+                        String::new()
+                    };
+                    parts.push(format!("r:{}{annotations}", duration_code(base, dots)));
                 }
                 Ok(parts
                     .into_iter()
@@ -470,8 +477,19 @@ fn lyric_strings(score: &mut Score) -> Map<usize, Vec<(String, Vec<String>)>> {
         for verse in 0..verses {
             let syllables: Vec<Option<&Lyric>> = flat
                 .iter()
-                .map(|(_, event)| event.lyrics.get(&verse).filter(|lyric| usable(Some(lyric))))
+                .map(|(_, event)| {
+                    event
+                        .lyrics
+                        .get(&verse)
+                        .filter(|lyric| lyric.token.is_none() && usable(Some(lyric)))
+                })
                 .collect();
+            let has_explicit_alignment = flat.iter().any(|(_, event)| {
+                event
+                    .lyrics
+                    .get(&verse)
+                    .is_some_and(|lyric| lyric.token.is_some())
+            });
             let mut remaining = vec![false; flat.len()];
             let mut later = false;
             for position in (0..flat.len()).rev() {
@@ -481,6 +499,28 @@ fn lyric_strings(score: &mut Score) -> Map<usize, Vec<(String, Vec<String>)>> {
             let mut melisma = false;
             for (position, (measure, _)) in flat.iter().enumerate() {
                 let bar_tokens = &mut tokens[*measure][verse];
+                if has_explicit_alignment {
+                    match flat[position]
+                        .1
+                        .lyrics
+                        .get(&verse)
+                        .and_then(|lyric| lyric.token)
+                    {
+                        Some(LyricToken::Extender) => {
+                            bar_tokens.push("__".into());
+                            continue;
+                        }
+                        Some(LyricToken::Skip) | None if syllables[position].is_none() => {
+                            bar_tokens.push("_".into());
+                            continue;
+                        }
+                        Some(LyricToken::Skip) => {
+                            bar_tokens.push("_".into());
+                            continue;
+                        }
+                        None => {}
+                    }
+                }
                 let Some(lyric) = syllables[position] else {
                     bar_tokens.push(if melisma { "__" } else { "_" }.into());
                     continue;
@@ -518,10 +558,21 @@ fn harmony_text(measure: &Measure, warnings: &mut Vec<String>) -> ImportResult<O
     let mut changes: Vec<(Frac, String)> = Vec::new();
     for (onset, symbol) in sorted {
         let symbol: String = symbol.chars().filter(|c| *c != ':' && *c != ' ').collect();
-        if symbol.is_empty()
-            || onset >= measure.length
-            || changes.last().is_some_and(|(last, _)| *last == onset)
-        {
+        if onset < Frac::ZERO {
+            warnings.push(format!(
+                "bar {}: chord symbol with a negative offset was dropped",
+                measure.number
+            ));
+            continue;
+        }
+        if symbol.is_empty() || onset >= measure.length {
+            continue;
+        }
+        if changes.last().is_some_and(|(last, _)| *last == onset) {
+            warnings.push(format!(
+                "bar {}: a second chord symbol at one onset was dropped",
+                measure.number
+            ));
             continue;
         }
         changes.push((onset, symbol));
@@ -810,7 +861,18 @@ impl Emitted {
                         let Val::Dict(fields, _) = bar else { continue };
                         let number = measure_numbers
                             .get(index)
-                            .cloned()
+                            .map(|number| {
+                                number
+                                    .chars()
+                                    .map(|character| {
+                                        if character.is_control() {
+                                            ' '
+                                        } else {
+                                            character
+                                        }
+                                    })
+                                    .collect::<String>()
+                            })
                             .unwrap_or_else(|| (index + 1).to_string());
                         lines.push(format!("    // m. {number}"));
                         lines.push("    (".into());

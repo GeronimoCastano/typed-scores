@@ -117,11 +117,25 @@ fn fill_slots(score: &mut Score) {
     let order = staff_order(score);
     for measure in &mut score.measures {
         let length = measure.length;
+        let mut staff_has_cross_staff_notes: Map<String, bool> = Map::new();
+        for slots in measure.voices.values() {
+            for event in slots.iter().flatten() {
+                for pitch in &event.pitches {
+                    if let Some(staff) = &pitch.staff {
+                        *staff_has_cross_staff_notes.or_default(staff.clone()) = true;
+                    }
+                }
+            }
+        }
         for staff in &order {
             let Some(slots) = measure.voices.get_mut(staff) else {
                 continue;
             };
-            let staff_empty = slots.iter().all(Vec::is_empty);
+            let staff_empty = slots.iter().all(Vec::is_empty)
+                && !staff_has_cross_staff_notes
+                    .get(staff)
+                    .copied()
+                    .unwrap_or(false);
             for (index, slot) in slots.iter_mut().enumerate() {
                 if slot.is_empty() {
                     let kind = if index == 0 && staff_empty {
@@ -264,6 +278,12 @@ fn clean_annotations(score: &mut Score) {
             };
             for event in slots.iter_mut().flatten() {
                 for grace in &mut event.graces {
+                    if !grace.annotations.is_empty() {
+                        warnings.push(
+                            "marks on grace notes were dropped because typed-scores cannot draw them"
+                                .into(),
+                        );
+                    }
                     grace.annotations.clear();
                     grace.lyrics.clear();
                     grace.tie = false;
@@ -278,7 +298,7 @@ fn clean_annotations(score: &mut Score) {
 }
 
 fn clean_marks(event: &Event, warnings: &mut Vec<String>) -> Vec<String> {
-    if !matches!(event.kind, Kind::Note | Kind::Rest) {
+    if !matches!(event.kind, Kind::Note | Kind::Rest | Kind::MeasureRest) {
         if !event.annotations.is_empty() {
             warnings.push("marks on invisible notes or full-bar rests were dropped".into());
         }
@@ -297,13 +317,16 @@ fn clean_marks(event: &Event, warnings: &mut Vec<String>) -> Vec<String> {
             }
             mark = format!("{prefix}={value}");
         }
-        if event.kind == Kind::Rest
+        if matches!(event.kind, Kind::Rest | Kind::MeasureRest)
             && (NOTE_ONLY_MARKS.contains(&mark.as_str())
                 || ["f=", "turn-f=", "arpeggio", "tremolo="]
                     .iter()
                     .any(|prefix| mark.starts_with(prefix))
                 || span_parts(&mark).is_some_and(|(name, _)| name.starts_with('s')))
         {
+            warnings.push(format!(
+                "mark {mark:?} on a rest was dropped because it requires a pitched note"
+            ));
             continue;
         }
         if mark.starts_with("arpeggio") && event.pitches.len() < 2 {

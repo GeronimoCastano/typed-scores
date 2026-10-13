@@ -185,11 +185,18 @@ pub struct Tuplet {
     pub number: Option<String>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Lyric {
     pub text: String,
     pub hyphen_after: bool,
     pub extend: bool,
+    pub token: Option<LyricToken>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LyricToken {
+    Extender,
+    Skip,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -399,6 +406,25 @@ pub fn slug(name: &str) -> String {
         value = format!("staff-{value}");
     }
     const RESERVED: &[&str] = &[
+        "if",
+        "else",
+        "let",
+        "for",
+        "while",
+        "loop",
+        "break",
+        "continue",
+        "return",
+        "import",
+        "include",
+        "as",
+        "context",
+        "show",
+        "set",
+        "none",
+        "auto",
+        "true",
+        "false",
         "key",
         "time",
         "clef",

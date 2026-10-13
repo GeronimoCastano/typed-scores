@@ -42,7 +42,7 @@
       harmony: "G:h.",
       flute: "acciaccatura { C5:e } B4:q. ~ B4:q D5:e",
       cello: ("_", "s:h."),
-      lyrics: (flute: "clear _ a --",),
+      lyrics: (flute: "clear a -- _",),
     ),
     // m. 5
     (

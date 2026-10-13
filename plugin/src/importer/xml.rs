@@ -31,20 +31,19 @@ fn local_name(name: &str) -> &str {
     name.rsplit(':').next().unwrap_or(name)
 }
 
-fn decode(text: &str) -> String {
+fn decode(text: &str) -> ImportResult<String> {
     if !text.contains('&') {
-        return text.to_string();
+        return Ok(text.to_string());
     }
     let mut decoded = String::with_capacity(text.len());
     let mut rest = text;
     while let Some(start) = rest.find('&') {
         decoded.push_str(&rest[..start]);
         let after = &rest[start + 1..];
-        let Some(end) = after.find(';').filter(|end| *end <= 10) else {
-            decoded.push('&');
-            rest = after;
-            continue;
-        };
+        let end = after
+            .find(';')
+            .filter(|end| *end <= 10)
+            .ok_or_else(|| error("an entity reference is missing its semicolon"))?;
         let entity = &after[..end];
         let character = match entity {
             "lt" => Some('<'),
@@ -69,13 +68,14 @@ fn decode(text: &str) -> String {
                 rest = &after[end + 1..];
             }
             None => {
-                decoded.push('&');
-                rest = after;
+                return Err(error(&format!(
+                    "entity &{entity}; is not supported; replace it with text or a numeric entity"
+                )));
             }
         }
     }
     decoded.push_str(rest);
-    decoded
+    Ok(decoded)
 }
 
 fn error(message: &str) -> String {
@@ -100,7 +100,7 @@ pub fn parse(text: &str) -> ImportResult<Document> {
             if let Some(parent) = stack.last() {
                 document.elements[*parent]
                     .children
-                    .push(Content::Text(decode(&rest[..open])));
+                    .push(Content::Text(decode(&rest[..open])?));
             }
         }
         rest = &rest[open..];
@@ -197,7 +197,7 @@ pub fn parse(text: &str) -> ImportResult<Document> {
                 let value_end = value_start[1..]
                     .find(quote)
                     .ok_or_else(|| error(&format!("attribute {key} is not closed")))?;
-                attributes.push((key, decode(&value_start[1..1 + value_end])));
+                attributes.push((key, decode(&value_start[1..1 + value_end])?));
                 position = &value_start[value_end + 2..];
             }
             document.elements.push(Element {
