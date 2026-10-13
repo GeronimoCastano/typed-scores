@@ -65,3 +65,32 @@
 #score(staves: (upper: (clef: "treble"), lower: (clef: "bass")), time: "2/4", beams: true, width: 23, bars: ((upper: "C5:e[s1(] G4 @lower E3 C3[s1)]", lower: "C2:h"),))
 
 #score(staves: (upper: (clef: "treble"), lower: (clef: "bass")), key: "Cm", time: "2/4", beams: true, scale: 1.2, bars: ((partial: "1/16", upper: ("g4:s", "cue { tuplet 3:2[side=above] { g4:t d5 d } }"), lower: "r:s"),))
+
+== Tempo and chord names above high notes
+
+#score(time: "4/4", bars: ((notes: "a6:h g6:h", tempo: "Allegro"),))
+
+#score(time: "4/4", bars: ((notes: "a6:h g6:h", harmony: "Am:h G:h", rehearsal: "A", tempo: "Moderato"),))
+
+== Alternating tremolo subdivision
+
+LilyPond's repeat count sets the total duration of its two-note pattern;
+`typed-scores` durations set the score time, while the tremolo number sets
+the subdivision and stroke count.
+
+*LilyPond 2.26.0*
+#image("lilypond-ab/reference/alternating-tremolos.svg", width: 21.3458 * 8pt)
+
+*typed-scores*
+#score(time: "4/4", width: 32, wrap: false, ragged-right: false, bars: ((notes: "tremolo 16 { c5:q g5:q } tremolo 32 { d5:q a4:q }", barline: (right: "final")),))
+
+== Single-note tremolos on flagged notes
+
+Tremolo marks replace ordinary flags, so written note values do not add extra
+strokes to the selected subdivision.
+
+*LilyPond 2.26.0*
+#image("lilypond-ab/reference/single-tremolo-flagged.svg", width: 24.4909 * 8pt)
+
+*typed-scores*
+#score(time: "3/16", wrap: false, ragged-right: false, bars: ((notes: "c5:e[tremolo=16] d5:s[tremolo=32]", barline: (right: "final")),))

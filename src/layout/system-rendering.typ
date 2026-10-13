@@ -659,10 +659,9 @@
       volta-y += 2.2
     }
   }
-  let header-y-base = if has-system-ending {
-    calc.max(above-top + 4.6, volta-y + 1.6)
-  } else {
-    above-top + 4.6
+  let header-y-base = calc.max(above-top + 4.6, top-staff-ink + 1.4)
+  if has-system-ending {
+    header-y-base = calc.max(header-y-base, volta-y + 1.6)
   }
   let harmony-y = calc.max(above-top + 2.4, top-staff-ink + 1.4)
   // Chord diagrams stand in one row above the top staff's ink, tops

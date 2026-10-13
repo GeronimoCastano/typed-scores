@@ -189,7 +189,7 @@
           draw-stem-tremolo(stem-x, y, unit: unit, paint: paint)
         }
       }
-      if layout.flags > 0 and not suppress-flags {
+      if layout.flags > 0 and not suppress-flags and tremolo == none {
         let tip = stem-tip(x, stem-start-y, direction: direction, length: stem-length, glyph-scale: notation-scale)
         draw-flag(tip.at(0), tip.at(1), direction: direction, count: layout.flags, unit: unit, scale: notation-scale, paint: paint)
       }

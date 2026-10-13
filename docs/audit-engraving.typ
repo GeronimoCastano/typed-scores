@@ -13,6 +13,42 @@ the voices and rehearsal marks in their system.
   ),
 )
 
+Tempo marks use the same high-note clearance as other header text, even when
+no chord symbols or ending bracket appears in the system.
+
+#score(
+  time: "4/4",
+  bars: (
+    (notes: "a6:h g6:h", tempo: "Allegro"),
+    (notes: "a6:h g6:h", harmony: "Am:h G:h", rehearsal: "A", tempo: "Moderato"),
+  ),
+)
+
+== Alternating tremolo subdivisions
+
+In an alternating tremolo, note durations determine how much score time the
+two written events occupy. The subdivision number determines the repeat rate
+and stroke count: 8 draws one stroke, 16 draws two, 32 draws three, and 64
+draws four. For example, `tremolo 16 { c5:q g5:q }` occupies a half note and
+shows two strokes.
+
+For a single-note tremolo, the subdivision strokes replace the note's ordinary
+flags. An eighth note with subdivision 16 therefore has two total stem
+strokes, and a sixteenth note with subdivision 32 has three.
+
+LilyPond's `\repeat tremolo N` uses `N` as the number of repetitions. The
+repetition count and the written note durations together set the total time;
+the number is not itself the stroke-count label. A four-repeat pair of
+sixteenths and an eight-repeat pair of thirty-seconds each occupy a half note,
+but show two and three strokes respectively.
+
+#score(
+  time: "4/4",
+  bars: (
+    (notes: "tremolo 16 { c5:q g5:q } tremolo 32 { d5:q a4:q }"),
+  ),
+)
+
 == Hairpins and pedal spans across wrapped systems
 
 Pedal lines and hairpins continue through a system break. A continuation
