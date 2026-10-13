@@ -29,10 +29,10 @@ violinOne = \absolute {
   g''8 d'' g'' b'' d'''4 r |
   c'''4 r8 a'' c'''4 r8 a'' |
   c'''8 a'' fis'' a'' d''4 r | \break
-  <b' d'' g''>8 r g''4. b''8( a'' g''-.) |
-  a''32[ g'' a'' g''] fis''8 fis''4. a''8( c''' fis''-.) | \break
-  a''8( g'') g''4. b''8( a'' g''-.) |
-  a''32[ g'' a'' g''] fis''8 fis''4. a''8( c''' fis''-.) | \break
+  <b' d'' g''>8 r g''4. b''8( a'') g''-. |
+  a''32[ g'' a'' g''] fis''8 fis''4. a''8( c''') fis''-. | \break
+  a''8( g'') g''4. b''8( a'') g''-. |
+  a''32[ g'' a'' g''] fis''8 fis''4. a''8( c''') fis''-. | \break
   g''8-. g''-. \appoggiatura g''16 fis''8( e''16 fis'') g''8-. g''-.
     \appoggiatura b''16 a''8( g''16 a'') |
   b''8-. b''-. \appoggiatura d'''16 c'''8( b''16 c''') d'''4 r \bar "|."

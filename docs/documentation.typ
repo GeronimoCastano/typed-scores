@@ -399,7 +399,9 @@ keep each staff's barline separate.
 
 == Bar metadata
 
-`clef`, `key`, `time`, and `tempo` may be set on any bar and persist until changed.
+`clef`, `key`, and `time` may be set on any bar and persist until changed.
+Tempo metadata applies to the bar where it is set; add it again when a later
+bar needs its own tempo marking.
 `partial` changes duration validation only: it does not change the displayed
 meter. When a key change removes old alterations, cancellation naturals are
 engraved before the replacement key signature. This replaces separate section
@@ -870,7 +872,7 @@ neighbors and cannot be extracted on its own.
   [#c("(a4 c e):h (f a c)")], [Relative chord pitches and inherited duration.],
   [#c("r:q")], [Quarter rest.],
   [#c("s:q")], [Invisible quarter spacer: takes time, draws nothing.],
-  [#c("_")], [Automatic rest placeholder.],
+  [#c("_")], [One automatic rest filling the representable remaining duration.],
   [#c("c2:e g2 @upper e4 g4")], [Draw the following events on staff #c("upper").],
   [#c("(c3 g3 @upper e4 c5):h")], [Split chord: one stem across two staves.],
   [#c("~")], [Tie the previous event to the next event.],
@@ -889,8 +891,10 @@ Durations are `w`, `h`, `q`, `e`, `s`, and `t`; append `.` or `..` for dots.
 An explicit duration becomes the current duration for that staff. Subsequent
 notes, chords, and ordinary rests may omit it and inherit the complete value,
 including dots, across barlines. With no preceding value, the default is `q`.
-The computed-rest placeholder `_` does not change this state, and a written
-colon must always be followed by a duration. An omitted duration never expands
+The automatic-rest placeholder `_` does not change this state. It fills the
+remaining duration with one supported note value; add placeholders when that
+remainder cannot be represented by one value. A written colon must always be
+followed by a duration. An omitted duration never expands
 to fill the measure; normal bar-duration validation still reports an incorrect
 total.
 
@@ -928,9 +932,10 @@ voicings.
 Standalone `/` and `-` are local beam-boundary controls. `/` splits before the
 next event; `-` joins the flagged event on each side even across an automatic metric
 boundary. A join at an edge, beside a rest, or beside an unflagged duration is
-an error. For example, this 3/8 measure is grouped 3+3 rather than the automatic
-2+2+2 sixteenths, and the next bar demonstrates relative chord voicing. No
-`key` argument is needed here: `score` defaults to C major.
+an error. Default groups follow the meter: 3/8 groups its three eighths together,
+4/8 groups in pairs, 5/8 uses 3+2, and 7/8 uses 2+2+3. Compound meters such as
+6/8 group in threes. The example uses explicit boundaries to show two groups
+of three sixteenths. No `key` argument is needed here: `score` defaults to C major.
 
 #demo[
   #example(```typ
@@ -1493,7 +1498,7 @@ way.
   align: bottom,
   chord-diagram("x32010", name: "C", fingers: "032010"),
   chord-diagram("133211", name: "F", fingers: "134211"),
-  chord-diagram("x 7 9 9 9 7", name: "E/B"),
+  chord-diagram("x 7 9 9 9 7", name: "E"),
   chord-diagram((0, 0, 0, 3), name: "C"),
 )
 ```, side: false)
@@ -1682,21 +1687,17 @@ accidentals:
 
 = Release showcase
 
-The repository's `examples/` directory contains six reusable, source-checked
-fixtures and a compiled `showcase.pdf`:
+The compiled `examples/showcase.pdf` currently presents three source-checked
+score plates:
 
-- Chopin, Nocturne Op. 9 No. 2 — piano, pickup and measures 1–4;
-- Mozart, Eine kleine Nachtmusik K. 525/I — four-staff strings, measures 1–4;
-- Bach, Cello Suite No. 1 BWV 1007/I — solo cello, measures 1–4;
-- Beethoven, the four-bar Ode to Joy theme — E-flat alto saxophone, typed at
-  concert pitch;
-- Beethoven, Für Elise WoO 59 — piano, pickup and measures 1–4; and
-- Beethoven, Piano Sonata Op. 27 No. 2/III — piano, cross-staff coda,
-  measures 178–185.
+- Chopin, Nocturne Op. 9 No. 2 — piano, pickup and measures 1–8;
+- Mozart, Eine kleine Nachtmusik K. 525/I — four-staff strings, measures 1–10;
+- Bach, Cello Suite No. 1 BWV 1007/I — solo cello, measures 1–16.
 
-The saxophone fixture is typed in Beethoven's D major and drawn in B major
-with #c("transpose: \"M6\""). The others retain their reference score's
-written pitches. This compact quartet excerpt demonstrates a bracketed ensemble:
+The `examples/` directory also contains reusable Beethoven fixtures. Their
+current source files are not pages in the three-plate showcase.
+
+The Mozart excerpt demonstrates a bracketed ensemble:
 
 #align(center)[#mozart-k525-opening(
   scale: 0.42,

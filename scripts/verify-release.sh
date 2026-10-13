@@ -12,9 +12,9 @@ cd "$repo_root"
 cargo test --manifest-path plugin/Cargo.toml
 scripts/test-errors.sh
 scripts/test-import.sh
-typst compile --root . tests/test.typ tests/test.pdf
-typst compile --root . docs/documentation.typ docs/documentation.pdf
-typst compile --root . examples/showcase.typ examples/showcase.pdf
+scripts/test-rendering.sh
+typst compile --root . docs/documentation.typ "$tmp_dir/documentation.pdf"
+typst compile --root . examples/showcase.typ "$tmp_dir/showcase.pdf"
 
 mkdir -p "$tmp_dir/packages-repo/packages/preview"
 scripts/package-preview.sh "$version" "$tmp_dir/packages-repo"

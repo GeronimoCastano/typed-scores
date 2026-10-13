@@ -13,6 +13,12 @@ mkdir -p "$reference_dir" "$actual_dir"
 
 cd "$repo_root"
 typst compile --root . tests/test.typ "$actual_pdf"
-pdftoppm -r 144 tests/test.pdf "$reference_dir/page" >/dev/null 2>&1
-pdftoppm -r 144 "$actual_pdf" "$actual_dir/page" >/dev/null 2>&1
+if ! pdftoppm -r 144 tests/test.pdf "$reference_dir/page" >/dev/null 2>&1; then
+  echo "could not rasterize the committed rendering reference with pdftoppm" >&2
+  exit 1
+fi
+if ! pdftoppm -r 144 "$actual_pdf" "$actual_dir/page" >/dev/null 2>&1; then
+  echo "could not rasterize the current rendering with pdftoppm" >&2
+  exit 1
+fi
 python3 scripts/compare-rendering.py "$reference_dir" "$actual_dir"

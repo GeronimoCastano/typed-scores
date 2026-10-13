@@ -251,6 +251,7 @@
         fix: "remove staff-gap or declare multiple staves",
       )
     }
+    let group = if group == "auto" { auto } else { group }
     let group-style = if group == auto {
       if staff-count == 1 { "none" }
       // Notation and its tablature form one instrument's bracketed group.
@@ -298,7 +299,28 @@
     )
     let first-label-reserve = _staff-label-reserve(measures.first().voices, unit)
     let short-label-reserve = _staff-label-reserve(measures.first().voices, unit, short: true)
-    let max-width = if width == none { size.width / unit } else { width }
+    let page-width = size.width / unit
+    let page-has-auto-width = page-width == float.inf or page-width == -float.inf
+    let natural-system-width = {
+      let system-left-bar-x = left-bar-x + indent + first-label-reserve
+      let total-width = system-left-bar-x
+      for measure-index in range(measures.len()) {
+        total-width += _measure-width-in-system(
+          measures.at(measure-index),
+          measure-index == 0,
+          system-left-bar-x,
+          system-left-bar-x + _system-clef-after-barline-gap,
+        )
+      }
+      total-width
+    }
+    let max-width = if width != none {
+      width
+    } else if page-has-auto-width {
+      natural-system-width
+    } else {
+      page-width
+    }
     let packed-systems = if wrap {
       _pack-score-systems(
         measures,
@@ -325,6 +347,15 @@
         )
         widths.push(measure-width)
         system-width += measure-width
+      }
+      if width != none and system-width > max-width {
+        _score-error(
+          "score layout",
+          "unwrapped score is wider than the requested width",
+          value: width,
+          expected: "enough width for every complete measure and the staff prologue",
+          fix: "increase width, reduce note-spacing or scale, or enable wrapping",
+        )
       }
       ((
         start: 0,

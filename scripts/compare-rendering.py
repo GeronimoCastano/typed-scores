@@ -48,7 +48,7 @@ def main() -> None:
     argument_parser.add_argument("reference", type=Path)
     argument_parser.add_argument("actual", type=Path)
     argument_parser.add_argument("--channel-tolerance", type=int, default=8)
-    argument_parser.add_argument("--pixel-ratio", type=float, default=0.0005)
+    argument_parser.add_argument("--pixel-ratio", type=float, default=0.00001)
     arguments = argument_parser.parse_args()
 
     reference_pages = sorted(arguments.reference.glob("page-*.ppm"), key=page_number)

@@ -377,7 +377,7 @@ before the next bar. Set `bar-numbers` to
 | `(a4 c e):h (f a c)` | Relative chord pitches and inherited duration |
 | `r:q` | Quarter rest |
 | `s:q` | Invisible spacer: takes a quarter's time, draws nothing |
-| `_` | Rest filling the remaining measure duration |
+| `_` | One automatic rest filling the representable remaining duration |
 | `c2:e g2 @upper e4 g4` | Draw the following events on staff `upper` |
 | `c2:q clef treble (c4 e4 g4):q` | Change this staff's clef before the next event |
 | `(c3 g3 @upper e4 c5):h` | Split chord: one stem across two staves |
@@ -537,7 +537,8 @@ makes it repeat another staff's music, so bars never write it twice.
 
 ![Guitar notation with tablature and chord diagrams](assets/readme/guitar.png)
 
-Each note takes the lowest fret that reaches it. Notes that start together
+Automatic fingering balances fret height, fret span, and hand movement; it
+does not always choose the lowest reachable fret. Notes that start together
 share out the strings, a note still ringing in another voice keeps its
 string, and a tied note stays on the string it was tied from. Add
 `[string=2]` to choose a string (1 is the highest), or `[string=5,4,3]` to
@@ -632,7 +633,7 @@ most 256 tied note values; divide longer values across shorter measures.
 
 See the [user guide](https://github.com/GeronimoCastano/typed-scores/blob/63212dc/docs/documentation.pdf)
 for the complete reference. The
-[five-piece release showcase](https://github.com/GeronimoCastano/typed-scores/blob/63212dc/examples/showcase.pdf)
-includes famous piano, string-score, solo-cello, and alto-saxophone excerpts;
+[three-piece release showcase](https://github.com/GeronimoCastano/typed-scores/blob/63212dc/examples/showcase.pdf)
+includes piano, string-score, and solo-cello excerpts;
 its reusable [source fixtures and reference notes](https://github.com/GeronimoCastano/typed-scores/tree/63212dc/examples)
 live alongside it.

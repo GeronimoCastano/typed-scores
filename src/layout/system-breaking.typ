@@ -85,6 +85,7 @@
 // LilyPond-like line breaking permits modest compression, but evaluates all
 // legal barline partitions instead of taking the first line that overflows.
 #let _minimum-justification-scale = 0.82
+#let _minimum-measure-density = 0.4
 #let _density-adjustment = 0.65
 
 #let _line-break-badness(scale, final-single: false) = {
@@ -217,10 +218,12 @@
     return none
   }
   let density = allocation.density
-  // A multi-measure line that cannot reach this density must break; an
-  // exceptionally wide individual measure remains legal because it cannot be
-  // divided at a barline.
-  if density < _minimum-justification-scale and stop - start > 1 {
+  // Multi-measure systems keep the normal density floor; one indivisible bar
+  // may compress farther before it has no readable legal layout.
+  if stop - start > 1 and density < _minimum-justification-scale {
+    return none
+  }
+  if stop - start == 1 and density < _minimum-measure-density {
     return none
   }
   if (

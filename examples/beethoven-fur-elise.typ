@@ -17,23 +17,23 @@
   bars: (
     (
       partial: "1/8",
-      upper: "E6:s[dyn=pp s1(] D#",
+      upper: "E5:s[dyn=pp s1(] D#",
       lower: "r:e",
     ),
     (
-      upper: "E D# - E / B5 - D C[s1)]",
+      upper: "E D# - E / B4 - D C[s1)]",
       lower: "r:q.",
     ),
     (
-      upper: "A5:e r:s C5 - E A5",
+      upper: "A4:e r:s C4 - E A4",
       lower: "A2:s[p1(] E3 - A[p1)] r r:e",
     ),
     (
-      upper: "B5:e r:s E5 - G# B5",
+      upper: "B4:e r:s E4 - G# B4",
       lower: "E2:s[p2(] E3 - G#[p2)] r r:e",
     ),
     (
-      upper: "C6:e r:s E5 - E6 D#",
+      upper: "C5:e r:s E4 - E5 D#",
       lower: "A2:s[p3(] E3 - A[p3)] r r:e",
     ),
   ),

@@ -29,8 +29,11 @@ mkdir -p "$reference_dir"
 has_difference=0
 for fixture_source in "$fixture_dir"/*.ly; do
   fixture_name=$(basename "$fixture_source" .ly)
-  lilypond --svg -dcrop -dno-point-and-click \
-    -o "$tmp_dir/$fixture_name" "$fixture_source" >/dev/null 2>&1
+  if ! lilypond --svg -dcrop -dno-point-and-click \
+    -o "$tmp_dir/$fixture_name" "$fixture_source" >/dev/null 2>&1; then
+    echo "$fixture_name: LilyPond could not render the reference source" >&2
+    exit 1
+  fi
   generated_svg="$tmp_dir/$fixture_name.cropped.svg"
   reference_svg="$reference_dir/$fixture_name.svg"
   if [ "$mode" = "--update" ]; then

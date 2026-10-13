@@ -39,8 +39,9 @@
   for layout in layouts {
     let opening = _ottava-marker(layout, "(")
     let closing = _ottava-marker(layout, ")")
+    let is_same_ottava_continuation = open != none and opening == open.kind and closing == open.kind
     if opening != none {
-      if open != none {
+      if open != none and not is_same_ottava_continuation {
         _score-error(
           location,
           "ottava " + opening + " opens while " + open.kind + " from bar " + str(open.bar) + " is still open",
@@ -81,9 +82,13 @@
     let shift = _ottava-kinds.at(open.kind).shift
     shifted.push(layout + (
       pitches: layout.pitches.map(pitch => pitch + (staff_position: pitch.staff_position + shift)),
-      ottava: (kind: open.kind, start: opening != none, stop: closing != none),
+        ottava: (
+          kind: open.kind,
+          start: opening != none and not is_same_ottava_continuation,
+          stop: closing != none and not is_same_ottava_continuation,
+        ),
     ))
-    if closing != none {
+    if closing != none and not is_same_ottava_continuation {
       open = none
     }
   }

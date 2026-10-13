@@ -1,6 +1,7 @@
 pub mod importer;
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -307,6 +308,11 @@ fn parse_pitch_spec(input: &str) -> Result<PitchSpec, String> {
     }
 
     let octave_str: String = chars.collect();
+    if octave_str.starts_with('+') {
+        return Err(format!(
+            "invalid octave {octave_str:?} in pitch {input:?}; write an unsigned octave or a negative octave"
+        ));
+    }
     let octave = if octave_str.is_empty() {
         None
     } else {
@@ -340,7 +346,7 @@ pub fn parse_pitch(input: &str) -> Result<Pitch, String> {
     })
 }
 
-fn resolve_pitch(spec: PitchSpec, anchor: Option<&Pitch>, clef: Clef) -> Pitch {
+fn resolve_pitch(spec: PitchSpec, anchor: Option<&Pitch>, clef: Clef) -> Result<Pitch, String> {
     let octave = spec.octave.unwrap_or_else(|| {
         let Some(anchor) = anchor else {
             return clef.default_relative_octave();
@@ -351,11 +357,16 @@ fn resolve_pitch(spec: PitchSpec, anchor: Option<&Pitch>, clef: Clef) -> Pitch {
             .min_by_key(|octave| (octave * 7 + spec.letter.diatonic_index() - anchor_index).abs())
             .unwrap_or(base_octave)
     });
-    Pitch {
+    if !(-1..=9).contains(&octave) {
+        return Err(format!(
+            "relative pitch resolves to octave {octave}, outside the supported range -1 through 9; write an explicit octave or choose a nearer pitch"
+        ));
+    }
+    Ok(Pitch {
         letter: spec.letter,
         accidental: spec.accidental,
         octave,
-    }
+    })
 }
 
 fn pitch_anchor_string(pitch: &Pitch) -> String {
@@ -617,17 +628,44 @@ fn distribute_auto_rests(remaining: Rational, count: usize) -> Option<Vec<Durati
         }
     }
 
+    let supported_durations = supported_durations_descending();
+    let shortest_duration = duration_to_rational(*supported_durations.last()?);
+    let longest_duration = duration_to_rational(supported_durations.first().copied()?);
+    let placeholder_count = count as u128;
+    let remaining_scaled = u128::from(remaining.numerator);
+    let remaining_denominator = u128::from(remaining.denominator);
+    let shortest_total_scaled = placeholder_count
+        .checked_mul(u128::from(shortest_duration.numerator))?
+        .checked_mul(remaining_denominator)?;
+    let longest_total_scaled = placeholder_count
+        .checked_mul(u128::from(longest_duration.numerator))
+        .and_then(|total| total.checked_mul(remaining_denominator))
+        .unwrap_or(u128::MAX);
+    if shortest_total_scaled > remaining_scaled * u128::from(shortest_duration.denominator)
+        || longest_total_scaled < remaining_scaled * u128::from(longest_duration.denominator)
+    {
+        return None;
+    }
+
     fn find_rest_durations(
         remaining: Rational,
         count: usize,
         supported_durations: &[Duration],
+        cache: &mut HashMap<(u64, u64, usize), Option<Vec<Duration>>>,
     ) -> Option<Vec<Duration>> {
+        let cache_key = (remaining.numerator, remaining.denominator, count);
+        if let Some(cached) = cache.get(&cache_key) {
+            return cached.clone();
+        }
+
         if count == 0 {
-            return if remaining.numerator == 0 {
+            let result = if remaining.numerator == 0 {
                 Some(Vec::new())
             } else {
                 None
             };
+            cache.insert(cache_key, result.clone());
+            return result;
         }
 
         for duration in supported_durations {
@@ -636,17 +674,19 @@ fn distribute_auto_rests(remaining: Rational, count: usize) -> Option<Vec<Durati
                 continue;
             };
             if let Some(mut remaining_durations) =
-                find_rest_durations(next_remaining, count - 1, supported_durations)
+                find_rest_durations(next_remaining, count - 1, supported_durations, cache)
             {
                 let mut rest_durations = vec![*duration];
                 rest_durations.append(&mut remaining_durations);
+                cache.insert(cache_key, Some(rest_durations.clone()));
                 return Some(rest_durations);
             }
         }
+        cache.insert(cache_key, None);
         None
     }
 
-    find_rest_durations(remaining, count, &supported_durations_descending())
+    find_rest_durations(remaining, count, &supported_durations, &mut HashMap::new())
 }
 
 /// The shape of a notehead. Percussion parts draw cymbals with X heads and
@@ -1358,7 +1398,7 @@ fn parse_event_relative(
             parse_pitch_spec(pitch_part)?,
             pitch_anchor.as_ref(),
             home_clef,
-        );
+        )?;
         let (duration, annotations) =
             parse_duration_with_state(tail, duration_is_explicit, duration_anchor, input)?;
         *pitch_anchor = Some(pitch.clone());
@@ -1516,7 +1556,7 @@ fn parse_chord_event_relative(
             parse_pitch_spec(pitch_text)?,
             chord_pitch_anchor.as_ref(),
             home_clef,
-        );
+        )?;
         chord_pitch_anchor = Some(pitch.clone());
         notes.push(Note {
             pitch,
@@ -1669,6 +1709,11 @@ fn validate_chord_pitches(notes: &[Note], input: &str) -> Result<(), String> {
 
 fn parse_duration_part_and_annotations(input: &str) -> Result<(&str, Vec<String>), String> {
     let input = input.trim();
+    if input.matches('[').count() > 1 || input.matches(']').count() > 1 {
+        return Err(format!(
+            "event {input:?} has more than one annotation block; combine annotations inside one pair of square brackets"
+        ));
+    }
     let (duration_part, annotation_part) = if let Some(open) = input.find('[') {
         let close = input
             .rfind(']')
@@ -1857,6 +1902,14 @@ fn validate_annotation(annotation: &str) -> Result<(), String> {
         "p", "pp", "ppp", "pppp", "ppppp", "pppppp", "f", "ff", "fff", "ffff", "fffff", "ffffff",
         "mp", "mf", "sf", "sfp", "sfpp", "fp", "rf", "rfz", "sfz", "sffz", "fz", "n", "pf", "sfzp",
     ];
+
+    if let Some(subdivision) = annotation.strip_prefix("tremolo=") {
+        if !matches!(subdivision, "8" | "16" | "32" | "64") {
+            return Err(format!(
+                "unsupported tremolo subdivision {subdivision:?}; expected 8, 16, 32, or 64"
+            ));
+        }
+    }
 
     let annotation_is_supported = MARKS.contains(&annotation)
         || annotation
@@ -3310,13 +3363,36 @@ impl TimeSignature {
         Rational::new(u64::from(self.numerator), u64::from(self.denominator))
     }
 
-    /// The beat used to group beams: a dotted unit in compound meters
-    /// (6/8, 9/8, 12/8, ...), one denominator unit otherwise.
-    fn beat_unit(self) -> Rational {
-        if self.numerator > 3 && self.numerator.is_multiple_of(3) && self.denominator >= 8 {
-            Rational::new(3, u64::from(self.denominator))
-        } else {
-            Rational::new(1, u64::from(self.denominator))
+    /// Returns the default beam group containing a written onset.
+    fn beam_group_index(self, onset: Rational) -> u64 {
+        let denominator = u64::from(self.denominator);
+        let denominator_units =
+            u128::from(onset.numerator) * u128::from(denominator) / u128::from(onset.denominator);
+        let denominator_units = denominator_units as u64;
+        if self.denominator < 8 {
+            return denominator_units;
+        }
+        match self.numerator {
+            2 | 3 => 0,
+            4 => denominator_units / 2,
+            5 => {
+                if denominator_units >= 3 {
+                    1
+                } else {
+                    0
+                }
+            }
+            7 => {
+                if denominator_units < 2 {
+                    0
+                } else if denominator_units < 4 {
+                    1
+                } else {
+                    2
+                }
+            }
+            numerator if numerator > 3 && numerator.is_multiple_of(3) => denominator_units / 3,
+            _ => denominator_units,
         }
     }
 }
@@ -3335,6 +3411,11 @@ fn parse_time_signature(input: &str) -> Result<TimeSignature, String> {
     if numerator == 0 || denominator == 0 {
         return Err(format!(
             "time signature values must be positive, got {input:?}"
+        ));
+    }
+    if !denominator.is_power_of_two() {
+        return Err(format!(
+            "unsupported time signature denominator {denominator}; expected a power of two such as 2, 4, 8, or 16"
         ));
     }
     Ok(TimeSignature {
@@ -3672,19 +3753,32 @@ fn layout_events(
     Ok(event_layouts)
 }
 
+fn nested_tuplet_depth(parent: &ParsedTuplet, tuplets: &[ParsedTuplet]) -> usize {
+    let children = tuplets.iter().filter(|candidate| {
+        candidate.start >= parent.start
+            && candidate.end <= parent.end
+            && (candidate.start != parent.start || candidate.end != parent.end)
+            && !tuplets.iter().any(|middle| {
+                middle.start >= parent.start
+                    && middle.end <= parent.end
+                    && (middle.start != parent.start || middle.end != parent.end)
+                    && middle.start <= candidate.start
+                    && middle.end >= candidate.end
+                    && (middle.start != candidate.start || middle.end != candidate.end)
+            })
+    });
+    children
+        .map(|child| 1 + nested_tuplet_depth(child, tuplets))
+        .max()
+        .unwrap_or(0)
+}
+
 fn attach_tuplets(layouts: &mut [NoteLayout], tuplets: Vec<ParsedTuplet>) -> Result<(), String> {
     for tuplet in &tuplets {
         if tuplet.start >= layouts.len() || tuplet.end == 0 || tuplet.end > layouts.len() {
             return Err("internal tuplet range is outside the parsed event sequence".to_string());
         }
-        let depth = tuplets
-            .iter()
-            .filter(|other| {
-                other.start >= tuplet.start
-                    && other.end <= tuplet.end
-                    && (other.start != tuplet.start || other.end != tuplet.end)
-            })
-            .count();
+        let depth = nested_tuplet_depth(tuplet, &tuplets);
         layouts[tuplet.start].tuplet_starts.push(TupletLayout {
             numerator: tuplet.numerator,
             denominator: tuplet.denominator,
@@ -3717,7 +3811,10 @@ fn attach_tremolos(layouts: &mut [NoteLayout], tremolos: Vec<ParsedTremolo>) -> 
 
 /// Group consecutive flagged notes into beams. With a beat unit, groups also
 /// break at beat boundaries; rests and explicit '/' breaks always split.
-fn assign_beam_groups(layouts: &mut [NoteLayout], beat: Option<Rational>) -> Result<(), String> {
+fn assign_beam_groups(
+    layouts: &mut [NoteLayout],
+    time_signature: Option<TimeSignature>,
+) -> Result<(), String> {
     let mut next_group = 0_usize;
     let mut current_beam_group: Option<(usize, u64)> = None;
     let mut current_beam_is_cue = false;
@@ -3754,11 +3851,8 @@ fn assign_beam_groups(layouts: &mut [NoteLayout], beat: Option<Rational>) -> Res
             current_beam_group = None;
         }
         previous_was_grace = false;
-        let beat_index = beat
-            .map(|beat| {
-                u64::from(layout.onset.numerator) * u64::from(beat.denominator)
-                    / (u64::from(layout.onset.denominator) * u64::from(beat.numerator))
-            })
+        let beat_index = time_signature
+            .map(|time_signature| time_signature.beam_group_index(layout.onset))
             .unwrap_or(0);
         if current_beam_group.is_some() && layout.cue != current_beam_is_cue {
             if layout.beam_join_before {
@@ -3929,7 +4023,7 @@ pub fn layout_transposed_staff_sequence_native(
                 pitch_anchor,
                 duration_anchor,
             )?,
-            Some(parse_time_signature(time)?.beat_unit()),
+            Some(parse_time_signature(time)?),
         ),
         None => (
             parse_sequence_marked(input, &mut staff_cursor, pitch_anchor, duration_anchor)?,
@@ -4139,6 +4233,77 @@ mod tests {
         assert!(parse_pitch("Cq").is_err());
         assert!(parse_pitch("C###4").is_err());
         assert!(parse_pitch("C#b4").is_err());
+    }
+
+    #[test]
+    fn rejects_invalid_relative_octaves_annotations_and_meters() {
+        assert!(layout_sequence_with_time_native("c+4:w", Clef::Treble, "4/4").is_err());
+        assert!(
+            layout_sequence_with_time_native("b9:q c d e", Clef::Treble, "4/4")
+                .unwrap_err()
+                .contains("relative pitch resolves to octave 10")
+        );
+        assert!(parse_note("C5:q[f=1][f=2]")
+            .unwrap_err()
+            .contains("more than one annotation block"));
+        assert!(parse_note("C5:q[tremolo=3]")
+            .unwrap_err()
+            .contains("unsupported tremolo subdivision"));
+        assert!(parse_time_signature("4/3")
+            .unwrap_err()
+            .contains("unsupported time signature denominator"));
+    }
+
+    #[test]
+    fn auto_rest_distribution_caches_unsatisfiable_duration_counts() {
+        let remaining = Rational::new(3, 4);
+        let durations = distribute_auto_rests(remaining, 17).unwrap();
+        assert_eq!(durations.len(), 17);
+        assert_eq!(
+            durations
+                .into_iter()
+                .map(duration_to_rational)
+                .try_fold(Rational::new(0, 1), Rational::checked_add)
+                .unwrap(),
+            remaining
+        );
+        assert!(distribute_auto_rests(remaining, 25).is_none());
+        assert!(distribute_auto_rests(remaining, 1_000_000).is_none());
+    }
+
+    #[test]
+    fn short_and_odd_meters_assign_conventional_beam_groups() {
+        let cases = [
+            ("3/8", "c5:e d e", vec![0, 0, 0]),
+            ("4/8", "c5:e d e f", vec![0, 0, 1, 1]),
+            ("5/8", "c5:e d e f g", vec![0, 0, 0, 1, 1]),
+            ("7/16", "c5:s d e f g a b", vec![0, 0, 1, 1, 2, 2, 2]),
+        ];
+
+        for (time, music, expected_groups) in cases {
+            let layouts = layout_sequence_with_time_native(music, Clef::Treble, time).unwrap();
+            let actual_groups: Vec<_> = layouts
+                .iter()
+                .map(|layout| layout.beam_group.unwrap())
+                .collect();
+            assert_eq!(actual_groups, expected_groups, "{time}");
+        }
+
+        let forced_break =
+            layout_sequence_with_time_native("c5:e d5:e / e5:e", Clef::Treble, "3/8").unwrap();
+        assert_eq!(
+            forced_break
+                .iter()
+                .map(|layout| layout.beam_group.unwrap())
+                .collect::<Vec<_>>(),
+            vec![0, 0, 1]
+        );
+
+        let forced_join =
+            layout_sequence_with_time_native("c5:e d5:e - e5:e f5:e", Clef::Treble, "4/8").unwrap();
+        assert!(forced_join
+            .iter()
+            .all(|layout| layout.beam_group == forced_join[0].beam_group));
     }
 
     #[test]
@@ -4923,6 +5088,29 @@ mod tests {
         assert_eq!(event_layouts[2].tuplet_starts[0].numerator, 3);
         assert_eq!(event_layouts[0].tuplet_starts[0].depth, 1);
         assert_eq!(event_layouts[2].tuplet_starts[0].depth, 0);
+    }
+
+    #[test]
+    fn sibling_nested_tuplets_share_the_same_display_depth() {
+        let event_layouts = layout_sequence_native(
+            "tuplet 3:2 { tuplet 3:2 { c5:e d e } tuplet 3:2 { f5:e g a } }",
+            Clef::Treble,
+        )
+        .unwrap();
+        let outer = event_layouts[0]
+            .tuplet_starts
+            .iter()
+            .find(|tuplet| tuplet.end_index == 5)
+            .unwrap();
+        let first_inner = event_layouts[0]
+            .tuplet_starts
+            .iter()
+            .find(|tuplet| tuplet.end_index == 2)
+            .unwrap();
+        let second_inner = &event_layouts[3].tuplet_starts[0];
+        assert_eq!(outer.depth, 1);
+        assert_eq!(first_inner.depth, 0);
+        assert_eq!(second_inner.depth, 0);
     }
 
     #[test]

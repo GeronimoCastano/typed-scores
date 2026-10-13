@@ -14,7 +14,7 @@
     lower: "Eb2:e[stacc p1(] (G3 Eb4):e[sb1(] (Bb3 Eb4 G4):e[sb1) p1)] Eb2:e[stacc p2(] (Ab3 D4):e[sb2(] (Cb4 D4 Ab4):e[sb2) p2)] Eb2:e[stacc p3(] (G3 Eb4):e[sb3(] (Bb3 Eb4 G4):e[sb3) p3)] D2:e[stacc p4(] (G3 Eb4):e[sb4(] (Bb3 Eb4 G4):e[sb4) p4)]",
   ),
   (
-    upper: "G5:q[f=5] C5:e[chromatic-turn turn-f=12121 h1<] C6:q[f=5 h1!] G5:e[f=2] Bb5:q.[f=4 h2>] Ab5:q[f=3] G5:e[f=2 s2) h2!]",
+    upper: "G5:q[f=5] C5:e[chromatic-turn turn-f=12121 h1<] C6:q[f=5 h1!] G5:e[f=2] Bb5:q.[f=4] Ab5:q[f=3] G5:e[f=2 s2)]",
     lower: "C2:e[stacc p5(] (G3 E4):e[sb5(] (Bb3 E4 G4):e[sb5) p5)] C3:e[stacc text-below=Ped._simile] (G3 E4):e[sb6(] (C4 E4 Bb4):e[sb6)] F2:e[stacc] (F3 Db4):e[sb7(] (Bb3 Db4 E4):e[sb7)] F2:e[stacc] (F3 C4):e[sb8(] (Ab3 C4 F4):e[sb8)]",
   ),
   (
