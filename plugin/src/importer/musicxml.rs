@@ -1074,9 +1074,16 @@ impl<'s> PartReader<'s> {
                     } else if name == "tremolo"
                         && mark.attribute("type").unwrap_or("single") == "single"
                     {
-                        let strokes: u32 = element_text(mark).trim().parse().unwrap_or(3);
-                        if (1..=4).contains(&strokes) {
-                            event.add(format!("tremolo={}", 8 * 2_u32.pow(strokes - 1)));
+                        match element_text(mark).trim().parse::<u32>() {
+                            Ok(strokes @ 1..=4) => {
+                                event.add(format!("tremolo={}", 8 * 2_u32.pow(strokes - 1)));
+                            }
+                            Ok(strokes) => self.score.warn(format!(
+                                "MusicXML single-note tremolo with {strokes} strokes was dropped; typed-scores supports 1 through 4"
+                            )),
+                            Err(_) => self.score.warn(
+                                "MusicXML single-note tremolo with an invalid stroke count was dropped",
+                            ),
                         }
                     } else if name == "tremolo" {
                         self.score

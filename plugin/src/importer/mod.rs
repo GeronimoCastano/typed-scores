@@ -505,6 +505,18 @@ mod tests {
     }
 
     #[test]
+    fn musicxml_warns_for_unsupported_single_note_tremolo_strokes() {
+        let xml = r#"<score-partwise><part-list><score-part id="P1"/></part-list><part id="P1"><measure number="1"><attributes><divisions>1</divisions></attributes>
+            <note><pitch><step>C</step><octave>5</octave></pitch><duration>4</duration><type>whole</type><notations><ornaments><tremolo type="single">5</tremolo></ornaments></notations></note>
+            </measure></part></score-partwise>"#;
+        let source = source_of(xml.as_bytes(), "x").unwrap();
+        assert!(
+            source.contains("single-note tremolo with 5 strokes was dropped"),
+            "{source}"
+        );
+    }
+
+    #[test]
     fn musicxml_warns_for_above_text_hidden_chord_heads_and_midbar_keys() {
         let xml = r#"<score-partwise><part-list><score-part id="P1"/></part-list><part id="P1"><measure number="1">
             <attributes><divisions>1</divisions><time><beats>2+3</beats><beat-type>8</beat-type></time></attributes>
