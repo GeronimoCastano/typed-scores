@@ -16,6 +16,20 @@
 #let _small-beam-center-step = 0.648
 #let _small-stem-length = 3.5 * _small-stem-length-fraction - stem-anchor-dy * _small-notation-scale
 
+#let _stem-length-reaching-middle(stem-start-y, stem-length, direction, bottom-y, line-gap) = {
+  let stem-tip-y = if direction == "up" {
+    stem-start-y + stem-anchor-dy + stem-length
+  } else {
+    stem-start-y - stem-anchor-dy - stem-length
+  }
+  let middle-y = bottom-y + 2 * line-gap
+  if direction == "up" {
+    stem-length + calc.max(middle-y - stem-tip-y, 0)
+  } else {
+    stem-length + calc.max(stem-tip-y - middle-y, 0)
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Small helpers
 // ---------------------------------------------------------------------------
@@ -34,16 +48,6 @@
   if group.all(item => _uses-small-notation(item.layout)) { _small-notation-scale } else { 1.0 }
 }
 
-#let _duration-denominator(layout) = {
-  let base = _duration-base(layout)
-  if base == "Whole" { 1 }
-  else if base == "Half" { 2 }
-  else if base == "Quarter" { 4 }
-  else if base == "Eighth" { 8 }
-  else if base == "Sixteenth" { 16 }
-  else { 32 }
-}
-
 #let _single-tremolo-strokes(layout, subdivision) = {
   if subdivision == 8 { 1 }
   else if subdivision == 16 { 2 }
@@ -51,11 +55,10 @@
   else { 4 }
 }
 
-#let _alternating-tremolo-strokes(layout, subdivision) = {
-  let ratio = subdivision / _duration-denominator(layout)
-  if ratio == 2 { 1 }
-  else if ratio == 4 { 2 }
-  else if ratio == 8 { 3 }
+#let _alternating-tremolo-strokes(subdivision) = {
+  if subdivision == 8 { 1 }
+  else if subdivision == 16 { 2 }
+  else if subdivision == 32 { 3 }
   else { 4 }
 }
 
@@ -63,11 +66,9 @@
   if positions.len() == 0 {
     "up"
   } else {
-    let sum = 0
-    for p in positions {
-      sum += p
-    }
-    if sum / positions.len() < 6 { "up" } else { "down" }
+    let highest-position = calc.max(..positions)
+    let lowest-position = calc.min(..positions)
+    if highest-position - 6 >= 6 - lowest-position { "down" } else { "up" }
   }
 }
 

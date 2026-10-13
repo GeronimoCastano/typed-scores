@@ -725,17 +725,27 @@
 }
 
 // Crescendo opens to the right; diminuendo opens to the left.
-#let draw-hairpin(start, end, kind: "crescendo", spread: 0.65, unit: 8pt, paint: black) = {
+#let draw-hairpin(start, end, kind: "crescendo", spread: 0.65, start-spread: auto, end-spread: auto, unit: 8pt, paint: black) = {
   import cetz.draw: *
   let (sx, sy) = start
   let (ex, ey) = end
+  let start-spread = if start-spread == auto {
+    if kind == "crescendo" { 0 } else { spread }
+  } else {
+    start-spread
+  }
+  let end-spread = if end-spread == auto {
+    if kind == "crescendo" { spread } else { 0 }
+  } else {
+    end-spread
+  }
   let stroke-style = hairpin-thickness * unit + paint
   if kind == "crescendo" {
-    line((sx, sy), (ex, ey + spread / 2), stroke: stroke-style)
-    line((sx, sy), (ex, ey - spread / 2), stroke: stroke-style)
+    line((sx, sy + start-spread / 2), (ex, ey + end-spread / 2), stroke: stroke-style)
+    line((sx, sy - start-spread / 2), (ex, ey - end-spread / 2), stroke: stroke-style)
   } else {
-    line((sx, sy + spread / 2), (ex, ey), stroke: stroke-style)
-    line((sx, sy - spread / 2), (ex, ey), stroke: stroke-style)
+    line((sx, sy + start-spread / 2), (ex, ey + end-spread / 2), stroke: stroke-style)
+    line((sx, sy - start-spread / 2), (ex, ey - end-spread / 2), stroke: stroke-style)
   }
 }
 

@@ -71,7 +71,12 @@
     let positions = item.layout.pitches.map(p => p.staff_position)
     let direction = _stem-direction(positions)
     let sign = if direction == "up" { -1 } else { 1 }
+    let chord = item.layout.pitches.len() >= 2
+    let top-rank = if chord { calc.max(..item.layout.pitches.map(_pitch-vertical-rank)) } else { none }
+    let bottom-rank = if chord { calc.min(..item.layout.pitches.map(_pitch-vertical-rank)) } else { none }
     for pitch in item.layout.pitches {
+      let rank = _pitch-vertical-rank(pitch)
+      let tie-dir = if chord and rank == top-rank { 1 } else if chord and rank == bottom-rank { -1 } else { sign }
       let pitch-bottom-y = _pitch-bottom-y(pitch, event-bottom-y)
       let head-y = staff-y(pitch.staff_position, bottom-y: pitch-bottom-y, line-gap: line-gap)
       let end-x = item.x - _head-half-width(item.layout) - 0.2
@@ -82,11 +87,11 @@
       }
       if end-x > continuation-left-x + 0.2 {
         let height = bow-height(end-x - continuation-left-x, 1.0, 0.333)
-        let tip-y = _tie-tip-y(head-y, sign, 0.75 * height, pitch-bottom-y)
+        let tip-y = _tie-tip-y(head-y, tie-dir, 0.75 * height, pitch-bottom-y)
         ties.push((
           start: (continuation-left-x, tip-y),
           end: (end-x, tip-y),
-          dir: sign,
+          dir: tie-dir,
           height: height,
         ))
       }
@@ -202,6 +207,18 @@
     if same-side-stem and dir == -1 {
       x = stem-geometry.point.at(0) + 0.2
       y = stem-geometry.point.at(1) - 0.4
+    }
+    if dir == 1 and _event-articulations(item.layout).len() > 0 {
+      let articulation-direction = _annotation-stem-direction(item, placed, beams: beams, bottom-y: bottom-y)
+      if articulation-direction != "up" {
+        let top-articulation = _articulation-stack(
+          _event-articulations(item.layout),
+          y-values,
+          1,
+          bottom-y,
+        ).last()
+        y = calc.max(y, top-articulation.y + _articulation-height(top-articulation.mark) / 2 + 0.4)
+      }
     }
     let top = if stem-geometry != none and direction == "up" {
       calc.max(calc.max(..y-values), stem-geometry.point.at(1))

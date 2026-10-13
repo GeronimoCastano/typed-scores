@@ -5,7 +5,7 @@
 #import "../engraving/spacing.typ": _onset-key, _place-voice-at-onsets
 #import "../engraving/event-geometry.typ": _event-pitch-ys, _event-staff-index, _pitch-staff-index
 #import "../engraving/events.typ": _beamed-stem-tips, _draw-placed-sequence, _draw-tuplets, _event-stem-geometry, _resolve-cross-staff-beams, _resolve-staff-accidentals
-#import "../engraving/markings.typ": _annotation-stem-direction, _collect-hairpins, _collect-pedal-spans, _draw-hairpins, _draw-pedal-spans, _draw-placed-annotations, _draw-tempo, _staff-dynamics-baselines, _event-decoration-top
+#import "../engraving/markings.typ": _annotation-stem-direction, _annotation-with-prefix, _collect-hairpins, _collect-pedal-spans, _draw-hairpins, _draw-pedal-spans, _draw-placed-annotations, _draw-tempo, _staff-dynamics-baselines, _event-decoration-top
 #import "../engraving/ties-slurs.typ": _collect-system-slurs, _collect-ties, _draw-slur-bows, _draw-ties, _layout-slurs, _slur-clearance-obstacles
 #import "../engraving/lyrics.typ": _draw-system-lyrics, _lyric-verse-counts, _placed-lyric-items
 #import "../engraving/figured-bass.typ": _draw-figure-stack, _figure-rows
@@ -95,8 +95,20 @@
   }
 }
 
-#let _draw-dashed-barline(x, staff-count, bottom-map, heights, unit, paint) = {
+#let _draw-dashed-barline(x, staff-count, bottom-map, heights, system-bottom, system-top, unit, paint, connected: false) = {
   import cetz.draw: *
+  if connected {
+    for step in range(calc.ceil((system-top - system-bottom) / 0.72) + 1) {
+      let y = system-bottom + step * 0.72
+      if y >= system-top { break }
+      line(
+        (x, y),
+        (x, calc.min(y + 0.38, system-top)),
+        stroke: thin-barline-thickness * unit + paint,
+      )
+    }
+    return
+  }
   for staff-index in range(staff-count) {
     let bottom-y = bottom-map.at(str(staff-index))
     let top-y = bottom-y + heights.at(staff-index)
@@ -177,7 +189,7 @@
     _draw-barline-stroke(thin-center, thin-barline-thickness, voice-count, system-bottom, system-top, bottom-map, heights, unit, connected, paint)
     _draw-barline-stroke(thick-center, thick-barline-thickness, voice-count, system-bottom, system-top, bottom-map, heights, unit, connected, paint)
   } else if kind == "dashed" {
-    _draw-dashed-barline(x, voice-count, bottom-map, heights, unit, paint)
+    _draw-dashed-barline(x, voice-count, bottom-map, heights, system-bottom, system-top, unit, paint, connected: connected)
   } else {
     _draw-barline-stroke(x, thin-barline-thickness, voice-count, system-bottom, system-top, bottom-map, heights, unit, connected, paint)
   }
@@ -201,6 +213,12 @@
         measure-starts.at(local-stop) + system.widths.at(local-stop)
       } else {
         system-width
+      }
+      if starts-here and span.start > system.start {
+        start-x += 0.24
+      }
+      if stops-here and span.stop < system-last {
+        stop-x -= 0.24
       }
       line((start-x, volta-y), (stop-x, volta-y), stroke: stroke)
       if starts-here {
@@ -231,6 +249,38 @@
       pitches: pitches,
     ))
   })
+}
+
+#let _direction-spans-open-before-system(measures, voice-index, system-start) = {
+  let pedals = (:)
+  let hairpins = (:)
+  for measure in measures.slice(0, system-start) {
+    for layout in measure.voices.at(voice-index).layouts {
+      for annotation in layout.annotations {
+        let annotation-text = str(annotation)
+        if annotation-text.starts-with("p") and annotation-text.ends-with("(") {
+          pedals.insert(annotation-text.slice(0, -1), true)
+        } else if annotation-text.starts-with("p") and annotation-text.ends-with(")") {
+          let span-id = annotation-text.slice(0, -1)
+          if span-id in pedals { let _ = pedals.remove(span-id) }
+        } else if annotation-text.starts-with("h") and (
+          annotation-text.ends-with("<") or annotation-text.ends-with(">")
+        ) {
+          hairpins.insert(annotation-text.slice(0, -1), (
+            kind: if annotation-text.ends-with("<") { "crescendo" } else { "diminuendo" },
+            dynamic: _annotation-with-prefix(layout, "dyn="),
+          ))
+        } else if annotation-text.starts-with("h") and annotation-text.ends-with("!") {
+          let span-id = annotation-text.slice(0, -1)
+          if span-id in hairpins { let _ = hairpins.remove(span-id) }
+        }
+      }
+    }
+  }
+  (
+    pedals: pedals.keys().map(id => (id: id,)),
+    hairpins: hairpins.keys().map(id => hairpins.at(id) + (id: id,)),
+  )
 }
 
 #let _voice-tied-from-previous-measure(measures, measure-index, voice-index) = {
@@ -577,24 +627,35 @@
     span.stop >= system.start and span.start <= system-last
   )
   let has-harmony = system-measures.any(measure => measure.harmony.len() > 0)
+  let top-staff-ink = bottom-map.at("0") + staff-note-extents.first().high
   let volta-y = above-top + 2.0
   if has-system-ending and not is-tab-voice(0) {
-    for placed in placed-by-voice.first() {
-      for item in placed {
-        volta-y = calc.max(
-          volta-y,
-          _event-decoration-top(
-            item,
-            placed,
-            beams: beams,
-            bottom-y: bottom-map.at(str(system-measures.first().voices.first().staff-index)),
-          ) + 1.35,
-        )
+    volta-y = calc.max(volta-y, top-staff-ink + 4.5)
+    for (voice-index, placed-voice) in placed-by-voice.enumerate() {
+      if system-measures.first().voices.at(voice-index).staff-index != 0 { continue }
+      for placed in placed-voice {
+        for item in placed {
+          volta-y = calc.max(
+            volta-y,
+            _event-decoration-top(
+              item,
+              placed,
+              beams: beams,
+              bottom-y: bottom-map.at("0"),
+            ) + 1.35,
+          )
+        }
       }
     }
     // Slurs are intentionally given their own air above note and annotation
     // bounds because their final clearance shift depends on the whole span.
-    if slurs-by-voice.first().len() > 0 {
+    let has-top-staff-slur = false
+    for (voice-index, spans) in slurs-by-voice.enumerate() {
+      if system-measures.first().voices.at(voice-index).staff-index == 0 and spans.len() > 0 {
+        has-top-staff-slur = true
+      }
+    }
+    if has-top-staff-slur {
       volta-y += 2.2
     }
   }
@@ -603,7 +664,7 @@
   } else {
     above-top + 4.6
   }
-  let harmony-y = above-top + 2.4
+  let harmony-y = calc.max(above-top + 2.4, top-staff-ink + 1.4)
   // Chord diagrams stand in one row above the top staff's ink, tops
   // aligned, with their chord names above them.
   let system-diagrams = ()
@@ -612,7 +673,6 @@
   }
   let diagram-top-y = none
   if system-diagrams.len() > 0 {
-    let top-staff-ink = bottom-map.at("0") + staff-note-extents.first().high
     let tallest = calc.max(..system-diagrams.map(item => _chord-diagram-extent(item.diagram, _score-diagram-scale).height))
     // Diagrams also clear a volta bracket, whose label hangs below its line.
     let volta-clearance = if has-system-ending { volta-y + 0.8 } else { above-top }
@@ -726,13 +786,19 @@
           repeat-start: measure.barline.left == "repeat-start",
         )
       }
+      let starts-volta-ending = ending-spans.any(span => (
+        span.start == system.start + measure-index
+      ))
       if measure.tempo != none {
         _draw-tempo(measure.tempo, measure-start + 0.4, header-y, unit, paint: paint)
       }
       if measure.rehearsal != none {
         import cetz.draw: *
         content(
-          (measure-start + 0.18, above-top + 2.15),
+          (
+            measure-start + if starts-volta-ending { 1.25 } else { 0.18 },
+            calc.max(above-top + 2.15, top-staff-ink + 1.0),
+          ),
           box(
             inset: 0.18em,
             stroke: 0.10 * unit + paint,
@@ -747,15 +813,24 @@
         if type(measure.navigation) == str and measure.navigation in ("segno", "coda") {
           draw-navigation-symbol(
             measure.navigation,
-            measure-start + 1.5,
-            above-top + if measure.rehearsal == none { 3.0 } else { 4.55 },
+            measure-start + if starts-volta-ending { 2.75 } else { 1.5 },
+            calc.max(
+              above-top + if measure.rehearsal == none { 3.0 } else { 4.55 },
+              top-staff-ink + 1.7,
+            ),
             unit: unit,
             scale: 0.62,
             paint: paint,
           )
         } else {
           content(
-            (measure-start + 0.18, above-top + if measure.rehearsal == none { 2.0 } else { 3.65 }),
+            (
+              measure-start + if starts-volta-ending { 2.75 } else { 0.18 },
+              calc.max(
+                above-top + if measure.rehearsal == none { 2.0 } else { 3.65 },
+                top-staff-ink + 1.0,
+              ),
+            ),
             text(size: unit * 1.02, style: "italic", measure.navigation),
             anchor: "south-west",
             padding: 0pt,
@@ -922,6 +997,11 @@
       if is-tab-voice(voice-index) { continue }
       let staff-index = system-measures.first().voices.at(voice-index).staff-index
       let bottom-y = bottom-map.at(str(staff-index))
+      let direction-spans-before-system = _direction-spans-open-before-system(
+        measures,
+        voice-index,
+        system.start,
+      )
       let placed-flat = ()
       for placed in placed-by-voice.at(voice-index) {
         placed-flat += placed
@@ -942,7 +1022,12 @@
       )
       _draw-slur-bows(slur-layouts-by-voice.at(voice-index), unit: unit, paint: paint)
       _draw-hairpins(
-        _collect-hairpins(placed-by-voice.at(voice-index)),
+        _collect-hairpins(
+          placed-by-voice.at(voice-index),
+          incoming: direction-spans-before-system.hairpins,
+          left-x: continuation-left-x,
+          right-x: continuation-right-x,
+        ),
         if dynamics-baseline-by-voice.at(voice-index) == none {
           bottom-y - 3.2
         } else {
@@ -952,7 +1037,12 @@
         paint: paint,
       )
       _draw-pedal-spans(
-        _collect-pedal-spans(placed-by-voice.at(voice-index)),
+        _collect-pedal-spans(
+          placed-by-voice.at(voice-index),
+          incoming: direction-spans-before-system.pedals,
+          left-x: continuation-left-x,
+          right-x: continuation-right-x,
+        ),
         bottom-y - 7.0,
         unit: unit,
         paint: paint,

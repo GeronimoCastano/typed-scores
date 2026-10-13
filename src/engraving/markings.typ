@@ -177,7 +177,7 @@
     }
   }
   let stem = _event-stem-geometry(item.layout, item.x, bottom-y: bottom-y)
-  if stem == none { none } else { stem.direction }
+  if stem == none { _stem-direction(item.layout.pitches.map(p => p.staff_position)) } else { stem.direction }
 }
 
 #let _articulation-height(kind) = {
@@ -393,7 +393,7 @@
         bottom-y - 2.0,
         column-ink.at(column, default: bottom-y) - ink-clearance,
       )
-      for upper-voice in column-dynamic-voices.at(column) {
+      for upper-voice in column-dynamic-voices.at(column, default: ()) {
         if upper-voice < entry.voice-index {
           demand = calc.min(demand, baselines.at(str(upper-voice)) - _dynamic-stack-step)
         }
@@ -414,7 +414,17 @@
       draw-dynamic(dynamic, item.x, y, unit: unit, paint: paint)
     }
     if _has-annotation(item.layout, "fermata") {
-      draw-fermata(item.x, _event-top(item, bottom-y: bottom-y) + 1.15, unit: unit, paint: paint)
+      let fermata-y = _event-top(item, bottom-y: bottom-y) + 1.15
+      let y-values = _event-pitch-ys(item.layout, bottom-y: _event-bottom-y(item.layout, bottom-y))
+      let articulations = _event-articulations(item.layout)
+      if articulations.len() > 0 {
+        let direction = _annotation-stem-direction(item, placed, beams: beams, bottom-y: _event-bottom-y(item.layout, bottom-y))
+        if direction != "up" {
+          let top-articulation = _articulation-stack(articulations, y-values, 1, _event-bottom-y(item.layout, bottom-y)).last()
+          fermata-y = calc.max(fermata-y, top-articulation.y + _articulation-height(top-articulation.mark) / 2 + 1.0)
+        }
+      }
+      draw-fermata(item.x, fermata-y, unit: unit, paint: paint)
     }
     if _has-annotation(item.layout, "breath") {
       draw-breath-mark(
@@ -538,23 +548,45 @@
   }
 }
 
-#let _collect-pedal-spans(placed-measures) = {
+#let _collect-pedal-spans(placed-measures, incoming: (), left-x: 0, right-x: none) = {
   let open-pedals = (:)
+  for span in incoming {
+    open-pedals.insert(span.id, (x: left-x, draw-mark: false))
+  }
   let pedal-spans = ()
   for placed-events in placed-measures {
     for item in placed-events {
       for annotation in item.layout.annotations {
         let annotation-text = str(annotation)
         if annotation-text.starts-with("p") and annotation-text.ends-with("(") {
-          open-pedals.insert(annotation-text.slice(0, -1), item.x)
+          open-pedals.insert(annotation-text.slice(0, -1), (x: item.x, draw-mark: true))
         } else if annotation-text.starts-with("p") and annotation-text.ends-with(")") {
           let span-id = annotation-text.slice(0, -1)
           if span-id in open-pedals {
-            pedal-spans.push((start: open-pedals.at(span-id), end: item.x))
+            let start = open-pedals.at(span-id)
+            pedal-spans.push((
+              start: start.x,
+              end: item.x,
+              draw-mark: start.draw-mark,
+              continues-left: not start.draw-mark,
+              continues-right: false,
+            ))
             let _ = open-pedals.remove(span-id)
           }
         }
       }
+    }
+  }
+  if right-x != none {
+    for span-id in open-pedals.keys() {
+      let start = open-pedals.at(span-id)
+      pedal-spans.push((
+        start: start.x,
+        end: right-x,
+        draw-mark: start.draw-mark,
+        continues-left: not start.draw-mark,
+        continues-right: true,
+      ))
     }
   }
   pedal-spans
@@ -564,18 +596,30 @@
   import cetz.draw: *
   let stroke-style = 0.08 * unit + paint
   for span in spans {
-    draw-pedal-mark(span.start, y, unit: unit, paint: paint)
-    let line-start = span.start + 1.72
+    if span.at("draw-mark", default: true) {
+      draw-pedal-mark(span.start, y, unit: unit, paint: paint)
+    }
+    let line-start = span.start + if span.draw-mark { 1.72 } else { 0 }
     let line-end = span.end + 0.55
     if line-end > line-start {
       line((line-start, y), (line-end, y), stroke: stroke-style)
-      line((line-end, y), (line-end, y + 0.48), stroke: stroke-style)
+      if not span.at("continues-right", default: false) {
+        line((line-end, y), (line-end, y + 0.48), stroke: stroke-style)
+      }
     }
   }
 }
 
-#let _collect-hairpins(placed-measures) = {
+#let _collect-hairpins(placed-measures, incoming: (), left-x: 0, right-x: none) = {
   let open-hairpins = (:)
+  for span in incoming {
+    open-hairpins.insert(span.id, (
+      x: left-x,
+      kind: span.kind,
+      dynamic: span.dynamic,
+      draw-open: false,
+    ))
+  }
   let hairpin-spans = ()
   for placed-events in placed-measures {
     for item in placed-events {
@@ -589,22 +633,48 @@
             x: item.x,
             kind: if annotation-text.ends-with("<") { "crescendo" } else { "diminuendo" },
             dynamic: _annotation-with-prefix(item.layout, "dyn="),
+            draw-open: true,
           ))
         } else if annotation-text.starts-with("h") and annotation-text.ends-with("!") {
           let span-id = annotation-text.slice(0, -1)
           if span-id in open-hairpins {
             let start = open-hairpins.at(span-id)
-            let start-clearance = if start.dynamic == none { 0 } else { dynamic-width(start.dynamic) / 2 + 0.35 }
+            let start-clearance = if not start.draw-open or start.dynamic == none {
+              0
+            } else {
+              dynamic-width(start.dynamic) / 2 + 0.35
+            }
             let end-dynamic = _annotation-with-prefix(item.layout, "dyn=")
             let end-clearance = if end-dynamic == none { 0 } else { dynamic-width(end-dynamic) / 2 + 0.35 }
             let start-x = start.x + start-clearance
             let end-x = item.x - end-clearance
             if end-x > start-x + 0.4 {
-              hairpin-spans.push((start: start-x, end: end-x, kind: start.kind))
+              hairpin-spans.push((
+                start: start-x,
+                end: end-x,
+                kind: start.kind,
+                continues-left: not start.draw-open,
+                continues-right: false,
+              ))
             }
             let _ = open-hairpins.remove(span-id)
           }
         }
+      }
+    }
+  }
+  if right-x != none {
+    for span in open-hairpins.values() {
+      let start-clearance = if span.dynamic == none { 0 } else { dynamic-width(span.dynamic) / 2 + 0.35 }
+      let start-x = span.x + if span.draw-open { start-clearance } else { 0 }
+      if right-x > start-x + 0.4 {
+        hairpin-spans.push((
+          start: start-x,
+          end: right-x,
+          kind: span.kind,
+          continues-left: not span.draw-open,
+          continues-right: true,
+        ))
       }
     }
   }
@@ -613,7 +683,17 @@
 
 #let _draw-hairpins(spans, y, unit: 8pt, paint: black) = {
   for span in spans {
-    draw-hairpin((span.start, y), (span.end, y), kind: span.kind, unit: unit, paint: paint)
+    let start-spread = if span.continues-left and span.kind == "crescendo" { 0.65 } else { 0 }
+    let end-spread = if span.continues-right and span.kind == "diminuendo" { 0 } else { 0.65 }
+    draw-hairpin(
+      (span.start, y),
+      (span.end, y),
+      kind: span.kind,
+      start-spread: start-spread,
+      end-spread: end-spread,
+      unit: unit,
+      paint: paint,
+    )
   }
 }
 

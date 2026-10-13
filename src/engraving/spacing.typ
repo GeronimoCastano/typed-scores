@@ -1,5 +1,5 @@
 #import "primitives.typ": accidental-width, notehead-half-width, rest-width, stem-thickness
-#import "event-geometry.typ": _accidental-gap, _dot-gap-from-head, _dot-step, _duration-base, _grace-main-gap, _grace-note-step, _head-half-width, _min-onset-step, _pitch-head-shape, _pitch-vertical-rank, _stem-direction
+#import "event-geometry.typ": _accidental-gap, _dot-gap-from-head, _dot-step, _duration-base, _grace-main-gap, _grace-note-step, _head-half-width, _layout-stem-direction, _min-onset-step, _pitch-head-shape, _pitch-vertical-rank
 #import "signatures.typ": _barline-clearance, _inline-clef-change-prefix-width, _key-alters-natural, _key-suppresses-accidental
 #import "lyrics.typ": _add-lyric-spacing-demands
 #import "figured-bass.typ": _figure-stack-extent
@@ -133,11 +133,13 @@
 // accidentals, dots, flags, or seconds offsets.
 #let _is-tab-layout(layout) = layout.at("tab", default: false)
 
+#let _grace-event-step(layout) = if _is-tab-layout(layout) { 1.55 } else { _grace-note-step }
+
 #let _event-prefix-width-before-notehead(layout, key) = {
   if _is-tab-layout(layout) { return 0 }
   let cluster-pad = 0
   if not layout.rest and layout.pitches.len() > 1 {
-    let offsets = _cluster-offsets(layout, _stem-direction(layout.pitches.map(p => p.staff_position)))
+    let offsets = _cluster-offsets(layout, _layout-stem-direction(layout))
     cluster-pad = -calc.min(..offsets, 0)
   }
   let arpeggio-pad = if layout.annotations.any(mark => str(mark) == "arpeggio" or str(mark).starts-with("arpeggio=")) { 0.95 } else { 0 }
@@ -160,7 +162,7 @@
   if _is-tab-layout(layout) { return notehead-half-width }
   let x = _head-half-width(layout)
   if not layout.rest and layout.pitches.len() > 1 {
-    let offsets = _cluster-offsets(layout, _stem-direction(layout.pitches.map(p => p.staff_position)))
+    let offsets = _cluster-offsets(layout, _layout-stem-direction(layout))
     x += calc.max(..offsets, 0)
   }
   if layout.duration.dots > 0 {
@@ -280,7 +282,7 @@
       _harmony-item-width(harmony.first(), harmony-size) / 2 + 0.35,
     )
   }
-  shortest-duration-value = calc.clamp(shortest-duration-value, 1 / 32, 1 / 4)
+  shortest-duration-value = calc.max(shortest-duration-value, 1 / 32)
   onset-keys = onset-keys.sorted()
 
   // For each onset, the spacing constraints imposed by events that end
@@ -301,9 +303,26 @@
         )
         let next-layout = main-layouts.at(layout-index + 1)
         let next-onset-key = str(_onset-key(next-layout.onset))
-        let grace-width = next-layout.at("grace_before", default: 0) * _grace-note-step + (
+        let grace-layouts = layouts.filter(layout => (
+          layout.at("grace", default: false) and layout.onset == next-layout.onset
+        ))
+        let grace-right-overhang = if grace-layouts.len() == 0 {
+          0
+        } else {
+          calc.max(..grace-layouts.map(grace-layout => {
+            let offsets = _cluster-offsets(grace-layout, _layout-stem-direction(grace-layout))
+            let displaced-head-overhang = calc.max(..offsets, 0)
+            let flag-overhang = if grace-layout.flags > 0 and _layout-stem-direction(grace-layout) == "up" {
+              0.8 * 0.7071
+            } else {
+              0
+            }
+            calc.max(displaced-head-overhang + _head-half-width(grace-layout) * 0.7071 - 0.35, flag-overhang)
+          }))
+        }
+        let grace-width = next-layout.at("grace_before", default: 0) * _grace-event-step(next-layout) + (
           if next-layout.at("grace_before", default: 0) > 0 { _grace-main-gap } else { 0 }
-        )
+        ) + grace-right-overhang
         let demand = (
           from: current-onset-key,
           distance: event-advance + _left-pad(next-layout, key) + grace-width,
@@ -457,7 +476,7 @@
   layouts.map(layout => {
     let base = note-start + positions.at(str(_onset-key(layout.onset))) * scale
     let grace-shift = if layout.at("grace", default: false) {
-      -(layout.grace_count - layout.grace_index) * _grace-note-step - _grace-main-gap
+      -(layout.grace_count - layout.grace_index) * _grace-event-step(layout) - _grace-main-gap
     } else { 0 }
     (
       layout: layout,

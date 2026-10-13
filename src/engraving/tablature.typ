@@ -311,7 +311,7 @@
       let owner = (
         voice-index: member.voice-index,
         event-index: member.event-index,
-        shared: false,
+        tied-in: held-string != none,
       )
       let slot-index = slots.position(slot => slot.midi == midi)
       if slot-index == none {
@@ -334,12 +334,19 @@
           )
         }
         if slot.requested == none { slot.requested = requested-string }
-        slot.owners.push(owner + (shared: true))
+        slot.owners.push(owner)
         slots.at(slot-index) = slot
       }
     }
   }
-  slots
+  slots.map(slot => {
+    let attack-owner = slot.owners.position(owner => not owner.tied-in)
+    let primary-owner = if attack-owner == none { 0 } else { attack-owner }
+    slot + (owners: slot.owners.enumerate().map(pair => {
+      let (owner-index, owner) = pair
+      owner + (shared: owner-index != primary-owner)
+    }),)
+  })
 }
 
 // Assigns strings and frets to every pitched event of one tab staff in one
@@ -407,7 +414,13 @@
       for owner in slot.owners {
         let notes = assigned.at(owner.voice-index).at(owner.event-index)
         if notes == none { notes = () }
-        notes.push((string: choice.string, fret: choice.fret, midi: slot.midi, shared: owner.shared))
+        notes.push((
+          string: choice.string,
+          fret: choice.fret,
+          midi: slot.midi,
+          shared: owner.shared,
+          tied-in: owner.tied-in,
+        ))
         assigned.at(owner.voice-index).at(owner.event-index) = notes
       }
     }
@@ -471,10 +484,10 @@
       let opens-system = measure-index == 0 and placed.slice(0, event-index).all(other => (
         other.layout.rest or other.layout.at("grace", default: false)
       ))
-      if layout.at("tab-tied-in", default: false) and not opens-system { continue }
       let small = layout.at("grace", default: false) or layout.at("cue", default: false)
       let scale = if small { _tab-small-number-scale } else { 1.0 }
       for note in notes {
+        if note.at("tied-in", default: false) and not opens-system { continue }
         // A unison shared with an earlier voice keeps one number, drawn there.
         if note.at("shared", default: false) { continue }
         let label = if layout.at("tab-tied-in", default: false) { "(" + str(note.fret) + ")" } else { str(note.fret) }

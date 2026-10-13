@@ -529,7 +529,9 @@
         let placed-extenders = placed-lyrics.filter(candidate => (
           candidate.kind == "extender" and candidate.source-id == item.id
         ))
-        let target-x = if placed-extenders.len() > 0 {
+        let target-x = if last.measure-index >= system-stop {
+          right-x
+        } else if placed-extenders.len() > 0 {
           placed-extenders.last().x + 0.58
         } else {
           right-x

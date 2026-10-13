@@ -2,7 +2,7 @@
 #import "primitives.typ": beam-spacing, beam-thickness, draw-accidental, draw-arpeggio, draw-augmentation-dot, draw-beam, draw-bow, draw-flag, draw-ledger-lines, draw-notehead, draw-rest, draw-stem, draw-stem-tremolo, ledger-extension, notehead-geometry, rest-extent, rest-width, staff-y, stem-anchor-dy, stem-center-offset, stem-tip
 #import "../foundation/diagnostics.typ": _score-error
 #import "../foundation/meter.typ": _rational-add, _rational-lte
-#import "event-geometry.typ": _accidental-gap, _alternating-tremolo-strokes, _default-stem-length, _dot-gap-from-head, _dot-step, _dot-y, _draw-dots, _duration-base, _event-bottom-y, _event-notation-scale, _event-pitch-ys, _event-staff-index, _group-notation-scale, _head-half-width, _is-split-chord, _layout-stem-direction, _pitch-bottom-y, _pitch-head-shape, _pitch-staff-index, _single-tremolo-strokes, _small-beam-center-step, _small-beam-thickness, _small-notation-scale, _small-stem-length, _small-stem-length-fraction, _stem-direction, _uses-small-notation
+#import "event-geometry.typ": _accidental-gap, _alternating-tremolo-strokes, _default-stem-length, _dot-gap-from-head, _dot-step, _dot-y, _draw-dots, _duration-base, _event-bottom-y, _event-notation-scale, _event-pitch-ys, _event-staff-index, _group-notation-scale, _head-half-width, _is-split-chord, _layout-stem-direction, _pitch-bottom-y, _pitch-head-shape, _pitch-staff-index, _single-tremolo-strokes, _small-beam-center-step, _small-beam-thickness, _small-notation-scale, _small-stem-length, _small-stem-length-fraction, _stem-direction, _stem-length-reaching-middle, _uses-small-notation
 #import "signatures.typ": _draw-event-clef, _key-default-accidental
 #import "spacing.typ": _accidental-plan, _cluster-offsets, _event-prefix-width-before-notehead
 
@@ -101,10 +101,24 @@
         paint: paint,
       )
       let dot-x = x + right-spread + head-half-width + _dot-gap-from-head + 0.2
+      let dot-y = _dot-y(staff-position, notehead-y, line-gap)
+      let dots-share-space-with-higher-note = layout.pitches.any(other-pitch => (
+        other-pitch.staff_position > staff-position
+          and _dot-y(
+            other-pitch.staff_position,
+            staff-y(
+              other-pitch.staff_position,
+              bottom-y: _pitch-bottom-y(other-pitch, _event-bottom-y(layout, bottom-y)),
+              line-gap: line-gap,
+            ),
+            line-gap,
+          ) == dot-y
+      ))
+      if dots-share-space-with-higher-note { dot-y -= line-gap * notation-scale }
       for dot-index in range(layout.duration.dots) {
         draw-augmentation-dot(
           dot-x + dot-index * _dot-step * notation-scale,
-          _dot-y(staff-position, notehead-y, line-gap),
+          dot-y,
           unit: unit,
           scale: notation-scale,
           paint: paint,
@@ -129,6 +143,15 @@
         (high-y - low-y) + if notation-scale < 1 { _small-stem-length } else { _default-stem-length }
       } else {
         stem-length-override
+      }
+      if stem-length-override == none {
+        stem-length = _stem-length-reaching-middle(
+          stem-start-y,
+          stem-length,
+          direction,
+          bottom-y,
+          line-gap,
+        )
       }
       if tremolo != none and stem-length-override == none {
         let strokes = _single-tremolo-strokes(layout, tremolo)
@@ -219,14 +242,13 @@
     let notation-scale = _event-notation-scale(layout)
     let stem-length = (high-y - low-y) + if notation-scale < 1 { _small-stem-length } else { _default-stem-length }
     // Ledger-line notes: the stem always reaches the middle staff line.
-    let middle-y = bottom-y + 2 * line-gap
-    if direction == "up" {
-      let tip = stem-start-y + stem-anchor-dy + stem-length
-      stem-length += calc.max(middle-y - tip, 0)
-    } else {
-      let tip = stem-start-y - stem-anchor-dy - stem-length
-      stem-length += calc.max(tip - middle-y, 0)
-    }
+    stem-length = _stem-length-reaching-middle(
+      stem-start-y,
+      stem-length,
+      direction,
+      bottom-y,
+      line-gap,
+    )
     (
       point: stem-tip(x, stem-start-y, direction: direction, length: stem-length, glyph-scale: notation-scale),
       direction: direction,
@@ -1092,7 +1114,10 @@
       let tip-clearance = 0.48
       draw-bow(
         (first.x - 0.08, grace-y - (0.5 * _small-notation-scale + tip-clearance)),
-        (main.x - 0.13, main-y - (0.5 + tip-clearance)),
+        (
+          main.x - _head-half-width(main.layout) - 0.13,
+          main-y - (0.5 + tip-clearance),
+        ),
         direction-sign: -1,
         height: 0.55,
         maximum-control-height: 1.2,
@@ -1110,7 +1135,7 @@
       let first-stem = _event-stem-geometry(item.layout, item.x, bottom-y: bottom-y)
       let last-stem = _event-stem-geometry(end.layout, end.x, bottom-y: bottom-y)
       if first-stem != none and last-stem != none {
-        let strokes = _alternating-tremolo-strokes(item.layout, tremolo.subdivision)
+        let strokes = _alternating-tremolo-strokes(tremolo.subdivision)
         let direction = first-stem.direction
         let sign = if direction == "up" { 1 } else { -1 }
         for stroke-index in range(strokes) {
@@ -1234,12 +1259,12 @@
       // left-side origin rather than the center of its bounding box. The
       // asymmetric terminal padding includes the last column's stem edge.
       let left = group.first().x - _head-half-width(group.first().layout) * _event-notation-scale(group.first().layout) - 0.16
-      let right = group.last().x - _head-half-width(group.last().layout) * _event-notation-scale(group.last().layout) + 0.32
+      let right = group.last().x + _head-half-width(group.last().layout) * _event-notation-scale(group.last().layout) + 0.16
       let lane = tuplet.depth * 1.12
       let y = if above {
         let top = calc.max(..group.map(item => {
           if item.layout.rest or item.layout.pitches.len() == 0 {
-            _event-bottom-y(item.layout, bottom-y) + 3
+            _event-bottom-y(item.layout, bottom-y) + 4.7
           } else {
             let heads = _event-pitch-ys(item.layout, bottom-y: bottom-y)
             // A numeral on the notehead side must clear the head outline, not its center.
