@@ -505,9 +505,10 @@ per staff for every voice drawn there.
 "Moonlight" Sonata's finale.
 
 For multiple staves, `group: "brace"`, `"bracket"`, `"line"`, or `"none"`
-controls the system grouping symbol. The default `auto` chooses the customary
-style from the number of staves. Key changes automatically print cancellation
-naturals before the new signature when required.
+controls the system grouping symbol. The default `auto` uses a brace for two
+notation staves, and a bracket for three or more staves or any group containing
+tablature. Key changes automatically print cancellation naturals before the
+new signature when required.
 
 ## Guitar notation
 

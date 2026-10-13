@@ -393,15 +393,16 @@ the full first-system names; wrapped systems substitute the short names.
 
 The `group` argument controls the symbol at the left of a multi-staff system:
 `"brace"`, `"bracket"`, `"line"`, or `"none"`. Its default, `auto`, uses no
-symbol for one staff, a brace for two staves, and a bracket for larger
-ensembles. Brace groups connect barlines across their staves; the other styles
-keep each staff's barline separate.
+symbol for one staff, a brace for two notation staves, and a bracket for three
+or more staves or any group containing tablature. Brace groups connect barlines
+across their staves; the other styles keep each staff's barline separate.
 
 == Bar metadata
 
 `clef`, `key`, and `time` may be set on any bar and persist until changed.
-Tempo metadata applies to the bar where it is set; add it again when a later
-bar needs its own tempo marking.
+Set `time: none` for unmetered measures; this omits the time signature and
+disables measure-duration checks. Tempo metadata applies to the bar where it is
+set; add it again when a later bar needs its own tempo marking.
 `partial` changes duration validation only: it does not change the displayed
 meter. When a key change removes old alterations, cancellation naturals are
 engraved before the replacement key signature. This replaces separate section
@@ -722,11 +723,12 @@ matching LilyPond's usual sparse numbering; `"all"` prints every bar number.
 == Score arguments
 
 #argtable(
-  [#c("clef")], [`str`], [#c("\"treble\"")], [Clef for the implicit single staff only.],
+  [#c("clef")], [`str`], [#c("\"treble\"")], [Clef for the implicit single staff only; each `staves` entry declares its own clef.],
+  [#c("heads")], [`dictionary | none`], [`none`], [Drum map for the implicit single staff; with `staves`, declare it on each staff entry.],
   [#c("staves")], [`dictionary | none`], [`none`], [Permanent staff-ID map. Each spec has `clef`, plus optional first-system `label` and later-system `short-label`. A `tab` staff also accepts `tuning`, `position`, and `source` (@guitar).],
   [#c("bars")], [`array`], [`()`], [Required non-empty array of bar dictionaries.],
   [#c("key")], [`str`], [#c("\"C\"")], [Initial key signature.],
-  [#c("time")], [`str`], [#c("\"4/4\"")], [Initial meter and full-bar duration.],
+  [#c("time")], [`str | none`], [#c("\"4/4\"")], [Initial meter and full-bar duration. `none` omits the signature and duration checks; automatic rests, harmony, and figured bass require a meter.],
   [#c("transpose")], [`str | none`], [`none`], [Interval from the pitches as typed to the pitches as drawn, such as `M6` or `-M2`. Moves notes, key signatures, and chord symbols.],
   [#c("theme")], [`str`], [#c("\"auto\"")], [Notation ink: `light` uses black, `dark` uses white, and `auto` follows the surrounding solid text fill.],
   [#c("tempo")], [`str | content | dictionary | none`], [`none`], [Tempo text, or `(text:, beat:, bpm:)` for an engraved metronome mark.],

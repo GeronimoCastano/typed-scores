@@ -545,4 +545,25 @@ mod tests {
         );
         assert!(!source.contains("G5"), "{source}");
     }
+
+    #[test]
+    fn imported_staff_names_avoid_every_reserved_bar_field() {
+        for name in [
+            "key",
+            "time",
+            "clef",
+            "partial",
+            "tempo",
+            "harmony",
+            "figures",
+            "barline",
+            "ending",
+            "rehearsal",
+            "navigation",
+            "lyrics",
+            "notes",
+        ] {
+            assert_eq!(model::slug(name), format!("{name}-staff"), "{name}");
+        }
+    }
 }
