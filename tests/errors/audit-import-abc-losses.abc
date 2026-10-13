@@ -1,0 +1,14 @@
+X:1
+M:2+3/8
+L:1/8
+Q:3/8=60
+K:Cfoo clef=perc clef=treble+8
+s: symbol line
+>C |
+{!accent!c} !invertedfermata!C | D | E | F | G |
+>C | C3>D |
+ (3C>D E |
+{c}z | C [!accent!CE] | C [1 D |
+[C-E] [CE] |
+!accent!z |
+w: _
