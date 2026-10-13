@@ -449,8 +449,8 @@ beamed acciaccatura omits it. Flagged grace groups beam independently.
 
 Write repeated-note strokes as `c5:h[tremolo=16]`, and a two-note alternation as
 `tremolo 16 { c5:h g5:h }`. For a single event, subdivisions 8, 16, 32, and 64
-draw one, two, three, and four strokes respectively, independent of its written
-duration. The strips use LilyPond's beam-weight thickness, vertical end edges,
+draw one, two, three, and four total stem strokes respectively; ordinary flags
+are replaced by the tremolo marks. The alternating form uses the same stroke counts. The strips use LilyPond's beam-weight thickness, vertical end edges,
 and stem-tip-relative placement. Append `arpeggio`, `arpeggio=up`, or
 `arpeggio=down` to a chord to draw a full-height wave immediately to its left,
 with an arrow at the requested end for a directional form.
@@ -465,7 +465,7 @@ continue across wrapped systems.
 
 An ottava span opens with `[8va(]` and closes with `[8va)]`; `8vb`, `15ma`, and
 `15mb` work the same way. Notes are written at sounding pitch and drawn one or
-two octaves nearer the staff, so `c6:q[8va(] d e f g6:q[8va)]` sits inside the
+two octaves nearer the staff, so `c6:q[8va(] d e f[8va)]` sits inside the
 treble staff under a dashed `8va` bracket. Brackets cross barlines and continue
 across system breaks with the bare numeral.
 

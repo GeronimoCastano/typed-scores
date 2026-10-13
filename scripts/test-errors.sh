@@ -198,3 +198,17 @@ check_error tests/errors/tuning-octave-out-of-range.typ "tuning octave is outsid
 check_error tests/errors/invalid-tab-position.typ "position must be a whole fret number from 0 to 24"
 check_error tests/errors/tab-position-on-notation-staff.typ "staff guitar position: position applies only to a tab staff"
 check_error tests/errors/unison-string-conflict.typ "voices sounding B4 together need different strings"
+check_error tests/errors/audit-import-zero-tune.typ 'tune must be a positive ABC X: number'
+check_error tests/errors/audit-import-additive-meter.typ 'ABC additive meter grouping cannot be retained'
+check_error tests/errors/audit-import-decorated-grace.typ 'ABC decoration "accent" inside a grace group was dropped'
+check_error tests/errors/audit-import-partial-tie.typ 'partial chord ties in MusicXML were dropped'
+check_error tests/errors/audit-import-transpose.typ 'instrument transposition metadata is not represented; written pitches are retained'
+check_error tests/errors/audit-import-entity.typ 'entity &custom; is not supported'
+check_error tests/errors/audit-import-malformed-grace.typ 'missing its closing brace'
+check_error tests/errors/audit-import-tremolo.typ "MusicXML single-note tremolo with 5 strokes was dropped; typed-scores supports 1 through 4"
+check_error tests/errors/impossible-single-measure-density.typ "no legal system partition fits the requested width"
+check_error tests/errors/unwrapped-score-exceeds-width.typ "unwrapped score is wider than the requested width"
+check_error tests/errors/relative-octave-out-of-range.typ "relative pitch resolves to octave 10"
+check_error tests/errors/multiple-annotation-blocks.typ "more than one annotation block"
+check_error tests/errors/invalid-tremolo-subdivision.typ "unsupported tremolo subdivision"
+check_error tests/errors/unsupported-meter-denominator.typ "unsupported time signature denominator 3"

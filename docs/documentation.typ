@@ -882,7 +882,7 @@ neighbors and cannot be extracted on its own.
   [#c("tuplet 3:2[number=never] { c:e d e }")], [Tuplet without its numeral.],
   [#c("cue { c:e d }")], [Cue-sized notes that keep their rhythmic value.],
   [#c("acciaccatura { d:e } f:q")], [Slashed single grace note before F.],
-  [#c("tremolo 16 { c:h g:h }")], [Two-note alternating sixteenth tremolo.],
+  [#c("tremolo 16 { c:h g:h }")], [Two-note alternating sixteenth tremolo with two strokes.],
 )
 
 == Duration inheritance
@@ -1079,11 +1079,13 @@ inside it, as is a beam marker before the group or at its end.
 == Tremolos and arpeggios
 
 For a repeated single event, append `tremolo=8`, `16`, `32`, or `64` in its
-annotation block. These values draw one, two, three, or four strokes
-respectively, independent of the event's written duration. For an
-alternation, place exactly two equal-duration notes or chords in
-`tremolo subdivision { ... }`; the connecting strokes replace ordinary flags
-or beams.
+annotation block. These values draw one, two, three, or four total stem strokes
+respectively; tremolo strokes replace ordinary flags. For an alternation, place
+exactly two equal-duration notes or chords in `tremolo subdivision { ... }`.
+The written durations determine the group's score time, while the subdivision
+sets its repeat rate and stroke count: 8 draws one stroke, 16 two, 32 three,
+and 64 four. LilyPond's `\repeat tremolo N` uses `N` as the repeat count; its
+total duration is the braced pattern's duration multiplied by `N`.
 
 Append `arpeggio`, `arpeggio=up`, or `arpeggio=down` to a chord. The arpeggio
 wave spans the full chord immediately to its left; the directional forms add
@@ -1790,3 +1792,7 @@ The Chopin, Mozart, Bach, and Beethoven compositions used by the release
 fixtures are public domain. Their reusable Typst sources live in the
 #c("examples/") directory and are shared by the guide, showcase, and visual
 regression suite.
+
+#include "audit-engraving.typ"
+
+#include "audit-import.typ"

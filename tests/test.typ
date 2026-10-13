@@ -2647,3 +2647,12 @@ obstacle covers that whole range, no offset is found and the rest falls back
 to the nearest notehead on its side.
 
 #assert(_find-nearest-free-rest-offset(1.0, rest-extent("Half"), ((bottom: -30, top: 30),)) == none)
+
+#pagebreak()
+#include "audit-engraving.typ"
+
+#pagebreak()
+#include "audit-import.typ"
+
+#pagebreak()
+#include "audit-core.typ"
