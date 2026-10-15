@@ -663,9 +663,10 @@
       label: "hairpin measure duration",
     )
     if measure-duration == none {
-      measure-duration = layouts.map(layout => _duration-as-number(layout.duration_value)).sum()
+      score-onset += layouts.map(layout => _duration-as-number(layout.duration_value)).sum()
+    } else {
+      score-onset += _duration-as-number(measure-duration)
     }
-    score-onset += _duration-as-number(measure-duration)
   }
   (
     measure-onsets: measure-onsets,

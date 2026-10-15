@@ -2711,6 +2711,15 @@ Diminuendo segments narrow by the same timing rule.
 #assert(later-close-span.end-onset == 2.75)
 #assert(_hairpin-overlaps-system(later-close-span, 2, 4))
 
+#let unmetered-hairpin-measures = _prepare-score-measures(
+  none,
+  ((notes: "c3:q[h1<] d3 e3 f3[h1!]"),),
+  "bass", "C", none, none,
+)
+#let unmetered-hairpin-timeline = _hairpin-score-timeline(unmetered-hairpin-measures, 0)
+#assert(unmetered-hairpin-timeline.score-end-onset == 1)
+#assert(unmetered-hairpin-timeline.spans.first().end-onset == 0.75)
+
 #let _close-enough(actual, expected) = calc.abs(actual - expected) < 0.001
 #let crescendo-spread-at-second-break = _hairpin-spread-at-onset("crescendo", 4, 0, 6)
 #let crescendo-spread-at-third-break = _hairpin-spread-at-onset("crescendo", 6, 0, 6)
@@ -2752,6 +2761,17 @@ the remaining crescendo.
     (notes: "c3:q d3 e3 f3[h1!]"),
     (notes: "g3 a3 b3 c4"),
   ),
+)
+
+#pagebreak()
+
+Hairpin timing also supports an unmetered score, whose measure duration is
+derived from its events.
+
+#score(
+  clef: "bass",
+  time: none,
+  bars: ((notes: "c3:q[h1<] d3 e3 f3[h1!]"),),
 )
 
 #pagebreak()
