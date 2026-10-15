@@ -2656,3 +2656,6 @@ to the nearest notehead on its side.
 
 #pagebreak()
 #include "audit-core.typ"
+
+#pagebreak()
+#include "audit-grace-followup.typ"
