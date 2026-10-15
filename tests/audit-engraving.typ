@@ -16,7 +16,7 @@
 
 #score(time: "4/4", scale: 3, bars: ((notes: "(e4 f4):q. (b4 c5):q. r:q"),))
 
-#score(time: "4/4", scale: 5, bars: ((notes: "c4:q acciaccatura { (d5 e5):e } f5:q r:h"),))
+#score(time: "4/4", scale: 3, bars: ((notes: "c4:q acciaccatura { (d5 e5):e } f5:q r:h"),))
 
 == Spans, slurs, ties, and tuplets
 
