@@ -1144,6 +1144,27 @@ Named slurs over beamed passages follow the beam group's stem direction, so a
 slur goes below when every note it spans stems upward and above when any note
 stems downward.
 
+Hairpin crescendos and diminuendos keep one continuous opening shape across
+system breaks. A close on the first note of a system ends at the previous
+system edge; a later close continues from the spread reached at that break.
+
+#demo[
+  #example(```typ
+#score(
+  clef: "bass",
+  time: "4/4",
+  width: 40,
+  bars: (
+    (notes: "c3:q[p1( h1<] d3 e3 f3"),
+    (notes: "g3 a3 b3 c4"),
+    (notes: "c3:q[h1!] d3 e3 f3[p1)]"),
+    (notes: "g3 a3 b3 c4"),
+    (notes: "c3:w"),
+  ),
+)
+```, side: false)
+]
+
 #reference-table(
   (34%, 66%),
   [*Syntax*], [*Mark*],
@@ -1739,8 +1760,9 @@ instrument written from concert pitch:
 - Grace groups currently exclude rests, tuplets, and nested ornamental groups.
 - Arpeggio signs span one chord; a cross-staff arpeggio is written on a split
   chord.
-- Pedals and hairpins are event-anchored and do not split automatically at a
-  system break.
+- Pedal brackets and hairpins continue across system breaks. Hairpin spread
+  follows elapsed musical duration, and a close on a system's first note ends
+  at the preceding system edge.
 - Ottava spans require pitched notation and stay on their voice's staff; end one before a staff switch. Put octave markers on the notation source when mirroring tab.
 - Tablature cannot show notehead maps or mirror unpitched percussion.
 - Figured bass is drawn under the bottom staff, without continuation lines.

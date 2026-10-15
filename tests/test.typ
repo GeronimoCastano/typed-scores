@@ -2666,3 +2666,129 @@ to the nearest notehead on its side.
 
 #pagebreak()
 #include "audit-lilypond-review.typ"
+
+#pagebreak()
+
+== Hairpins keep one shape across system breaks
+
+System continuation preserves the spread reached over the full musical span.
+A crescendo closed on the first note of a new system ends at the preceding
+system edge; one closed later in the bar continues widening from that point.
+Diminuendo segments narrow by the same timing rule.
+
+#import "../src/engraving/markings.typ": _hairpin-overlaps-system, _hairpin-score-timeline, _hairpin-spread-at-onset
+
+#let c02-hairpin-measures = _prepare-score-measures(
+  none,
+  (
+    (notes: "c3:q[p1( h1<] d3 e3 f3"),
+    (notes: "g3 a3 b3 c4"),
+    (notes: "c3:q[h1!] d3 e3 f3[p1)]"),
+    (notes: "g3 a3 b3 c4"),
+    (notes: "c3:w"),
+  ),
+  "bass", "C", "4/4", none,
+)
+#let c02-hairpin-timeline = _hairpin-score-timeline(c02-hairpin-measures, 0)
+#let c02-hairpin = c02-hairpin-timeline.spans.first()
+#assert(c02-hairpin.start-onset == 0)
+#assert(c02-hairpin.end-onset == 2)
+#assert(_hairpin-overlaps-system(c02-hairpin, 0, 2))
+#assert(not _hairpin-overlaps-system(c02-hairpin, 2, 5))
+
+#let later-close-measures = _prepare-score-measures(
+  none,
+  (
+    (notes: "c3:q[h1<] d3 e3 f3"),
+    (notes: "g3 a3 b3 c4"),
+    (notes: "c3:q d3 e3 f3[h1!]"),
+    (notes: "g3 a3 b3 c4"),
+  ),
+  "bass", "C", "4/4", none,
+)
+#let later-close-timeline = _hairpin-score-timeline(later-close-measures, 0)
+#let later-close-span = later-close-timeline.spans.first()
+#assert(later-close-span.end-onset == 2.75)
+#assert(_hairpin-overlaps-system(later-close-span, 2, 4))
+
+#let _close-enough(actual, expected) = calc.abs(actual - expected) < 0.001
+#let crescendo-spread-at-second-break = _hairpin-spread-at-onset("crescendo", 4, 0, 6)
+#let crescendo-spread-at-third-break = _hairpin-spread-at-onset("crescendo", 6, 0, 6)
+#let diminuendo-spread-at-second-break = _hairpin-spread-at-onset("diminuendo", 4, 0, 6)
+#let diminuendo-spread-at-third-break = _hairpin-spread-at-onset("diminuendo", 6, 0, 6)
+#assert(_close-enough(crescendo-spread-at-second-break, 0.65 * 2 / 3))
+#assert(_close-enough(crescendo-spread-at-third-break, 0.65))
+#assert(_close-enough(diminuendo-spread-at-second-break, 0.65 / 3))
+#assert(_close-enough(diminuendo-spread-at-third-break, 0))
+
+The five-bar case closes the crescendo at the first beat after the forced
+system break while the pedal bracket also spans the break.
+
+#score(
+  clef: "bass",
+  time: "4/4",
+  width: 40,
+  bars: (
+    (notes: "c3:q[p1( h1<] d3 e3 f3"),
+    (notes: "g3 a3 b3 c4"),
+    (notes: "c3:q[h1!] d3 e3 f3[p1)]"),
+    (notes: "g3 a3 b3 c4"),
+    (notes: "c3:w"),
+  ),
+)
+
+#pagebreak()
+
+The control closes on beat four of the next bar, so the second system carries
+the remaining crescendo.
+
+#score(
+  clef: "bass",
+  time: "4/4",
+  width: 40,
+  bars: (
+    (notes: "c3:q[h1<] d3 e3 f3"),
+    (notes: "g3 a3 b3 c4"),
+    (notes: "c3:q d3 e3 f3[h1!]"),
+    (notes: "g3 a3 b3 c4"),
+  ),
+)
+
+#pagebreak()
+
+The longer crescendo crosses three systems. Each new segment resumes at the
+spread reached by the previous system.
+
+#score(
+  clef: "bass",
+  time: "4/4",
+  width: 40,
+  bars: (
+    (notes: "c3:q[h1<] d3 e3 f3"),
+    (notes: "g3 a3 b3 c4"),
+    (notes: "c3:q d3 e3 f3"),
+    (notes: "g3 a3 b3 c4"),
+    (notes: "c3:q d3 e3 f3"),
+    (notes: "g3 a3 b3 c4"),
+    (notes: "c3:q[h1!] d3 e3 f3"),
+  ),
+)
+
+#pagebreak()
+
+The matching diminuendo narrows across the same three-system layout.
+
+#score(
+  clef: "bass",
+  time: "4/4",
+  width: 40,
+  bars: (
+    (notes: "c4:q[h2>] d4 e4 f4"),
+    (notes: "g4 a4 b4 c5"),
+    (notes: "c4:q d4 e4 f4"),
+    (notes: "g4 a4 b4 c5"),
+    (notes: "c4:q d4 e4 f4"),
+    (notes: "g4 a4 b4 c5"),
+    (notes: "c4:q[h2!] d4 e4 f4"),
+  ),
+)

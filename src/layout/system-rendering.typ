@@ -5,7 +5,7 @@
 #import "../engraving/spacing.typ": _onset-key, _place-voice-at-onsets
 #import "../engraving/event-geometry.typ": _event-pitch-ys, _event-staff-index, _pitch-staff-index
 #import "../engraving/events.typ": _beamed-stem-tips, _draw-placed-sequence, _draw-tuplets, _event-stem-geometry, _resolve-cross-staff-beams, _resolve-staff-accidentals
-#import "../engraving/markings.typ": _annotation-stem-direction, _annotation-with-prefix, _collect-hairpins, _collect-pedal-spans, _draw-hairpins, _draw-pedal-spans, _draw-placed-annotations, _draw-tempo, _staff-dynamics-baselines, _event-decoration-top
+#import "../engraving/markings.typ": _annotation-stem-direction, _annotation-with-prefix, _collect-hairpins, _collect-pedal-spans, _draw-hairpins, _draw-pedal-spans, _draw-placed-annotations, _draw-tempo, _hairpin-score-timeline, _staff-dynamics-baselines, _event-decoration-top
 #import "../engraving/ties-slurs.typ": _collect-system-slurs, _collect-ties, _draw-slur-bows, _draw-ties, _layout-slurs, _slur-clearance-obstacles
 #import "../engraving/lyrics.typ": _draw-system-lyrics, _lyric-verse-counts, _placed-lyric-items
 #import "../engraving/figured-bass.typ": _draw-figure-stack, _figure-rows
@@ -1025,7 +1025,8 @@
       _draw-hairpins(
         _collect-hairpins(
           placed-by-voice.at(voice-index),
-          incoming: direction-spans-before-system.hairpins,
+          _hairpin-score-timeline(measures, voice-index),
+          system.start,
           left-x: continuation-left-x,
           right-x: continuation-right-x,
         ),

@@ -1,6 +1,7 @@
 #import "@preview/cetz:0.5.2"
 #import "primitives.typ": _bravura-bounding-box, _bravura-width, _draw-bravura-glyph, draw-accidental, draw-articulation, draw-breath-mark, draw-dynamic, draw-fermata, draw-hairpin, draw-ornament-mordent, draw-ornament-trill, draw-ornament-turn, draw-pedal-mark, dynamic-width, sampled-y-at-x
 #import "../foundation/diagnostics.typ": _score-error, _validate-marking
+#import "../foundation/meter.typ": _parse-time-rational
 #import "event-geometry.typ": _event-bottom-y, _event-pitch-ys, _head-half-width, _is-split-chord, _stem-direction
 #import "events.typ": _beam-group-visible, _event-stem-geometry
 
@@ -610,72 +611,202 @@
   }
 }
 
-#let _collect-hairpins(placed-measures, incoming: (), left-x: 0, right-x: none) = {
-  let open-hairpins = (:)
-  for span in incoming {
-    open-hairpins.insert(span.id, (
-      x: left-x,
-      kind: span.kind,
-      dynamic: span.dynamic,
-      draw-open: false,
-    ))
+#let _duration-as-number(duration) = {
+  if type(duration) == dictionary {
+    duration.numerator / duration.denominator
+  } else {
+    duration
   }
-  let hairpin-spans = ()
-  for placed-events in placed-measures {
-    for item in placed-events {
-      for annotation in item.layout.annotations {
+}
+
+#let _hairpin-score-timeline(measures, voice-index) = {
+  let measure-onsets = ()
+  let spans = ()
+  let open-hairpins = (:)
+  let score-onset = 0.0
+
+  for (measure-index, measure) in measures.enumerate() {
+    measure-onsets.push(score-onset)
+    let layouts = measure.voices.at(voice-index).layouts
+    for layout in layouts {
+      let event-onset = score-onset + _duration-as-number(layout.onset)
+      for annotation in layout.annotations {
         let annotation-text = str(annotation)
-        if (
-          annotation-text.starts-with("h")
-            and (annotation-text.ends-with("<") or annotation-text.ends-with(">"))
+        if annotation-text.starts-with("h") and (
+          annotation-text.ends-with("<") or annotation-text.ends-with(">")
         ) {
           open-hairpins.insert(annotation-text.slice(0, -1), (
-            x: item.x,
+            onset: event-onset,
             kind: if annotation-text.ends-with("<") { "crescendo" } else { "diminuendo" },
-            dynamic: _annotation-with-prefix(item.layout, "dyn="),
-            draw-open: true,
           ))
         } else if annotation-text.starts-with("h") and annotation-text.ends-with("!") {
           let span-id = annotation-text.slice(0, -1)
           if span-id in open-hairpins {
             let start = open-hairpins.at(span-id)
-            let start-clearance = if not start.draw-open or start.dynamic == none {
-              0
-            } else {
-              dynamic-width(start.dynamic) / 2 + 0.35
-            }
-            let end-dynamic = _annotation-with-prefix(item.layout, "dyn=")
-            let end-clearance = if end-dynamic == none { 0 } else { dynamic-width(end-dynamic) / 2 + 0.35 }
-            let start-x = start.x + start-clearance
-            let end-x = item.x - end-clearance
-            if end-x > start-x + 0.4 {
-              hairpin-spans.push((
-                start: start-x,
-                end: end-x,
-                kind: start.kind,
-                continues-left: not start.draw-open,
-                continues-right: false,
-              ))
-            }
+            spans.push((
+              id: span-id,
+              kind: start.kind,
+              start-onset: start.onset,
+              end-onset: event-onset,
+            ))
             let _ = open-hairpins.remove(span-id)
           }
         }
       }
     }
+    let measure-duration = _parse-time-rational(
+      if measure.at("partial", default: none) == none {
+        measure.time
+      } else {
+        measure.partial
+      },
+      label: "hairpin measure duration",
+    )
+    if measure-duration == none {
+      measure-duration = layouts.map(layout => _duration-as-number(layout.duration_value)).sum()
+    }
+    score-onset += _duration-as-number(measure-duration)
   }
-  if right-x != none {
-    for span in open-hairpins.values() {
-      let start-clearance = if span.dynamic == none { 0 } else { dynamic-width(span.dynamic) / 2 + 0.35 }
-      let start-x = span.x + if span.draw-open { start-clearance } else { 0 }
-      if right-x > start-x + 0.4 {
-        hairpin-spans.push((
-          start: start-x,
-          end: right-x,
-          kind: span.kind,
-          continues-left: not span.draw-open,
-          continues-right: true,
-        ))
+  (
+    measure-onsets: measure-onsets,
+    score-end-onset: score-onset,
+    spans: spans,
+  )
+}
+
+#let _hairpin-spread-at-onset(kind, onset, start-onset, end-onset, max-spread: 0.65) = {
+  let progress = if end-onset == start-onset {
+    0
+  } else {
+    calc.min(1, calc.max(0, (onset - start-onset) / (end-onset - start-onset)))
+  }
+  if kind == "crescendo" {
+    max-spread * progress
+  } else {
+    max-spread * (1 - progress)
+  }
+}
+
+#let _hairpin-overlaps-system(span, system-start-onset, system-end-onset) = {
+  if span.start-onset == span.end-onset {
+    span.start-onset >= system-start-onset and span.start-onset < system-end-onset
+  } else {
+    span.start-onset < system-end-onset and span.end-onset > system-start-onset
+  }
+}
+
+#let _hairpin-marker-in-system(placed-measures, measure-onsets, system-start, span, annotation-ending) = {
+  for (measure-offset, placed-events) in placed-measures.enumerate() {
+    let measure-onset = measure-onsets.at(system-start + measure-offset)
+    for item in placed-events {
+      let event-onset = measure-onset + _duration-as-number(item.layout.onset)
+      if event-onset != span.start-onset and event-onset != span.end-onset { continue }
+      for annotation in item.layout.annotations {
+        let annotation-text = str(annotation)
+        let marker-matches = if annotation-ending == "!" {
+          annotation-text == span.id + "!" and event-onset == span.end-onset
+        } else {
+          (
+            annotation-text == span.id + annotation-ending
+              and event-onset == span.start-onset
+          )
+        }
+        if marker-matches { return item }
       }
+    }
+  }
+  none
+}
+
+#let _collect-hairpins(
+  placed-measures,
+  timeline,
+  system-start,
+  left-x: 0,
+  right-x: none,
+) = {
+  let system-start-onset = timeline.measure-onsets.at(system-start)
+  let system-end-measure = system-start + placed-measures.len()
+  let system-end-onset = if system-end-measure < timeline.measure-onsets.len() {
+    timeline.measure-onsets.at(system-end-measure)
+  } else {
+    timeline.score-end-onset
+  }
+  let hairpin-spans = ()
+
+  for timed-span in timeline.spans {
+    let start-ending = if timed-span.kind == "crescendo" { "<" } else { ">" }
+    let start-item = _hairpin-marker-in-system(
+      placed-measures,
+      timeline.measure-onsets,
+      system-start,
+      timed-span,
+      start-ending,
+    )
+    let end-item = _hairpin-marker-in-system(
+      placed-measures,
+      timeline.measure-onsets,
+      system-start,
+      timed-span,
+      "!",
+    )
+    if not _hairpin-overlaps-system(timed-span, system-start-onset, system-end-onset) {
+      continue
+    }
+
+    let segment-start-onset = if start-item == none {
+      system-start-onset
+    } else {
+      timed-span.start-onset
+    }
+    let segment-end-onset = if end-item == none {
+      system-end-onset
+    } else {
+      timed-span.end-onset
+    }
+    let start-clearance = if start-item == none {
+      0
+    } else {
+      let dynamic = _annotation-with-prefix(start-item.layout, "dyn=")
+      if dynamic == none { 0 } else { dynamic-width(dynamic) / 2 + 0.35 }
+    }
+    let end-clearance = if end-item == none {
+      0
+    } else {
+      let dynamic = _annotation-with-prefix(end-item.layout, "dyn=")
+      if dynamic == none { 0 } else { dynamic-width(dynamic) / 2 + 0.35 }
+    }
+    let start-x = if start-item == none { left-x } else { start-item.x + start-clearance }
+    let end-x = if end-item == none { right-x } else { end-item.x - end-clearance }
+    let start-spread = if timed-span.start-onset == timed-span.end-onset {
+      if timed-span.kind == "crescendo" { 0 } else { 0.65 }
+    } else {
+      _hairpin-spread-at-onset(
+        timed-span.kind,
+        segment-start-onset,
+        timed-span.start-onset,
+        timed-span.end-onset,
+      )
+    }
+    let end-spread = if timed-span.start-onset == timed-span.end-onset {
+      if timed-span.kind == "crescendo" { 0.65 } else { 0 }
+    } else {
+      _hairpin-spread-at-onset(
+        timed-span.kind,
+        segment-end-onset,
+        timed-span.start-onset,
+        timed-span.end-onset,
+      )
+    }
+
+    if end-x > start-x + 0.4 {
+      hairpin-spans.push((
+        start: start-x,
+        end: end-x,
+        kind: timed-span.kind,
+        start-spread: start-spread,
+        end-spread: end-spread,
+      ))
     }
   }
   hairpin-spans
@@ -683,14 +814,12 @@
 
 #let _draw-hairpins(spans, y, unit: 8pt, paint: black) = {
   for span in spans {
-    let start-spread = if span.continues-left and span.kind == "crescendo" { 0.65 } else { 0 }
-    let end-spread = if span.continues-right and span.kind == "diminuendo" { 0 } else { 0.65 }
     draw-hairpin(
       (span.start, y),
       (span.end, y),
       kind: span.kind,
-      start-spread: start-spread,
-      end-spread: end-spread,
+      start-spread: span.start-spread,
+      end-spread: span.end-spread,
       unit: unit,
       paint: paint,
     )
