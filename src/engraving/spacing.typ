@@ -14,7 +14,7 @@
 // and for down-stems to the left, alternating through longer clusters.
 // Returns x offsets parallel to layout.pitches; displaced heads share the
 // stem line with their neighbors.
-#let _cluster-offsets(layout, direction) = {
+#let _cluster-offsets(layout, direction, notation-scale: 1.0) = {
   let offsets = layout.pitches.map(_ => 0.0)
   if layout.pitches.len() < 2 { return offsets }
   let order = ()
@@ -22,8 +22,8 @@
     order.push((index: pitch-index, pos: _pitch-vertical-rank(positioned-pitch)))
   }
   let order = order.sorted(key: e => e.pos)
-  let shift = 2 * (_head-half-width(layout) - stem-thickness / 2)
-  if not layout.stem { shift = 2 * _head-half-width(layout) }
+  let shift = 2 * (_head-half-width(layout) - stem-thickness / 2) * notation-scale
+  if not layout.stem { shift = 2 * _head-half-width(layout) * notation-scale }
   let walk = if direction == "up" { order } else { order.rev() }
   let sign = if direction == "up" { 1 } else { -1 }
   let previous = none
@@ -189,8 +189,22 @@
   }))
 }
 
-#let _grace-group-geometry(grace-layouts, principal-layout, key, beams) = {
-  let ordered-grace-layouts = grace-layouts.sorted(key: layout => layout.grace_index)
+#let _grace-event-key(layout) = str(layout.grace_group) + ":" + str(layout.grace_index)
+
+#let _grace-event-is-beamed(layout, grace-layouts) = {
+  let beam-group = layout.at("beam_group", default: none)
+  beam-group != none and grace-layouts.any(sibling => (
+    sibling.grace_group == layout.grace_group
+      and sibling.grace_index != layout.grace_index
+      and sibling.at("beam_group", default: none) == beam-group
+  ))
+}
+
+#let _grace-group-geometry(grace-layouts, principal-layout, key) = {
+  let ordered-grace-layouts = grace-layouts.sorted(key: layout => (
+    layout.grace_group,
+    layout.grace_index,
+  ))
   let offsets = (:)
   let principal-left-extent = _event-left-ink-extent(principal-layout, key)
   let next-event-x-offset = 0
@@ -198,9 +212,9 @@
   for grace-layout in ordered-grace-layouts.rev() {
     let grace-right-extent = _event-right-ink-extent(
       grace-layout,
-      beams and grace-layout.at("beam_group", default: none) != none,
+      _grace-event-is-beamed(grace-layout, ordered-grace-layouts),
     )
-    let is-last-grace-event = grace-layout.grace_index == ordered-grace-layouts.last().grace_index
+    let is-last-grace-event = _grace-event-key(grace-layout) == _grace-event-key(ordered-grace-layouts.last())
     let center-distance = if is-last-grace-event {
       grace-right-extent + next-event-left-extent + _grace-main-gap
     } else {
@@ -210,16 +224,19 @@
       )
     }
     let grace-center-offset = next-event-x-offset - center-distance
-    offsets.insert(str(grace-layout.grace_index), grace-center-offset)
+    offsets.insert(_grace-event-key(grace-layout), grace-center-offset)
     next-event-x-offset = grace-center-offset
     next-event-left-extent = _event-left-ink-extent(grace-layout, key)
   }
   let first-layout = ordered-grace-layouts.first()
-  let first-center-offset = offsets.at(str(first-layout.grace_index))
+  let first-center-offset = offsets.at(_grace-event-key(first-layout))
   let reservation = _event-left-ink-extent(first-layout, key) - first-center-offset
   let last-layout = ordered-grace-layouts.last()
-  let last-center-offset = offsets.at(str(last-layout.grace_index))
-  let principal-ink-gap = -principal-left-extent - last-center-offset - _event-right-ink-extent(last-layout, beams and last-layout.at("beam_group", default: none) != none)
+  let last-center-offset = offsets.at(_grace-event-key(last-layout))
+  let principal-ink-gap = -principal-left-extent - last-center-offset - _event-right-ink-extent(
+    last-layout,
+    _grace-event-is-beamed(last-layout, ordered-grace-layouts),
+  )
   assert(
     principal-ink-gap >= _grace-main-gap - 0.001,
     message: "grace placement must keep visible ink clearance before its principal note",
@@ -227,12 +244,12 @@
   for grace-index in range(ordered-grace-layouts.len() - 1) {
     let left-layout = ordered-grace-layouts.at(grace-index)
     let right-layout = ordered-grace-layouts.at(grace-index + 1)
-    let right-center-offset = offsets.at(str(right-layout.grace_index))
-    let left-center-offset = offsets.at(str(left-layout.grace_index))
+    let right-center-offset = offsets.at(_grace-event-key(right-layout))
+    let left-center-offset = offsets.at(_grace-event-key(left-layout))
     let center-distance = right-center-offset - left-center-offset
     let right-ink-distance = _event-right-ink-extent(
       left-layout,
-      beams and left-layout.at("beam_group", default: none) != none,
+      _grace-event-is-beamed(left-layout, ordered-grace-layouts),
     )
     let left-ink-distance = _event-left-ink-extent(right-layout, key)
     let grace-ink-gap = center-distance - right-ink-distance - left-ink-distance
@@ -354,7 +371,7 @@
       } else if grace-layouts.any(_is-tab-layout) {
         _left-pad(first, key) + first.at("grace_before", default: 0) * _grace-note-step + _grace-main-gap
       } else {
-        _grace-group-geometry(grace-layouts, first, key, beams).reservation
+        _grace-group-geometry(grace-layouts, first, key).reservation
       }
       first-onset-x = calc.max(first-onset-x, grace-prefix)
     }
@@ -412,7 +429,7 @@
           layout.at("grace", default: false) and layout.onset == next-layout.onset
         ))
         let next-grace-geometry = if grace-layouts.len() > 0 and not grace-layouts.any(_is-tab-layout) {
-          _grace-group-geometry(grace-layouts, next-layout, key, beams)
+          _grace-group-geometry(grace-layouts, next-layout, key)
         } else {
           none
         }
@@ -585,8 +602,8 @@
       ))
       if principal-layouts.len() > 0 and not grace-layouts.any(_is-tab-layout) {
         let principal-layout = principal-layouts.first()
-        let geometry = _grace-group-geometry(grace-layouts, principal-layout, key, beams)
-        geometry.offsets.at(str(layout.grace_index))
+        let geometry = _grace-group-geometry(grace-layouts, principal-layout, key)
+        geometry.offsets.at(_grace-event-key(layout))
       } else {
         -(layout.grace_count - layout.grace_index) * _grace-event-step(layout) - _grace-main-gap
       }

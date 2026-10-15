@@ -993,9 +993,21 @@ receives the conventional slash; a multi-note beamed acciaccatura does not.
 Consecutive flagged grace notes beam as an independent group. Their written
 durations control flags and beams but do not contribute to the measure total.
 
-Grace chords preserve their seconds while keeping a visible gap before the
-principal note. Spacing accounts for displaced noteheads, flags, dots, and
-accidentals, including when the grace group starts the measure.
+Grace chords preserve their seconds while keeping the displaced notehead
+attached to the shared stem, including at grace and cue size. Spacing accounts
+for displaced noteheads, flags, dots, and accidentals, including when the grace
+group starts the measure.
+
+Consecutive grace blocks before one principal note keep their written order.
+
+#demo[
+  #example(```typ
+#score(
+  time: "4/4",
+  bars: ((notes: "grace { c5:e } grace { (d5 e5):e } f5:q g5:q r:h"),),
+)
+```, side: false)
+]
 
 #demo[
   #example(```typ

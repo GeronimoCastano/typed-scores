@@ -1,6 +1,6 @@
 #import "primitives.typ": bow-control-points, bow-height, bow-indent, bow-max-height, bow-samples, draw-bow, notehead-half-width, sampled-y-at-x, staff-y
 #import "../foundation/diagnostics.typ": _score-error
-#import "event-geometry.typ": _dot-gap-from-head, _dot-step, _event-bottom-y, _event-pitch-ys, _head-half-width, _pitch-bottom-y, _pitch-staff-index, _pitch-vertical-rank, _stem-direction
+#import "event-geometry.typ": _dot-gap-from-head, _dot-step, _event-bottom-y, _event-notation-scale, _event-pitch-ys, _head-half-width, _pitch-bottom-y, _pitch-staff-index, _pitch-vertical-rank, _stem-direction
 #import "spacing.typ": _cluster-offsets
 #import "events.typ": _event-stem-geometry
 #import "markings.typ": _annotation-stem-direction, _annotation-with-prefix, _articulation-height, _articulation-stack, _event-articulations, _has-annotation, _has-turn-ornament, _ornament-scale, _simple-ornament
@@ -114,7 +114,11 @@
     let chord = item.layout.pitches.len() >= 2
     let top-rank = calc.max(..item.layout.pitches.map(_pitch-vertical-rank))
     let bottom-rank = calc.min(..item.layout.pitches.map(_pitch-vertical-rank))
-    let right-spread = calc.max(.._cluster-offsets(item.layout, direction), 0)
+    let right-spread = calc.max(.._cluster-offsets(
+      item.layout,
+      direction,
+      notation-scale: _event-notation-scale(item.layout),
+    ), 0)
     for pitch in item.layout.pitches {
       let rank = _pitch-vertical-rank(pitch)
       let tie-dir = if chord and rank == top-rank { 1 } else if chord and rank == bottom-rank { -1 } else { sign }
@@ -123,7 +127,11 @@
       let start-x = item.x + right-spread + _head-half-width(item.layout) + _tie-start-gap(item.layout)
       let end-x = if next != none {
         let next-direction = _stem-direction(next.layout.pitches.map(p => p.staff_position))
-        let next-left = -calc.min(.._cluster-offsets(next.layout, next-direction), 0)
+        let next-left = -calc.min(.._cluster-offsets(
+          next.layout,
+          next-direction,
+          notation-scale: _event-notation-scale(next.layout),
+        ), 0)
         next.x - next-left - _head-half-width(next.layout) - 0.2
       } else if continuation-right-x != none {
         continuation-right-x

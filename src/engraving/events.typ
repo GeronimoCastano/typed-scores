@@ -53,7 +53,7 @@
     }
     let head-half-width = _head-half-width(layout) * notation-scale
     let accidental-plan = _accidental-plan(layout, key)
-    let cluster-offsets = _cluster-offsets(layout, direction)
+    let cluster-offsets = _cluster-offsets(layout, direction, notation-scale: notation-scale)
     let left-spread = -calc.min(..cluster-offsets, 0)
     let right-spread = calc.max(..cluster-offsets, 0)
     let ledger-left-extension = layout.at(
@@ -1031,7 +1031,7 @@
   let layout = item.layout
   let scale = _event-notation-scale(layout)
   let direction = _layout-stem-direction(layout)
-  let offsets = _cluster-offsets(layout, direction)
+  let offsets = _cluster-offsets(layout, direction, notation-scale: scale)
   let head-half = _head-half-width(layout) * scale
   (
     left: item.x + calc.min(..offsets, 0) - head-half,
