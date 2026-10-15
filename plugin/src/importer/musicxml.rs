@@ -407,6 +407,7 @@ struct MeasureInfo {
     ending: Option<Ending>,
 }
 
+#[derive(Clone)]
 struct OpenTuplet {
     tuplet: Tuplet,
     target: Frac,
@@ -439,6 +440,7 @@ struct PartReader<'s> {
     pedal_name: Option<String>,
     has_beams: bool,
     verse_numbers: Vec<String>,
+    open_tuplets: Map<String, OpenTuplet>,
 }
 
 struct MeasureState {
@@ -479,6 +481,10 @@ impl<'s> PartReader<'s> {
         for (index, measure) in part.measures.iter().enumerate() {
             self.read_measure(index, measure)?;
         }
+        if !self.open_tuplets.is_empty() {
+            self.score
+                .warn("MusicXML tuplet continues past the final measure without a closing marker");
+        }
         Ok(())
     }
 
@@ -495,7 +501,7 @@ impl<'s> PartReader<'s> {
             last_notes: Map::new(),
             pending_graces: Map::new(),
             pending_slash: Map::new(),
-            tuplets: Map::new(),
+            tuplets: std::mem::take(&mut self.open_tuplets),
         };
         let mut measure_end = Frac::ZERO;
         for node in &measure.children {
@@ -531,6 +537,7 @@ impl<'s> PartReader<'s> {
                 "bar {number}: grace notes with no following note were dropped"
             ));
         }
+        self.open_tuplets = state.tuplets;
         Ok(())
     }
 
@@ -1590,6 +1597,7 @@ pub fn read(bytes: &[u8]) -> ImportResult<Score> {
             pedal_name: None,
             has_beams: false,
             verse_numbers: Vec::new(),
+            open_tuplets: Map::new(),
         };
         reader.read(part)?;
         let PartReader {

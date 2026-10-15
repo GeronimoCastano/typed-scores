@@ -47,3 +47,15 @@ the full group while the hidden notehead remains absent.
 ).join("\n")
 #let hidden-tuplet-import = read-score(hidden-tuplet-xml, format: "musicxml")
 #score(..hidden-tuplet-import.arguments)
+
+== ABC tuplets continued across a barline
+
+This ABC triplet starts in one measure and ends in the next. `read-score`
+retains its group identity, so the rendering uses one `3` and one bracket
+across C4, D4, and E4 rather than drawing a new tuplet in each measure.
+
+#let cross-measure-tuplet = read-score(
+  "X:1\nM:4/4\nL:3/4\nK:C\n(3C D | E |]\n",
+  format: "abc",
+)
+#score(..cross-measure-tuplet.arguments)

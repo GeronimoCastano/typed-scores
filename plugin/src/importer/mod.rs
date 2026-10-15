@@ -434,6 +434,15 @@ mod tests {
     }
 
     #[test]
+    fn abc_cross_measure_tuplet_fragments_keep_one_source_identity() {
+        let source = source_of(b"X:1\nM:4/4\nL:3/4\nK:C\n(3C D | E |]\n", "cross-bar-tuplet")
+            .unwrap();
+        assert_eq!(source.matches("span=t1").count(), 2, "{source}");
+        assert!(source.contains("tuplet 3:2[span=t1] { C4:h. D4 }"), "{source}");
+        assert!(source.contains("tuplet 3:2[span=t1] { E4:h. }"), "{source}");
+    }
+
+    #[test]
     fn abc_lyric_extenders_end_at_their_explicit_target_note() {
         let source = source_of(
             b"X:1\nM:4/4\nL:1/4\nK:C\nc c c c | d d d d |]\nw: Ho _ * ly * *\n",
@@ -489,6 +498,17 @@ mod tests {
             source.contains("instrument transposition metadata is not represented"),
             "{source}"
         );
+    }
+
+    #[test]
+    fn musicxml_tuplet_identity_continues_across_measure_boundary() {
+        let source = source_of(
+            include_bytes!("../../../tests/import/cross-measure-tuplet.musicxml"),
+            "cross-measure-tuplet.musicxml",
+        )
+        .unwrap();
+        assert_eq!(source.matches("span=t1").count(), 2, "{source}");
+        assert!(source.contains("tuplet 3:2[span=t1]"), "{source}");
     }
 
     #[test]

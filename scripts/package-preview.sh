@@ -30,6 +30,7 @@ engraving/event-geometry.typ
 engraving/spacing.typ
 engraving/lyrics.typ
 engraving/events.typ
+engraving/tuplets.typ
 engraving/markings.typ
 engraving/ottava.typ
 engraving/figured-bass.typ

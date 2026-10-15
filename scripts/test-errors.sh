@@ -205,6 +205,10 @@ check_error tests/errors/audit-import-partial-tie.typ 'partial chord ties in Mus
 check_error tests/errors/audit-import-transpose.typ 'instrument transposition metadata is not represented; written pitches are retained'
 check_error tests/errors/audit-import-entity.typ 'entity &custom; is not supported'
 check_error tests/errors/audit-import-malformed-grace.typ 'missing its closing brace'
+check_error tests/errors/import-tuplet-span-options.typ 'tuplet span must be 1 to 64 ASCII letters, digits, underscores, or hyphens'
+check_error tests/errors/import-tuplet-span-options-mismatch.typ 'tuplet span fragments have inconsistent ratio or display options'
+check_error tests/errors/import-tuplet-span-gap.typ 'tuplet span is reused after a gap between bars'
+check_error tests/errors/import-tuplet-span-nested.typ 'a tuplet span cannot be nested with another tuplet'
 check_error tests/errors/audit-import-tremolo.typ 'MusicXML single-note tremolo with 5 strokes was dropped; typed-scores supports 1 through 4'
 check_error tests/errors/impossible-single-measure-density.typ "no legal system partition fits the requested width"
 check_error tests/errors/unwrapped-score-exceeds-width.typ "unwrapped score is wider than the requested width"

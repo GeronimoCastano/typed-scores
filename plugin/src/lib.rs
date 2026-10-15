@@ -1197,6 +1197,7 @@ struct TupletOptions {
     bracket: String,
     side: String,
     number: String,
+    span: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -2925,6 +2926,8 @@ fn parse_tuplet_token(
     let mut has_bracket_option = false;
     let mut has_side_option = false;
     let mut has_number_option = false;
+    let mut has_span_option = false;
+    let mut span = None;
     if *cursor < chars.len() && chars[*cursor] == '[' {
         *cursor += 1;
         let options_start = *cursor;
@@ -2970,6 +2973,23 @@ fn parse_tuplet_token(
                 }
                 has_number_option = true;
                 number = value.to_string();
+            } else if let Some(value) = option.strip_prefix("span=") {
+                if has_span_option {
+                    return Err("tuplet span option is repeated; specify span only once".to_string());
+                }
+                if value.is_empty()
+                    || value.len() > 64
+                    || !value
+                        .chars()
+                        .all(|character| character.is_ascii_alphanumeric() || matches!(character, '_' | '-'))
+                {
+                    return Err(
+                        "tuplet span must be 1 to 64 ASCII letters, digits, underscores, or hyphens"
+                            .to_string(),
+                    );
+                }
+                has_span_option = true;
+                span = Some(value.to_string());
             } else {
                 return Err(format!("unknown tuplet option {option:?}"));
             }
@@ -3003,6 +3023,7 @@ fn parse_tuplet_token(
             bracket,
             side,
             number,
+            span,
         },
         contents: tokenize_sequence_with_depth(&contents, nesting_depth + 1)?,
     })
@@ -3506,6 +3527,7 @@ pub struct TupletLayout {
     pub bracket: String,
     pub side: String,
     pub number: String,
+    pub span: Option<String>,
     pub end_index: usize,
     pub depth: usize,
 }
@@ -3785,6 +3807,7 @@ fn attach_tuplets(layouts: &mut [NoteLayout], tuplets: Vec<ParsedTuplet>) -> Res
             bracket: tuplet.options.bracket.clone(),
             side: tuplet.options.side.clone(),
             number: tuplet.options.number.clone(),
+            span: tuplet.options.span.clone(),
             end_index: tuplet.end - 1,
             depth,
         });
@@ -5072,6 +5095,26 @@ mod tests {
         assert_eq!(event_layouts[0].tuplet_starts[0].end_index, 2);
         assert_eq!(event_layouts[0].beam_group, Some(0));
         assert_eq!(event_layouts[2].beam_group, Some(0));
+    }
+
+    #[test]
+    fn tuplet_span_option_is_preserved_in_layout_metadata() {
+        let layouts = layout_sequence_native(
+            "tuplet 3:2[span=import_2] { C4:e D E }",
+            Clef::Treble,
+        )
+        .unwrap();
+        assert_eq!(
+            layouts[0].tuplet_starts[0].span.as_deref(),
+            Some("import_2")
+        );
+        for sequence in [
+            "tuplet 3:2[span=] { C4:e D E }",
+            "tuplet 3:2[span=bad.id] { C4:e D E }",
+            "tuplet 3:2[span=first span=second] { C4:e D E }",
+        ] {
+            assert!(layout_sequence_native(sequence, Clef::Treble).is_err(), "{sequence}");
+        }
     }
 
     #[test]

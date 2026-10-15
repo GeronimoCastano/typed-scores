@@ -174,6 +174,7 @@ struct VoiceWriter<'a> {
     length: Frac,
     beat: Frac,
     staff_order: &'a [String],
+    cross_measure_tuplet_ids: &'a [usize],
     warnings: &'a mut Vec<String>,
     last_code: Option<String>,
     markers: Map<usize, char>,
@@ -251,6 +252,10 @@ impl<'a> VoiceWriter<'a> {
             .iter()
             .filter_map(|(name, value)| value.as_ref().map(|value| format!("{name}={value}")))
             .collect();
+        let mut options = options;
+        if self.cross_measure_tuplet_ids.contains(&tuplet.id) {
+            options.push(format!("span=t{}", tuplet.id));
+        }
         let mut header = format!("tuplet {}:{}", tuplet.actual, tuplet.normal);
         if !options.is_empty() {
             header.push_str(&format!("[{}]", options.join(" ")));
@@ -638,6 +643,7 @@ pub struct Emitted {
 pub fn emit(score: &mut Score) -> ImportResult<Emitted> {
     let single = score.staves.len() == 1 && score.staves[0].label.is_none();
     let staff_order: Vec<String> = score.staves.iter().map(|staff| staff.id.clone()).collect();
+    let cross_measure_tuplet_ids = cross_measure_tuplet_ids(score);
     let lyrics = lyric_strings(score);
     let mut warnings = Vec::new();
 
@@ -725,6 +731,7 @@ pub fn emit(score: &mut Score) -> ImportResult<Emitted> {
                     length,
                     beat,
                     staff_order: &staff_order,
+                    cross_measure_tuplet_ids: &cross_measure_tuplet_ids,
                     warnings: &mut warnings,
                     last_code: None,
                     markers: Map::new(),
@@ -809,6 +816,29 @@ pub fn emit(score: &mut Score) -> ImportResult<Emitted> {
         warnings: score.warnings.clone(),
         arguments,
     })
+}
+
+fn cross_measure_tuplet_ids(score: &Score) -> Vec<usize> {
+    let mut measures_by_tuplet: Map<usize, Vec<usize>> = Map::new();
+    for (measure_index, measure) in score.measures.iter().enumerate() {
+        for voice_slots in measure.voices.values() {
+            for events in voice_slots {
+                for event in events {
+                    let Some(tuplet) = &event.tuplet else {
+                        continue;
+                    };
+                    let measures = measures_by_tuplet.or_default(tuplet.id);
+                    if !measures.contains(&measure_index) {
+                        measures.push(measure_index);
+                    }
+                }
+            }
+        }
+    }
+    measures_by_tuplet
+        .iter()
+        .filter_map(|(id, measures)| (measures.len() > 1).then_some(*id))
+        .collect()
 }
 
 impl Emitted {

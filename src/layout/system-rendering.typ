@@ -4,7 +4,8 @@
 #import "../engraving/signatures.typ": _draw-inline-signature, _draw-prologue, _inline-signature-note-start, _inline-time-x, _prologue-start-x, _prologue-time-x
 #import "../engraving/spacing.typ": _onset-key, _place-voice-at-onsets
 #import "../engraving/event-geometry.typ": _event-pitch-ys, _event-staff-index, _pitch-staff-index
-#import "../engraving/events.typ": _beamed-stem-tips, _draw-placed-sequence, _draw-tuplets, _event-stem-geometry, _resolve-cross-staff-beams, _resolve-staff-accidentals
+#import "../engraving/events.typ": _beamed-stem-tips, _draw-placed-sequence, _event-stem-geometry, _resolve-cross-staff-beams, _resolve-staff-accidentals
+#import "../engraving/tuplets.typ": _draw-system-tuplets
 #import "../engraving/markings.typ": _annotation-stem-direction, _annotation-with-prefix, _collect-hairpins, _collect-pedal-spans, _draw-hairpins, _draw-pedal-spans, _draw-placed-annotations, _draw-tempo, _hairpin-score-timeline, _staff-dynamics-baselines, _event-decoration-top
 #import "../engraving/ties-slurs.typ": _collect-system-slurs, _collect-ties, _draw-slur-bows, _draw-ties, _layout-slurs, _slur-clearance-obstacles
 #import "../engraving/lyrics.typ": _draw-system-lyrics, _lyric-verse-counts, _placed-lyric-items
@@ -971,13 +972,6 @@
           key: measure.key,
           paint: paint,
         )
-        _draw-tuplets(
-          placed-by-voice.at(voice-index).at(measure-index),
-          bottom-y: bottom-y,
-          unit: unit,
-          beams: beams,
-          paint: paint,
-        )
         _draw-placed-annotations(
           placed-by-voice.at(voice-index).at(measure-index),
           bottom-y: bottom-y,
@@ -988,6 +982,18 @@
           paint: paint,
         )
       }
+    }
+
+    for voice-index in range(lane-count) {
+      if is-tab-voice(voice-index) { continue }
+      let staff-index = system-measures.first().voices.at(voice-index).staff-index
+      _draw-system-tuplets(
+        placed-by-voice.at(voice-index),
+        bottom-y: bottom-map.at(str(staff-index)),
+        unit: unit,
+        beams: beams,
+        paint: paint,
+      )
     }
 
     for numbers in tab-numbers-by-staff.values() {

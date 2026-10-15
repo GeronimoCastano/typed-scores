@@ -2665,6 +2665,10 @@ to the nearest notehead on its side.
 #render_c38()
 
 #pagebreak()
+#import "audit-import-gallery.typ": render_c32
+#render_c32()
+
+#pagebreak()
 #include "audit-lilypond-review.typ"
 
 #pagebreak()

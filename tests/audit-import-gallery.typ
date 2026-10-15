@@ -56,6 +56,7 @@
 #let render_c32() = {
   let tuplet-source = "X:1\nM:4/4\nL:3/4\nK:C\n(3C D | E |]\n"
   let tuplet-import = read-score(tuplet-source, format: "abc")
+  let musicxml-import = read-score(read("import/cross-measure-tuplet.musicxml"), format: "musicxml")
   let broken-source = "X:1\nM:4/4\nL:1/8\nK:C\nC3>D E4 |]\n"
   let broken-import = read-score(broken-source, format: "abc")
   block(
@@ -67,10 +68,12 @@
       #text(size: 11pt, weight: "bold")[C32 · Tuplets across bars and unsupported broken rhythm]
       #v(2pt)
       #text(size: 8pt, fill: luma(80))[
-        The triplet ratio continues across the barline. The unwritable broken-rhythm pair remains unchanged and exposes its import warning.
+        ABC and MusicXML keep one bracket and numeral across the barline. The unwritable broken-rhythm pair remains unchanged and exposes its import warning.
       ]
       #v(5pt)
       #score(..tuplet-import.arguments)
+      #v(3pt)
+      #score(..musicxml-import.arguments)
       #v(3pt)
       #score(..broken-import.arguments)
       #v(3pt)

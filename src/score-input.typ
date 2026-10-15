@@ -675,6 +675,111 @@
 }
 
 // Parse, validate, and pre-compute shared positions for every measure.
+#let _validate-tuplet-spans(measures) = {
+  let fragments-by-span = (:)
+  let all-groups = ()
+  for (measure-index, measure) in measures.enumerate() {
+    for voice in measure.voices {
+      for (event-index, layout) in voice.layouts.enumerate() {
+        for tuplet in layout.at("tuplet_starts", default: ()) {
+          let group = (
+            span: tuplet.at("span", default: none),
+            measure-index: measure-index,
+            measure-event-count: voice.layouts.len(),
+            voice-id: voice.id,
+            start-index: event-index,
+            end-index: tuplet.end_index,
+            numerator: tuplet.numerator,
+            denominator: tuplet.denominator,
+            bracket: tuplet.bracket,
+            side: tuplet.side,
+            number: tuplet.number,
+          )
+          all-groups.push(group)
+          if group.span != none {
+            let span-key = repr((group.voice-id, group.span))
+            let fragments = fragments-by-span.at(span-key, default: ())
+            fragments.push(group)
+            fragments-by-span.insert(span-key, fragments)
+          }
+        }
+      }
+    }
+  }
+
+  for group in all-groups {
+    if group.span == none { continue }
+    if all-groups.any(other => (
+      other.voice-id == group.voice-id
+        and other.measure-index == group.measure-index
+        and other.span != group.span
+        and other.start-index <= group.end-index
+        and group.start-index <= other.end-index
+    )) {
+      _score-error(
+        "tuplet span " + group.span,
+        "a tuplet span cannot be nested with another tuplet",
+        value: group.span,
+        fix: "remove span from nested tuplets or flatten the notation groups",
+      )
+    }
+  }
+
+  for (_, fragments) in fragments-by-span.pairs() {
+    let first = fragments.first()
+    let span-id = first.span
+    let seen-measures = ()
+    let previous = none
+    for fragment in fragments {
+      if seen-measures.contains(fragment.measure-index) {
+        _score-error(
+          "tuplet span " + span-id,
+          "one tuplet span is repeated in the same bar",
+          value: span-id,
+          fix: "give each tuplet group its own span ID",
+        )
+      }
+      seen-measures.push(fragment.measure-index)
+      if (
+        fragment.numerator != first.numerator
+          or fragment.denominator != first.denominator
+          or fragment.bracket != first.bracket
+          or fragment.side != first.side
+          or fragment.number != first.number
+      ) {
+        _score-error(
+          "tuplet span " + span-id,
+          "tuplet span fragments have inconsistent ratio or display options",
+          value: span-id,
+          fix: "use the same ratio, bracket, side, and number options in every fragment",
+        )
+      }
+      if previous != none {
+        if fragment.measure-index != previous.measure-index + 1 {
+          _score-error(
+            "tuplet span " + span-id,
+            "tuplet span is reused after a gap between bars",
+            value: span-id,
+            fix: "use distinct span IDs for separate tuplets and continue a span in every intervening bar",
+          )
+        }
+        if (
+          previous.end-index != previous.measure-event-count - 1
+            or fragment.start-index != 0
+        ) {
+          _score-error(
+            "tuplet span " + span-id,
+            "tuplet span fragments do not meet at the barline",
+            value: span-id,
+            fix: "end each continued fragment at the last event of its bar and start the next at its first event",
+          )
+        }
+      }
+      previous = fragment
+    }
+  }
+}
+
 #let _prepare-score-measures(
   staves,
   bars,
@@ -928,6 +1033,7 @@
       "staff " + voice.staff-id + ", voice " + str(voice.layer-index + 1),
     )
   }
+  _validate-tuplet-spans(prepared-measures)
   _validate-lyric-continuations(prepared-measures)
   prepared-measures
 }
