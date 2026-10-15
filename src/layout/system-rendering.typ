@@ -5,7 +5,7 @@
 #import "../engraving/spacing.typ": _onset-key, _place-voice-at-onsets
 #import "../engraving/event-geometry.typ": _event-pitch-ys, _event-staff-index, _pitch-staff-index
 #import "../engraving/events.typ": _beamed-stem-tips, _draw-placed-sequence, _event-stem-geometry, _resolve-cross-staff-beams, _resolve-staff-accidentals
-#import "../engraving/tuplets.typ": _draw-system-tuplets
+#import "../engraving/tuplets.typ": _draw-system-tuplets, _tuplet-span-ids
 #import "../engraving/markings.typ": _annotation-stem-direction, _annotation-with-prefix, _collect-hairpins, _collect-pedal-spans, _draw-hairpins, _draw-pedal-spans, _draw-placed-annotations, _draw-tempo, _hairpin-score-timeline, _staff-dynamics-baselines, _event-decoration-top
 #import "../engraving/ties-slurs.typ": _collect-system-slurs, _collect-ties, _draw-slur-bows, _draw-ties, _layout-slurs, _slur-clearance-obstacles
 #import "../engraving/lyrics.typ": _draw-system-lyrics, _lyric-verse-counts, _placed-lyric-items
@@ -989,6 +989,14 @@
       let staff-index = system-measures.first().voices.at(voice-index).staff-index
       _draw-system-tuplets(
         placed-by-voice.at(voice-index),
+        incoming: if system.start > 0 {
+          _tuplet-span-ids(measures.at(system.start - 1).voices.at(voice-index).layouts)
+        } else { () },
+        outgoing: if system.start + system-measures.len() < measures.len() {
+          _tuplet-span-ids(measures.at(system.start + system-measures.len()).voices.at(voice-index).layouts)
+        } else { () },
+        left-x: continuation-left-x,
+        right-x: continuation-right-x,
         bottom-y: bottom-map.at(str(staff-index)),
         unit: unit,
         beams: beams,

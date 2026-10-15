@@ -26,7 +26,7 @@ printf '%s\n' \
   '#score(time: "2/4", bars: ((notes: "F#5:h ~"), (notes: "F#5:h")))' \
   '#score(time: "4/4", bar-numbers: "all", bars: ((rehearsal: "A", notes: ("acciaccatura { D5:s } C5:q F5:q G5:h", "C4:w"), barline: (right: "final")),))' \
   '#score(time: "4/4", bars: ((notes: "C5:h[tremolo=16] (E5 G5 C6):h[arpeggio=up]"), (clef: "bass", notes: "tremolo 16 { C3:h G3:h }")))' \
-  '#score(time: "4/4", bars: ((notes: "tuplet 3:2[span=release-triplet] { C4:h. D4 }"), (notes: "tuplet 3:2[span=release-triplet] { E4:h. }")))' \
+  '#score(time: "4/4", bars: ((notes: "tuplet 3:2[span=release-triplet] { C4:h. D4 }"), (partial: "1/2", notes: "tuplet 3:2[span=release-triplet] { E4:h. }")))' \
   '#import-score("X:1\nT:Smoke\nM:2/4\nL:1/8\nK:G\n|: \"G\"B2 AG | \"D\"A4 :|")' \
   '#score(transpose: "M2", time: "2/4", bars: ((notes: "C5:h", harmony: "C:h"),))' \
   '#score(clef: "percussion", heads: (g5: "x"), time: "2/4", bars: ((notes: "g5:q c5"),))' \

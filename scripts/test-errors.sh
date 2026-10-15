@@ -209,6 +209,10 @@ check_error tests/errors/import-tuplet-span-options.typ 'tuplet span must be 1 t
 check_error tests/errors/import-tuplet-span-options-mismatch.typ 'tuplet span fragments have inconsistent ratio or display options'
 check_error tests/errors/import-tuplet-span-gap.typ 'tuplet span is reused after a gap between bars'
 check_error tests/errors/import-tuplet-span-nested.typ 'a tuplet span cannot be nested with another tuplet'
+check_error tests/errors/import-tuplet-span-repeated.typ 'one tuplet span is repeated in the same bar'
+check_error tests/errors/import-tuplet-span-interrupted.typ 'tuplet span fragments do not meet at the barline'
+check_error tests/errors/import-tuplet-span-duplicate-option.typ 'tuplet span option is repeated'
+check_error tests/errors/import-tuplet-unclosed.typ 'MusicXML tuplet continues past the final measure without a closing marker'
 check_error tests/errors/audit-import-tremolo.typ 'MusicXML single-note tremolo with 5 strokes was dropped; typed-scores supports 1 through 4'
 check_error tests/errors/impossible-single-measure-density.typ "no legal system partition fits the requested width"
 check_error tests/errors/unwrapped-score-exceeds-width.typ "unwrapped score is wider than the requested width"

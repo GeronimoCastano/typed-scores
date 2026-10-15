@@ -674,7 +674,6 @@
   ))
 }
 
-// Parse, validate, and pre-compute shared positions for every measure.
 #let _validate-tuplet-spans(measures) = {
   let fragments-by-span = (:)
   let all-groups = ()
@@ -780,6 +779,7 @@
   }
 }
 
+// Parse, validate, and pre-compute shared positions for every measure.
 #let _prepare-score-measures(
   staves,
   bars,

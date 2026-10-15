@@ -412,6 +412,7 @@ struct OpenTuplet {
     tuplet: Tuplet,
     target: Frac,
     accumulated: Frac,
+    uses_explicit_markers: bool,
 }
 
 struct Counters {
@@ -1001,6 +1002,7 @@ impl<'s> PartReader<'s> {
                     tuplet,
                     target: unit * Frac::int(normal as i64) * dotted,
                     accumulated: Frac::ZERO,
+                    uses_explicit_markers: !starts.is_empty(),
                 },
             );
         }
@@ -1010,7 +1012,7 @@ impl<'s> PartReader<'s> {
             .expect("tuplet was just opened");
         event.tuplet = Some(open.tuplet.clone());
         open.accumulated += event.duration;
-        if stops || open.accumulated >= open.target {
+        if stops || (!open.uses_explicit_markers && open.accumulated >= open.target) {
             state.tuplets.remove(voice);
         }
     }

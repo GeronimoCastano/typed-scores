@@ -2816,3 +2816,6 @@ The matching diminuendo narrows across the same three-system layout.
     (notes: "c4:q[h2!] d4 e4 f4"),
   ),
 )
+
+#pagebreak()
+#include "audit-tuplet-spans.typ"

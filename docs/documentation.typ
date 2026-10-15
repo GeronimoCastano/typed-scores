@@ -969,6 +969,24 @@ of the bracket, and `number=always` restores the default; combine
 `number=never` with `bracket=never` to hide the tuplet entirely. Each option
 may appear once, and unknown values are reported.
 
+Use the same `span=` ID on consecutive measure fragments to keep one tuplet
+bracket across their barline. IDs are local to each voice and contain 1–64
+ASCII letters, digits, underscores, or hyphens. Fragments must meet at the
+barline and share their ratio and display options. Reusing an ID after a gap,
+repeating it within one measure, or nesting a tagged span produces an error.
+At a system break the bracket has open continuation edges and its numeral
+appears only on the first segment. ABC and MusicXML imports retain these IDs
+automatically when a source tuplet crosses a measure boundary.
+
+#demo[
+  #example(```typ
+#score(time: "4/4", bars: (
+  (notes: "tuplet 3:2[span=triplet] { c4:h. d4 }"),
+  (partial: "1/2", notes: "tuplet 3:2[span=triplet] { e4:h. }"),
+))
+```, side: false)
+]
+
 #demo[
   #example(```typ
 #score(
@@ -1806,6 +1824,7 @@ instrument written from concert pitch:
   [#c("/") / #c("-")], [Break / force a local beam connection.],
   [#c("tuplet 3:2 { c:e d e }")], [Three written eighths in the time of two.],
   [#c("tuplet 3:2[number=never] { c:e d e }")], [Tuplet with its numeral hidden.],
+  [#c("tuplet 3:2[span=triplet] { c:h. d }")], [Share one bracket with a consecutive measure fragment using the same span ID.],
   [#c("cue { c:e d }")], [Small notes that still occupy bar time.],
   [#c("acciaccatura { d:e } f:q")], [Slashed single grace note resolving to F.],
   [#c("tremolo 16 { c:h g:h }")], [Two-note alternating tremolo.],

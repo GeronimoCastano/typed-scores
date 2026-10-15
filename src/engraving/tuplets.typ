@@ -50,8 +50,8 @@
       // x coordinates denote notehead centers, so use each boundary head's
       // left-side origin rather than the center of its bounding box. The
       // asymmetric terminal padding includes the last column's stem edge.
-      let left = group.first().x - _head-half-width(group.first().layout) * _event-notation-scale(group.first().layout) - 0.16
-      let right = group.last().x + _head-half-width(group.last().layout) * _event-notation-scale(group.last().layout) + 0.16
+      let left = tuplet.at("continuation-left-x", default: group.first().x - _head-half-width(group.first().layout) * _event-notation-scale(group.first().layout) - 0.16)
+      let right = tuplet.at("continuation-right-x", default: group.last().x + _head-half-width(group.last().layout) * _event-notation-scale(group.last().layout) + 0.16)
       let lane = tuplet.depth * 1.12
       let y = if above {
         let top = calc.max(..group.map(item => {
@@ -69,6 +69,9 @@
             }
           }
         }))
+        let top = if tuplet.at("crosses-measures", default: false) {
+          calc.max(top, _event-bottom-y(group.first().layout, bottom-y) + 4.7)
+        } else { top }
         top + 0.66 * tuplet-scale + lane
       } else {
         let bottom = calc.min(..group.map(item => {
@@ -84,6 +87,9 @@
             }
           }
         }))
+        let bottom = if tuplet.at("crosses-measures", default: false) {
+          calc.min(bottom, _event-bottom-y(group.first().layout, bottom-y) - 0.7)
+        } else { bottom }
         bottom - 0.66 * tuplet-scale - lane
       }
       let number = text(size: unit * 1.55 * tuplet-scale, style: "italic", fill: paint, str(tuplet.numerator))
@@ -92,7 +98,9 @@
       // visible center, not merely its advance box, lands on the span center.
       let center = (left + right) / 2 - 0.04
       let show-bracket = tuplet.bracket == "always" or (
-        tuplet.bracket == "auto" and not _tuplet-full-beam(group, beams)
+        tuplet.bracket == "auto" and (
+          tuplet.at("crosses-measures", default: false) or not _tuplet-full-beam(group, beams)
+        )
       )
       if show-bracket {
         let stroke = 0.16 * unit + paint
@@ -107,8 +115,12 @@
           }
         }
         let hook = (if above { -0.70 } else { 0.70 }) * tuplet-scale
-        line((left, y), (left, y + hook), stroke: stroke)
-        line((right, y), (right, y + hook), stroke: stroke)
+        if tuplet.at("continuation-left-x", default: none) == none {
+          line((left, y), (left, y + hook), stroke: stroke)
+        }
+        if tuplet.at("continuation-right-x", default: none) == none {
+          line((right, y), (right, y + hook), stroke: stroke)
+        }
       }
       if shows-number {
         content(
@@ -122,7 +134,18 @@
   }
 }
 
-#let _draw-system-tuplets(placed-by-measure, bottom-y: 0, unit: 8pt, beams: false, paint: black) = {
+#let _tuplet-span-ids(layouts) = {
+  let spans = ()
+  for layout in layouts {
+    for tuplet in layout.at("tuplet_starts", default: ()) {
+      let span = tuplet.at("span", default: none)
+      if span != none { spans.push(span) }
+    }
+  }
+  spans.dedup()
+}
+
+#let _draw-system-tuplets(placed-by-measure, incoming: (), outgoing: (), left-x: 0, right-x: 0, bottom-y: 0, unit: 8pt, beams: false, paint: black) = {
   let flat-placed = ()
   let measure-start-indices = ()
   let next-start-index = 0
@@ -146,9 +169,10 @@
           cross-measure-ranges.insert(span, (
             start-index: span-start-index,
             end-index: span-end-index,
+            fragments: 1,
           ))
         } else {
-          cross-measure-ranges.insert(span, existing + (end-index: span-end-index,))
+          cross-measure-ranges.insert(span, existing + (end-index: span-end-index, fragments: existing.fragments + 1))
         }
       }
     }
@@ -167,7 +191,17 @@
         } else {
           let span-range = cross-measure-ranges.at(span)
           if global-event-index == span-range.start-index {
-            tuplet-starts.push(tuplet + (end_index: span-range.end-index,))
+            let joined = tuplet + (
+              end_index: span-range.end-index,
+              crosses-measures: span-range.fragments > 1 or incoming.contains(span) or outgoing.contains(span),
+            )
+            if incoming.contains(span) {
+              joined += (continuation-left-x: left-x, number: "never")
+            }
+            if outgoing.contains(span) {
+              joined += (continuation-right-x: right-x,)
+            }
+            tuplet-starts.push(joined)
           }
         }
       }
