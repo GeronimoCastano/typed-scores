@@ -1,4 +1,4 @@
-// typst compile --root . --ppi 260 assets/readme/guitar.typ assets/readme/guitar.png
+// typst compile --root . --ppi 220 assets/readme/guitar.typ assets/readme/guitar.png
 #import "../../src/lib.typ": *
 
 #set page(width: 18cm, height: auto, margin: 0.7cm, fill: white)

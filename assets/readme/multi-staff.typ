@@ -1,4 +1,4 @@
-// typst compile --root . --ppi 260 assets/readme/multi-staff.typ assets/readme/multi-staff.png
+// typst compile --root . --ppi 220 assets/readme/multi-staff.typ assets/readme/multi-staff.png
 #import "../../src/lib.typ": *
 
 #set page(width: 18cm, height: auto, margin: 0.7cm, fill: white)
