@@ -506,16 +506,6 @@
     }
     pitched-voices-by-staff.at(staff-index).push((voice-index: voice-index, placed: placed-flat))
   }
-  let dynamics-baseline-by-voice = range(lane-count).map(_ => none)
-  for staff-index in range(staff-count) {
-    let baselines = _staff-dynamics-baselines(
-      pitched-voices-by-staff.at(staff-index),
-      bottom-y: bottom-map.at(str(staff-index)),
-    )
-    for entry in pitched-voices-by-staff.at(staff-index) {
-      dynamics-baseline-by-voice.at(entry.voice-index) = baselines.at(str(entry.voice-index))
-    }
-  }
   let slur-layouts-by-voice = ()
   for voice-index in range(lane-count) {
     if is-tab-voice(voice-index) {
@@ -591,6 +581,24 @@
       clearance-obstacles: clearance-obstacles,
       bottom-y: bottom-y,
     ))
+  }
+
+  let dynamics-baseline-by-voice = range(lane-count).map(_ => none)
+  for staff-index in range(staff-count) {
+    let staff-slur-layouts = ()
+    for voice-index in range(lane-count) {
+      if system-measures.first().voices.at(voice-index).staff-index == staff-index {
+        staff-slur-layouts += slur-layouts-by-voice.at(voice-index)
+      }
+    }
+    let baselines = _staff-dynamics-baselines(
+      pitched-voices-by-staff.at(staff-index),
+      slur-layouts: staff-slur-layouts,
+      bottom-y: bottom-map.at(str(staff-index)),
+    )
+    for entry in pitched-voices-by-staff.at(staff-index) {
+      dynamics-baseline-by-voice.at(entry.voice-index) = baselines.at(str(entry.voice-index))
+    }
   }
 
   // Ottava brackets clear every event of their staff and their voice's slurs.

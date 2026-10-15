@@ -1170,6 +1170,19 @@ as a closing `dyn=ff`, and fingerings rise above stacked articulations rather
 than overlapping them. A dynamic below the staff clears the noteheads, ledger
 lines, and stems of every voice sharing its onset, and dynamics of different
 voices at one onset stack with the upper voice's mark nearest the staff.
+When a downward slur crosses a dynamic, the dynamic moves below the bow while
+clearing its full glyph width. For example, the `ff` below sits beneath both
+the chord's accent and its descending phrase slur:
+
+#score(
+  staves: (soprano: (clef: "treble"), bass: (clef: "bass")),
+  group: "brace",
+  time: "4/4",
+  wrap: false,
+  scale: 0.62,
+  bars: ((soprano: "(c3 e3 g3 c4):q[accent dyn=ff s1(] b3:q a3:q g3:q[s1)]", bass: "c3:w"),),
+)
+
 Named slurs over beamed passages follow the beam group's stem direction, so a
 slur goes below when every note it spans stems upward and above when any note
 stems downward.

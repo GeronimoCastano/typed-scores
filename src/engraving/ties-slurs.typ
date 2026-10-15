@@ -216,16 +216,26 @@
       x = stem-geometry.point.at(0) + 0.2
       y = stem-geometry.point.at(1) - 0.4
     }
-    if dir == 1 and _event-articulations(item.layout).len() > 0 {
+    let articulations = _event-articulations(item.layout)
+    if articulations.len() > 0 {
       let articulation-direction = _annotation-stem-direction(item, placed, beams: beams, bottom-y: bottom-y)
-      if articulation-direction != "up" {
-        let top-articulation = _articulation-stack(
-          _event-articulations(item.layout),
+      let articulation-is-on-slur-side = (
+        (dir == 1 and articulation-direction != "up")
+          or (dir == -1 and articulation-direction == "up")
+      )
+      if articulation-is-on-slur-side {
+        let articulation = _articulation-stack(
+          articulations,
           y-values,
-          1,
+          dir,
           bottom-y,
         ).last()
-        y = calc.max(y, top-articulation.y + _articulation-height(top-articulation.mark) / 2 + 0.4)
+        let articulation-edge = articulation.y + dir * _articulation-height(articulation.mark) / 2
+        y = if dir == 1 {
+          calc.max(y, articulation-edge + 0.4)
+        } else {
+          calc.min(y, articulation-edge - 0.4)
+        }
       }
     }
     let top = if stem-geometry != none and direction == "up" {

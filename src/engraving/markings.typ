@@ -1,5 +1,5 @@
 #import "@preview/cetz:0.5.2"
-#import "primitives.typ": _bravura-bounding-box, _bravura-width, _draw-bravura-glyph, draw-accidental, draw-articulation, draw-breath-mark, draw-dynamic, draw-fermata, draw-hairpin, draw-ornament-mordent, draw-ornament-trill, draw-ornament-turn, draw-pedal-mark, dynamic-width, sampled-y-at-x
+#import "primitives.typ": _bravura-bounding-box, _bravura-width, _draw-bravura-glyph, _dynamic-glyph, draw-accidental, draw-articulation, draw-breath-mark, draw-dynamic, draw-fermata, draw-hairpin, draw-ornament-mordent, draw-ornament-trill, draw-ornament-turn, draw-pedal-mark, dynamic-width, sampled-y-at-x
 #import "../foundation/diagnostics.typ": _score-error, _validate-marking
 #import "../foundation/meter.typ": _parse-time-rational
 #import "event-geometry.typ": _event-bottom-y, _event-pitch-ys, _head-half-width, _is-split-chord, _stem-direction
@@ -356,6 +356,48 @@
   -f-bounds.sw.at(1) * _dynamic-draw-scale + f-bounds.ne.at(1) * _dynamic-draw-scale + 0.4
 }
 
+// Place a dynamic below any downward slur whose bow crosses the dynamic's
+// actual glyph width. The dynamic's y coordinate is its Bravura origin.
+#let _dynamic-baseline-below-slurs(dynamic-text, x, slur-layouts, baseline, scale: _dynamic-draw-scale) = {
+  let glyph-top = calc.max(..dynamic-text.codepoints().map(letter =>
+    _bravura-bounding-box(_dynamic-glyph(letter)).ne.at(1) * scale,
+  ))
+  let half-width = dynamic-width(dynamic-text, scale: scale) / 2
+  let ink-left = x - half-width
+  let ink-right = x + half-width
+  let required-baseline = baseline
+  for layout in slur-layouts {
+    if layout.dir != -1 { continue }
+    if ink-right < layout.start.at(0) or ink-left > layout.end.at(0) { continue }
+    let left-x = calc.max(ink-left, layout.start.at(0))
+    let right-x = calc.min(ink-right, layout.end.at(0))
+    let lowest-slur-y = none
+    for sample in layout.samples {
+      if sample.at(0) >= left-x and sample.at(0) <= right-x {
+        lowest-slur-y = if lowest-slur-y == none {
+          sample.at(1)
+        } else {
+          calc.min(lowest-slur-y, sample.at(1))
+        }
+      }
+    }
+    for edge-x in (left-x, right-x) {
+      let edge-y = sampled-y-at-x(layout.samples, edge-x)
+      if edge-y != none {
+        lowest-slur-y = if lowest-slur-y == none {
+          edge-y
+        } else {
+          calc.min(lowest-slur-y, edge-y)
+        }
+      }
+    }
+    if lowest-slur-y != none {
+      required-baseline = calc.min(required-baseline, lowest-slur-y - 0.25 - glyph-top)
+    }
+  }
+  required-baseline
+}
+
 // The shared dynamics baseline of each pitched voice on one staff, keyed by
 // voice index. `voices` pairs each voice index with its placed events, in
 // voice order from the top voice down. A dynamic clears the lowest ink of its
@@ -363,7 +405,7 @@
 // sharing the onset, with the usual padding. Events drawn on another staff do
 // not count. A voice's dynamic also sits at least one stack step below the
 // baseline of any higher voice that marks the same column.
-#let _staff-dynamics-baselines(voices, bottom-y: 0) = {
+#let _staff-dynamics-baselines(voices, slur-layouts: (), bottom-y: 0) = {
   let column-ink = (:)
   let column-dynamic-voices = (:)
   for entry in voices {
@@ -393,6 +435,12 @@
       let demand = calc.min(
         bottom-y - 2.0,
         column-ink.at(column, default: bottom-y) - ink-clearance,
+      )
+      demand = _dynamic-baseline-below-slurs(
+        _annotation-with-prefix(item.layout, "dyn="),
+        item.x,
+        slur-layouts,
+        demand,
       )
       for upper-voice in column-dynamic-voices.at(column, default: ()) {
         if upper-voice < entry.voice-index {

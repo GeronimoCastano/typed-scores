@@ -37,7 +37,7 @@
 }
 
 #let c57 = () => {
-  case-heading("C57", "Cross-staff slur/beam and accent/dynamic spacing", [The cross-staff slur crosses the upper beam near its start; the second panel shows the below-note accent and ff dynamic. The third panel checks the reported voice-two natural, which is visible in the current render.])
+  case-heading("C57", "Cross-staff slur/beam and accent/dynamic spacing", [The cross-staff slur crosses the upper beam near its start. The second panel checks clearance between the downward slur, accent, and ff dynamic; the third confirms that the reported voice-two natural is visible.])
   score(
     staves: (upper: (clef: "treble"), lower: (clef: "bass")),
     time: "2/4",

@@ -2680,7 +2680,7 @@ A crescendo closed on the first note of a new system ends at the preceding
 system edge; one closed later in the bar continues widening from that point.
 Diminuendo segments narrow by the same timing rule.
 
-#import "../src/engraving/markings.typ": _hairpin-overlaps-system, _hairpin-score-timeline, _hairpin-spread-at-onset
+#import "../src/engraving/markings.typ": _dynamic-baseline-below-slurs, _dynamic-stack-step, _hairpin-overlaps-system, _hairpin-score-timeline, _hairpin-spread-at-onset, _staff-dynamics-baselines
 
 #let c02-hairpin-measures = _prepare-score-measures(
   none,
@@ -2819,3 +2819,50 @@ The matching diminuendo narrows across the same three-system layout.
 
 #pagebreak()
 #include "audit-tuplet-spans.typ"
+
+#pagebreak()
+
+== Dynamics clear downward slurs
+
+The dynamic stays below the curved slur and the chord's accent. Its placement
+accounts for the full horizontal width of the dynamic glyphs.
+
+#let test-downward-slur = (
+  start: (0, 0),
+  end: (10, 0),
+  dir: -1,
+  samples: ((0, 0), (2, -0.4), (5, -1), (8, -0.4), (10, 0)),
+)
+#let baseline-under-slur = _dynamic-baseline-below-slurs(
+  "ff",
+  5,
+  (test-downward-slur,),
+  -1,
+)
+#let baseline-outside-slur = _dynamic-baseline-below-slurs(
+  "ff",
+  12,
+  (test-downward-slur,),
+  -1,
+)
+#assert(baseline-under-slur < -1)
+#assert(baseline-outside-slur == -1)
+
+#let stacked-dynamics = _staff-dynamics-baselines(
+  (
+    (voice-index: 0, placed: ((x: 5, layout: (rest: true, pitches: (), annotations: ("dyn=ff",))),)),
+    (voice-index: 1, placed: ((x: 5, layout: (rest: true, pitches: (), annotations: ("dyn=ff",))),)),
+  ),
+  slur-layouts: (test-downward-slur,),
+)
+#assert(stacked-dynamics.at("0") < -2)
+#assert(stacked-dynamics.at("1") <= stacked-dynamics.at("0") - _dynamic-stack-step)
+
+#score(
+  staves: (soprano: (clef: "treble"), bass: (clef: "bass")),
+  group: "brace",
+  time: "4/4",
+  wrap: false,
+  scale: 0.62,
+  bars: ((soprano: "(c3 e3 g3 c4):q[accent dyn=ff s1(] b3:q a3:q g3:q[s1)]", bass: "c3:w"),),
+)
