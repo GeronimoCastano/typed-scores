@@ -753,7 +753,10 @@ impl<'s> PartReader<'s> {
         let visible = node.attribute("print-object") != Some("no");
         let rest = child(node, "rest");
         let mut event = if !visible {
-            Event::new(Kind::Spacer, duration)
+            let mut event = Event::new(Kind::Spacer, duration);
+            event.base = base;
+            event.dots = dots;
+            event
         } else if let Some(rest) = rest {
             let kind = if rest.attribute("measure") == Some("yes") || base.is_none() {
                 Kind::MeasureRest

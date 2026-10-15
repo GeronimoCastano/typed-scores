@@ -133,12 +133,12 @@
       #text(size: 11pt, weight: "bold")[C38 · Cross-staff destination and hidden tuplet note]
       #v(2pt)
       #text(size: 8pt, fill: luma(80))[
-        The cross-staff chord tone fills the destination staff instead of a false whole-bar rest. The hidden-note case still emits a nested tuplet; scoring its arguments currently fails with a duration mismatch (13/18 versus 3/4). The excerpt shows the generated source.
+      The cross-staff chord tone fills the destination staff instead of a false whole-bar rest. A hidden note in the 3:2 group now emits as a spacer inside the same tuplet, so the imported score compiles without applying the ratio twice.
       ]
       #v(5pt)
       #score(..cross-staff-import.arguments)
       #v(3pt)
-      #raw(hidden-tuplet-import.source, block: true)
+      #score(..hidden-tuplet-import.arguments)
     ],
   )
 }
@@ -150,6 +150,103 @@
     "C48",
     "Reserved staff name",
     "The MusicXML part is named Set. The generated score keeps the name as a safe staff identifier and still compiles.",
+    imported,
+  )
+}
+
+#let render_c14() = {
+  let source = "<score-partwise><part-list><score-part id=\"P1\"><part-name>Clarinet in B-flat</part-name></score-part></part-list><part id=\"P1\"><measure number=\"1\"><attributes><divisions>1</divisions><key><fifths>2</fifths></key><transpose><diatonic>-1</diatonic><chromatic>-2</chromatic></transpose></attributes><note><pitch><step>C</step><octave>5</octave></pitch><duration>1</duration><type>quarter</type></note><note><pitch><step>D</step><octave>5</octave></pitch><duration>1</duration><type>quarter</type></note><note><pitch><step>E</step><octave>5</octave></pitch><duration>1</duration><type>quarter</type></note><note><pitch><step>F</step><octave>5</octave></pitch><duration>1</duration><type>quarter</type></note></measure></part></score-partwise>"
+  let imported = read-score(source, format: "musicxml")
+  panel(
+    "C14",
+    "Written-pitch clarinet import",
+    "MusicXML pitches remain written as C5–F5 under the notated D key. The clarinet's B-flat sounding-transpose metadata is reported as unsupported; no concert-pitch conversion is implied.",
+    imported,
+  )
+}
+
+#let render_c15() = {
+  let source = "<score-partwise><part-list><score-part id=\"P1\"><part-name>Chord</part-name></score-part></part-list><part id=\"P1\"><measure number=\"1\"><attributes><divisions>1</divisions></attributes><note><pitch><step>C</step><octave>5</octave></pitch><duration>2</duration><type>half</type><tie type=\"start\"/></note><note><chord/><pitch><step>E</step><octave>5</octave></pitch><duration>2</duration><type>half</type></note><note><pitch><step>C</step><octave>5</octave></pitch><duration>2</duration><type>half</type><tie type=\"stop\"/></note><note><chord/><pitch><step>E</step><octave>5</octave></pitch><duration>2</duration><type>half</type></note></measure></part></score-partwise>"
+  let imported = read-score(source, format: "musicxml")
+  panel(
+    "C15",
+    "Partial chord tie warning",
+    "Only C is tied in the MusicXML chord. The importer drops this partial chord tie and displays the warning; the rendered chord has no tie arc.",
+    imported,
+  )
+}
+
+#let render_c33() = block(
+  width: 100%,
+  inset: 8pt,
+  radius: 3pt,
+  stroke: 0.7pt + luma(205),
+  [
+    #text(size: 11pt, weight: "bold")[C33 · Malformed ABC chord diagnostic]
+    #v(2pt)
+    #text(size: 8pt, fill: luma(80))[
+      The importer rejects an unclosed chord that consumes a barline. This is the captured editor diagnostic from compiling the exact read-score call below.
+    ]
+    #v(5pt)
+    #raw("X:1\nK:C\nL:1/4\nM:4/4\nc d e f |\n[CEG c d e |]", block: true)
+    #v(4pt)
+    #text(size: 7pt, fill: rgb("#8a3b00"))[
+      typed-scores error in read-score: an ABC chord contains a barline before its closing bracket; fix: check the file in its notation program, or report the file if it opens correctly there
+    ]
+  ],
+)
+
+#let render_c34() = {
+  let source = "X:1\nM:4/4\nL:1/4\nK:C\nC D E F|]\n\nG A B c|]\n"
+  let imported = read-score(source, format: "abc")
+  panel(
+    "C34",
+    "Blank line ends ABC tune body",
+    "The first empty body line terminates the selected tune, so notes after it are not included in the imported score.",
+    imported,
+  )
+}
+
+#let render_c35() = {
+  let source = "X:1\nM:4/4\nL:1/4\nK:C\nC D [1 E F :| [2 G A |]\n"
+  let imported = read-score(source, format: "abc")
+  panel(
+    "C35",
+    "Mid-measure volta warning",
+    "The first ending begins mid-measure and is dropped with a warning. The later valid second ending remains in the rendered score.",
+    imported,
+  )
+}
+
+#let render_c49() = {
+  let source = "<score-partwise><part-list><score-part id=\"P1\"><part-name>Hidden chord head</part-name></score-part></part-list><part id=\"P1\"><measure number=\"1\"><attributes><divisions>1</divisions><time><beats>2+3</beats><beat-type>8</beat-type></time></attributes><note><pitch><step>C</step><octave>5</octave></pitch><duration>1</duration><type>quarter</type></note><attributes><key><fifths>1</fifths></key></attributes><direction placement=\"above\"><direction-type><words>rit.</words></direction-type></direction><note><pitch><step>E</step><octave>5</octave></pitch><duration>1</duration><type>quarter</type></note><note print-object=\"no\"><chord/><pitch><step>G</step><octave>5</octave></pitch><duration>1</duration><type>quarter</type></note></measure></part></score-partwise>"
+  let imported = read-score(source, format: "musicxml")
+  panel(
+    "C49",
+    "Hidden chord head and unsupported metadata",
+    "The hidden G chord member, mid-measure key change, above-staff direction, and additive meter grouping each produce an import warning. The visible notes show the retained score content.",
+    imported,
+  )
+}
+
+#let render_c50() = {
+  let source = "<score-partwise><part-list><score-part id=\"P1\"><part-name>Mixed chord</part-name></score-part></part-list><part id=\"P1\"><measure number=\"1\"><attributes><divisions>1</divisions></attributes><note><pitch><step>C</step><octave>5</octave></pitch><duration>4</duration><type>whole</type></note><note><chord/><unpitched><display-step>G</display-step><display-octave>5</display-octave></unpitched><duration>4</duration><type>whole</type></note></measure></part></score-partwise>"
+  let imported = read-score(source, format: "musicxml")
+  panel(
+    "C50",
+    "Unpitched chord head uses display pitch",
+    "The unpitched member is rendered at its MusicXML display pitch and the warning states this conversion explicitly.",
+    imported,
+  )
+}
+
+#let render_c60() = {
+  let source = "X:1\nM:4/4\nL:1/4\nK:C\n!invertedfermata!c d e f|]\n"
+  let imported = read-score(source, format: "abc")
+  panel(
+    "C60",
+    "Inverted fermata warning",
+    "The importer renders an upright fermata because below-staff fermatas are unsupported, and exposes that limitation in its warning.",
     imported,
   )
 }

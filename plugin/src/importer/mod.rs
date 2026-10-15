@@ -135,6 +135,17 @@ mod tests {
     }
 
     #[test]
+    fn hidden_musicxml_tuplet_note_stays_inside_its_tuplet() {
+        let xml = r#"<score-partwise><part-list><score-part id="P1"/></part-list><part id="P1"><measure number="1"><attributes><divisions>3</divisions><time><beats>3</beats><beat-type>4</beat-type></time></attributes><note><pitch><step>C</step><octave>5</octave></pitch><duration>1</duration><type>eighth</type><time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification><notations><tuplet type="start"/></notations></note><note print-object="no"><pitch><step>D</step><octave>5</octave></pitch><duration>1</duration><type>eighth</type><time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification></note><note><pitch><step>E</step><octave>5</octave></pitch><duration>1</duration><type>eighth</type><time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification><notations><tuplet type="stop"/></notations></note><note><pitch><step>D</step><octave>5</octave></pitch><duration>3</duration><type>quarter</type></note><note><pitch><step>F</step><octave>5</octave></pitch><duration>3</duration><type>quarter</type></note></measure></part></score-partwise>"#;
+        let source = source_of(xml.as_bytes(), "hidden-tuplet").unwrap();
+        assert!(
+            source.contains("tuplet 3:2 { C5:e s:e E5:e }"),
+            "{source}"
+        );
+        assert!(!source.contains("tuplet 3:2[bracket=never"), "{source}");
+    }
+
+    #[test]
     fn fixtures_match_their_committed_typst() {
         for (name, source, expected) in [
             (
