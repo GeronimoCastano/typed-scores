@@ -8,6 +8,10 @@ Every comparison stays within the public `typed-scores` API. The sources are
 adapted only to make the meter and page crop explicit; unsupported LilyPond
 features are deliberately excluded.
 
+The audit references also document remaining differences in hairpin
+continuation and cross-bar tuplet brackets. Matching rhythmic timing does not
+imply matching engraving.
+
 | Fixture | LilyPond source |
 | --- | --- |
 | `grace-notes` | [Grace notes](https://lilypond.org/doc/v2.26/Documentation/notation/special-rhythmic-concerns), including the documented single acciaccatura, appoggiatura, multi-note acciaccatura, and an ordinary slur for bow-weight comparison |
@@ -22,6 +26,10 @@ features are deliberately excluded.
 | `ottava-brackets` | [Ottava brackets](https://lilypond.org/doc/v2.26/Documentation/notation/displaying-pitches), with the ordinal `8va` and `15ma` markups that match Bravura's glyphs |
 | `figured-bass` | [Figured bass](https://lilypond.org/doc/v2.26/Documentation/notation/figured-bass), including stacks, accidentals before a numeral, and an accidental alone |
 | `percussion-clef` | [Percussion staves](https://lilypond.org/doc/v2.26/Documentation/notation/common-notation-for-percussion), in LilyPond's default drum style: bass drum, snare, X-headed hi-hat on E5, and a circled-X crash cymbal on G5 |
+| `audit-grace-chord` | C07: a D5/E5 acciaccatura chord before F5, with an ordinary C4 quarter and half rest completing 4/4 |
+| `audit-grace-groups` | C29: plain C5 and D5/E5 grace events, followed by F5–B5 quarter notes |
+| `audit-spanning-hairpin` | C02: a crescendo ending on the first note after a system break, contrasted with a later endpoint; pedal release remains on the fourth note |
+| `audit-cross-bar-tuplet` | C32: three dotted half notes under one 3:2 bracket spanning a barline, with a final half-measure fragment |
 
 Regenerate and verify the references with an installed LilyPond 2.26.0:
 
