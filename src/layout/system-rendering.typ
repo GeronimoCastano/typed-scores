@@ -447,6 +447,8 @@
         measure.positions,
         note-start,
         scale: measure-justifications.at(measure-index),
+        key: measure.key,
+        beams: beams,
         voice: voice,
         all-voices: measure.voices,
       )

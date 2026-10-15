@@ -1,5 +1,5 @@
 #import "primitives.typ": accidental-width, notehead-half-width, rest-width, stem-thickness
-#import "event-geometry.typ": _accidental-gap, _dot-gap-from-head, _dot-step, _duration-base, _grace-main-gap, _grace-note-step, _head-half-width, _layout-stem-direction, _min-onset-step, _pitch-head-shape, _pitch-vertical-rank
+#import "event-geometry.typ": _accidental-gap, _dot-gap-from-head, _dot-step, _duration-base, _event-notation-scale, _grace-main-gap, _grace-note-step, _head-half-width, _layout-stem-direction, _min-onset-step, _pitch-head-shape, _pitch-vertical-rank
 #import "signatures.typ": _barline-clearance, _inline-clef-change-prefix-width, _key-alters-natural, _key-suppresses-accidental
 #import "lyrics.typ": _add-lyric-spacing-demands
 #import "figured-bass.typ": _figure-stack-extent
@@ -146,6 +146,104 @@
   cluster-pad + _accidental-plan(layout, key).total + arpeggio-pad
 }
 
+#let _event-left-ink-extent(layout, key) = {
+  if _is-tab-layout(layout) { return notehead-half-width }
+  let ink-width = _head-half-width(layout) + _event-prefix-width-before-notehead(layout, key)
+  ink-width * _event-notation-scale(layout)
+}
+
+#let _event-right-ink-extent(layout, beamed) = {
+  if _is-tab-layout(layout) { return notehead-half-width }
+  let notation-scale = _event-notation-scale(layout)
+  let rightmost-head-offset = 0
+  if not layout.rest and layout.pitches.len() > 1 {
+    let offsets = _cluster-offsets(layout, _layout-stem-direction(layout))
+    rightmost-head-offset = calc.max(..offsets, 0)
+  }
+  let head-right-extent = (_head-half-width(layout) + rightmost-head-offset) * notation-scale
+  let flag-right-extent = if layout.flags > 0 and not beamed {
+    (_head-half-width(layout) + 0.8) * notation-scale
+  } else {
+    0
+  }
+  let dot-right-extent = if layout.duration.dots > 0 {
+    (_head-half-width(layout) + rightmost-head-offset + _dot-gap-from-head
+      + layout.duration.dots * _dot-step) * notation-scale
+  } else {
+    0
+  }
+  calc.max(head-right-extent, flag-right-extent, dot-right-extent)
+}
+
+#let _tab-grace-right-overhang(grace-layouts) = {
+  if grace-layouts.len() == 0 { return 0 }
+  calc.max(..grace-layouts.map(grace-layout => {
+    let offsets = _cluster-offsets(grace-layout, _layout-stem-direction(grace-layout))
+    let displaced-head-overhang = calc.max(..offsets, 0)
+    let flag-overhang = if grace-layout.flags > 0 and _layout-stem-direction(grace-layout) == "up" {
+      0.8 * 0.7071
+    } else {
+      0
+    }
+    calc.max(displaced-head-overhang + _head-half-width(grace-layout) * 0.7071 - 0.35, flag-overhang)
+  }))
+}
+
+#let _grace-group-geometry(grace-layouts, principal-layout, key, beams) = {
+  let ordered-grace-layouts = grace-layouts.sorted(key: layout => layout.grace_index)
+  let offsets = (:)
+  let principal-left-extent = _event-left-ink-extent(principal-layout, key)
+  let next-event-x-offset = 0
+  let next-event-left-extent = principal-left-extent
+  for grace-layout in ordered-grace-layouts.rev() {
+    let grace-right-extent = _event-right-ink-extent(
+      grace-layout,
+      beams and grace-layout.at("beam_group", default: none) != none,
+    )
+    let is-last-grace-event = grace-layout.grace_index == ordered-grace-layouts.last().grace_index
+    let center-distance = if is-last-grace-event {
+      grace-right-extent + next-event-left-extent + _grace-main-gap
+    } else {
+      calc.max(
+        _grace-event-step(grace-layout),
+        grace-right-extent + next-event-left-extent + 0.18,
+      )
+    }
+    let grace-center-offset = next-event-x-offset - center-distance
+    offsets.insert(str(grace-layout.grace_index), grace-center-offset)
+    next-event-x-offset = grace-center-offset
+    next-event-left-extent = _event-left-ink-extent(grace-layout, key)
+  }
+  let first-layout = ordered-grace-layouts.first()
+  let first-center-offset = offsets.at(str(first-layout.grace_index))
+  let reservation = _event-left-ink-extent(first-layout, key) - first-center-offset
+  let last-layout = ordered-grace-layouts.last()
+  let last-center-offset = offsets.at(str(last-layout.grace_index))
+  let principal-ink-gap = -principal-left-extent - last-center-offset - _event-right-ink-extent(last-layout, beams and last-layout.at("beam_group", default: none) != none)
+  assert(
+    principal-ink-gap >= _grace-main-gap - 0.001,
+    message: "grace placement must keep visible ink clearance before its principal note",
+  )
+  for grace-index in range(ordered-grace-layouts.len() - 1) {
+    let left-layout = ordered-grace-layouts.at(grace-index)
+    let right-layout = ordered-grace-layouts.at(grace-index + 1)
+    let right-center-offset = offsets.at(str(right-layout.grace_index))
+    let left-center-offset = offsets.at(str(left-layout.grace_index))
+    let center-distance = right-center-offset - left-center-offset
+    let right-ink-distance = _event-right-ink-extent(
+      left-layout,
+      beams and left-layout.at("beam_group", default: none) != none,
+    )
+    let left-ink-distance = _event-left-ink-extent(right-layout, key)
+    let grace-ink-gap = center-distance - right-ink-distance - left-ink-distance
+    assert(
+      grace-ink-gap >= 0.18 - 0.001,
+      message: "adjacent grace events must keep visible ink clearance; got " + str(grace-ink-gap),
+    )
+  }
+  (offsets: offsets, reservation: reservation)
+}
+
 #let _left-pad(layout, key) = {
   if _is-tab-layout(layout) { return 0 }
   let pad = _head-half-width(layout) - notehead-half-width
@@ -248,10 +346,17 @@
     let main-layouts = layouts.filter(layout => not layout.at("grace", default: false))
     if main-layouts.len() > 0 {
       let first = main-layouts.first()
-      first-onset-x = calc.max(
-        first-onset-x,
-        _left-pad(first, key) + first.at("grace_before", default: 0) * _grace-note-step + _grace-main-gap,
-      )
+      let grace-layouts = layouts.filter(layout => (
+        layout.at("grace", default: false) and layout.onset == first.onset
+      ))
+      let grace-prefix = if grace-layouts.len() == 0 {
+        _left-pad(first, key)
+      } else if grace-layouts.any(_is-tab-layout) {
+        _left-pad(first, key) + first.at("grace_before", default: 0) * _grace-note-step + _grace-main-gap
+      } else {
+        _grace-group-geometry(grace-layouts, first, key, beams).reservation
+      }
+      first-onset-x = calc.max(first-onset-x, grace-prefix)
     }
     for layout in main-layouts {
       let duration-value = layout.duration_value.numerator / layout.duration_value.denominator
@@ -306,26 +411,22 @@
         let grace-layouts = layouts.filter(layout => (
           layout.at("grace", default: false) and layout.onset == next-layout.onset
         ))
-        let grace-right-overhang = if grace-layouts.len() == 0 {
-          0
+        let next-grace-geometry = if grace-layouts.len() > 0 and not grace-layouts.any(_is-tab-layout) {
+          _grace-group-geometry(grace-layouts, next-layout, key, beams)
         } else {
-          calc.max(..grace-layouts.map(grace-layout => {
-            let offsets = _cluster-offsets(grace-layout, _layout-stem-direction(grace-layout))
-            let displaced-head-overhang = calc.max(..offsets, 0)
-            let flag-overhang = if grace-layout.flags > 0 and _layout-stem-direction(grace-layout) == "up" {
-              0.8 * 0.7071
-            } else {
-              0
-            }
-            calc.max(displaced-head-overhang + _head-half-width(grace-layout) * 0.7071 - 0.35, flag-overhang)
-          }))
+          none
         }
-        let grace-width = next-layout.at("grace_before", default: 0) * _grace-event-step(next-layout) + (
-          if next-layout.at("grace_before", default: 0) > 0 { _grace-main-gap } else { 0 }
-        ) + grace-right-overhang
+        let demand-distance = if next-grace-geometry != none {
+          event-advance + next-grace-geometry.reservation
+        } else if grace-layouts.len() > 0 {
+          let grace-before-spacing = next-layout.at("grace_before", default: 0) * _grace-event-step(next-layout)
+          event-advance + _left-pad(next-layout, key) + grace-before-spacing + _grace-main-gap + _tab-grace-right-overhang(grace-layouts)
+        } else {
+          event-advance + _left-pad(next-layout, key)
+        }
         let demand = (
           from: current-onset-key,
-          distance: event-advance + _left-pad(next-layout, key) + grace-width,
+          distance: demand-distance,
         )
         if next-onset-key in demands-by-ending-onset {
           demands-by-ending-onset.at(next-onset-key).push(demand)
@@ -472,11 +573,23 @@
   0
 }
 
-#let _place-voice-at-onsets(layouts, positions, note-start, scale: 1.0, voice: none, all-voices: ()) = {
+#let _place-voice-at-onsets(layouts, positions, note-start, scale: 1.0, key: "C", beams: false, voice: none, all-voices: ()) = {
   layouts.map(layout => {
     let base = note-start + positions.at(str(_onset-key(layout.onset))) * scale
     let grace-shift = if layout.at("grace", default: false) {
-      -(layout.grace_count - layout.grace_index) * _grace-event-step(layout) - _grace-main-gap
+      let principal-layouts = layouts.filter(principal => (
+        not principal.at("grace", default: false) and principal.onset == layout.onset
+      ))
+      let grace-layouts = layouts.filter(grace => (
+        grace.at("grace", default: false) and grace.onset == layout.onset
+      ))
+      if principal-layouts.len() > 0 and not grace-layouts.any(_is-tab-layout) {
+        let principal-layout = principal-layouts.first()
+        let geometry = _grace-group-geometry(grace-layouts, principal-layout, key, beams)
+        geometry.offsets.at(str(layout.grace_index))
+      } else {
+        -(layout.grace_count - layout.grace_index) * _grace-event-step(layout) - _grace-main-gap
+      }
     } else { 0 }
     (
       layout: layout,
