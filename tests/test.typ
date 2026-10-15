@@ -2659,3 +2659,7 @@ to the nearest notehead on its side.
 
 #pagebreak()
 #include "audit-grace-followup.typ"
+
+#pagebreak()
+#import "audit-import-gallery.typ": render_c38
+#render_c38()
