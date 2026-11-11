@@ -2866,3 +2866,21 @@ accounts for the full horizontal width of the dynamic glyphs.
   scale: 0.62,
   bars: ((soprano: "(c3 e3 g3 c4):q[accent dyn=ff s1(] b3:q a3:q g3:q[s1)]", bass: "c3:w"),),
 )
+
+#pagebreak()
+
+= Lyrics share one baseline
+
+Syllables with descenders sit on the same baseline as syllables without them,
+and a hyphenated syllable keeps its hyphen level with the surrounding words.
+
+#score(
+  time: "4/4",
+  wrap: false,
+  lyric-size: 1.5,
+  verse-gap: 2.4,
+  bars: (
+    (notes: "c5:q d e f", lyrics: ("where will go the", "sing a quiet tune")),
+    (notes: "g5:q a b c6", lyrics: ("sun -- day go -- ing", "pray __ for peace")),
+  ),
+)

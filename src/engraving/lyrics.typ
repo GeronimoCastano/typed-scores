@@ -26,6 +26,19 @@
   ).width / 8pt
 }
 
+// Cap height in staff spaces. Syllables are anchored on their baseline, so the
+// lane is offset by half a cap height rather than by half a measured text box.
+#let _lyric-cap-height(lyric-size, lyric-font) = {
+  measure(
+    text(
+      .._lyric-text-style(8pt, lyric-size, lyric-font),
+      top-edge: "cap-height",
+      bottom-edge: "baseline",
+      [H],
+    ),
+  ).height / 8pt
+}
+
 #let _normalize-verse-sequences(value, label) = {
   let verses = if type(value) == str { (value,) } else if type(value) == array {
     value
@@ -370,6 +383,10 @@
   counts
 }
 
+// Vertical centre of a lyric lane in staff spaces, measured from the staff's
+// lowest ink. Syllables sit on the baseline half a cap height below it, while
+// hyphens, melisma extenders, and the staff's reserved space are derived from
+// the centre, so a descender never moves a syllable off the shared baseline.
 #let _lyric-lane-center(
   note-extent-low,
   verse-index,
@@ -449,20 +466,26 @@
   for item in placed-lyrics {
     if item.kind == "syllable" { placed-by-id.insert(item.id, item) }
   }
-
-  for item in placed-lyrics {
-    if item.kind != "syllable" { continue }
-    let y = bottom-map.at(str(item.staff-index)) + _lyric-lane-center(
-      staff-note-extents.at(item.staff-index).low,
-      item.verse-index,
+  let cap-height = _lyric-cap-height(lyric-size, lyric-font)
+  let lane-center = (staff-index, verse-index) => (
+    bottom-map.at(str(staff-index)) + _lyric-lane-center(
+      staff-note-extents.at(staff-index).low,
+      verse-index,
       lyric-size,
       lyric-gap,
       verse-gap,
     )
+  )
+  let lane-baseline = (staff-index, verse-index) => (
+    lane-center(staff-index, verse-index) - cap-height / 2
+  )
+
+  for item in placed-lyrics {
+    if item.kind != "syllable" { continue }
     content(
-      (item.x, y),
+      (item.x, lane-baseline(item.staff-index, item.verse-index)),
       text(.._lyric-text-style(unit, lyric-size, lyric-font, paint: paint), item.text),
-      anchor: "center",
+      anchor: "base",
       padding: 0pt,
     )
   }
@@ -473,13 +496,7 @@
       candidate.staff-id == item.staff-id
         and candidate.verse-index == item.verse-index
     )
-    let y = bottom-map.at(str(item.staff-index)) + _lyric-lane-center(
-      staff-note-extents.at(item.staff-index).low,
-      item.verse-index,
-      lyric-size,
-      lyric-gap,
-      verse-gap,
-    )
+    let y = lane-center(item.staff-index, item.verse-index)
     if item.hyphen-after {
       let next = all-items.find(candidate => (
         candidate.kind == "syllable"

@@ -73,7 +73,7 @@ typst-package-check check "@preview/typed-scores:$VERSION"
 `typst/packages:main`.
 
 For the current manifest version, the submission directory is
-`packages/preview/typed-scores/0.6.1/`; derive it from `VERSION` for later
+`packages/preview/typed-scores/0.6.2/`; derive it from `VERSION` for later
 releases. The following title and full checklist are the historical initial
 0.1.0 submission example:
 
