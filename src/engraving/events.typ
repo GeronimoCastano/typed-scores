@@ -1,4 +1,4 @@
-#import "@preview/cetz:0.5.2"
+#import "@preview/cetz:0.5.3"
 #import "primitives.typ": beam-spacing, beam-thickness, draw-accidental, draw-arpeggio, draw-augmentation-dot, draw-beam, draw-bow, draw-flag, draw-ledger-lines, draw-notehead, draw-rest, draw-stem, draw-stem-tremolo, ledger-extension, notehead-geometry, rest-extent, rest-width, staff-y, stem-anchor-dy, stem-center-offset, stem-tip
 #import "../foundation/diagnostics.typ": _score-error
 #import "../foundation/meter.typ": _rational-add, _rational-lte

@@ -9,7 +9,7 @@ repository = "https://github.com/GeronimoCastano/typed-scores"
 keywords = ["music", "notation", "score", "sheet music", "CeTZ"]
 categories = ["visualization"]
 disciplines = ["music"]
-compiler = "0.14.0"
+compiler = "0.15.0"
 
 exclude = [
   "docs/documentation.typ",

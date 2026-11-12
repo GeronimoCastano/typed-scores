@@ -1,4 +1,4 @@
-#import "@preview/cetz:0.5.2"
+#import "@preview/cetz:0.5.3"
 #import "primitives.typ": _bravura-height, _bravura-width, _draw-bravura-glyph, octave-line-thickness
 #import "../foundation/diagnostics.typ": _score-error
 #import "event-geometry.typ": _head-half-width, _pitch-staff-index

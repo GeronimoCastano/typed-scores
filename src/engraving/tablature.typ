@@ -1,4 +1,4 @@
-#import "@preview/cetz:0.5.2"
+#import "@preview/cetz:0.5.3"
 #import "primitives.typ": _draw-bravura-glyph, draw-time-signature, staff-line-thickness
 #import "../foundation/diagnostics.typ": _score-error
 #import "ties-slurs.typ": _pitch-label

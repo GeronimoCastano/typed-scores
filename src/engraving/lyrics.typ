@@ -1,4 +1,4 @@
-#import "@preview/cetz:0.5.2"
+#import "@preview/cetz:0.5.3"
 #import "../foundation/diagnostics.typ": _score-error
 
 // Lyric input, onset alignment, spacing, and engraving.

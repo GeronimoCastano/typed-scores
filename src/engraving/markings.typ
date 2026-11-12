@@ -1,4 +1,4 @@
-#import "@preview/cetz:0.5.2"
+#import "@preview/cetz:0.5.3"
 #import "primitives.typ": _bravura-bounding-box, _bravura-width, _draw-bravura-glyph, _dynamic-glyph, draw-accidental, draw-articulation, draw-breath-mark, draw-dynamic, draw-fermata, draw-hairpin, draw-ornament-mordent, draw-ornament-trill, draw-ornament-turn, draw-pedal-mark, dynamic-width, sampled-y-at-x
 #import "../foundation/diagnostics.typ": _score-error, _validate-marking
 #import "../foundation/meter.typ": _parse-time-rational

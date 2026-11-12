@@ -1,4 +1,4 @@
-#import "@preview/cetz:0.5.2"
+#import "@preview/cetz:0.5.3"
 #import "../foundation/diagnostics.typ": _score-error
 #import "../engraving/primitives.typ": barline-separation, draw-augmentation-dot, draw-grand-brace, draw-navigation-symbol, draw-staff-bracket, draw-staff-group-line, draw-staff-lines, music-canvas, repeat-barline-dot-separation, repeat-ending-line-thickness, thick-barline-thickness, thin-barline-thickness
 #import "../engraving/signatures.typ": _draw-inline-signature, _draw-prologue, _inline-signature-note-start, _inline-time-x, _prologue-start-x, _prologue-time-x

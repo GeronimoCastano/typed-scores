@@ -1,4 +1,4 @@
-#import "@preview/cetz:0.5.2"
+#import "@preview/cetz:0.5.3"
 #import "event-geometry.typ": _event-bottom-y, _event-notation-scale, _event-pitch-ys, _group-notation-scale, _head-half-width, _layout-stem-direction, _stem-direction
 #import "events.typ": _beam-group-staves, _beam-group-visible, _event-stem-geometry
 

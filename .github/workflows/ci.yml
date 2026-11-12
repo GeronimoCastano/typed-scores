@@ -17,7 +17,7 @@ jobs:
           targets: wasm32-unknown-unknown
       - uses: typst-community/setup-typst@v4
         with:
-          typst-version: 0.14.2
+          typst-version: 0.15.1
       - name: Install PDF rasterizer
         run: sudo apt-get update && sudo apt-get install -y poppler-utils
       - name: Build the renderer used by regression tests
